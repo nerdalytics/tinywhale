@@ -6,5 +6,7 @@
 !.gitignore
 !package.json
 !tsconfig.json
+!biome.json
 !src/
+!src/**
 !README.md
