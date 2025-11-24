@@ -25,5 +25,13 @@
     "tinywhale"
   ],
   "author": "",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "ohm-js": "17.2.1"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.3.7",
+    "binaryen": "125.0.0",
+    "typescript": "5.9.3"
+  }
 }

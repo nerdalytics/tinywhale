@@ -8,9 +8,14 @@
 
 # Allow list for the current folder
 !.github/
+!.gitattributes
 !.mise.toml
+!.npmrc
 !package.json
 !package-lock.json
+!pnpm-lock.yaml
 !pnpm-workspace.yaml
 !README.md
+!biome.json
 !packages/
+!packages/**
