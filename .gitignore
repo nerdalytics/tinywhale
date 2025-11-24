@@ -1,37 +1,16 @@
-# Dependencies
-node_modules/
-.pnpm-store/
+# Ignore every file and folder
+*
+*/
 
-# Build outputs
-dist/
-build/
-*.tsbuildinfo
+# Allow .gitignore files everywhere
+!.gitignore
+!**/.gitignore
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Logs
-logs/
-*.log
-npm-debug.log*
-pnpm-debug.log*
-
-# Environment
-.env
-.env.local
-.env.*.local
-
-# Testing
-coverage/
-.nyc_output/
-
-# Mise
-.mise.local.toml
+# Allow list for the current folder
+!.github/
+!.mise.toml
+!package.json
+!package-lock.json
+!pnpm-workspace.yaml
+!README.md
+!packages/
