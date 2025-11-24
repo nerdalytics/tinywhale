@@ -24,6 +24,7 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@adonisjs/ace": "13.4.0",
     "@tinywhale/compiler": "workspace:*"
   }
 }
