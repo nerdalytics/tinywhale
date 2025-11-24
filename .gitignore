@@ -13,5 +13,6 @@
 !package-lock.json
 !pnpm-workspace.yaml
 !README.md
+!biome.json
 !packages/
 !packages/**

@@ -1,11 +1,11 @@
-# Ignore every file and folder
+# Ignore every file
 *
-*/
 
 # Allow list for the current folder
 !.gitignore
 !package.json
 !tsconfig.json
+!biome.json
 !src/
 !src/**
 !README.md
