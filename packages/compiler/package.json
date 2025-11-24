@@ -25,5 +25,8 @@
     "tinywhale"
   ],
   "author": "",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "ohm-js": "^17.2.1"
+  }
 }

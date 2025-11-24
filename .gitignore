@@ -14,3 +14,4 @@
 !pnpm-workspace.yaml
 !README.md
 !packages/
+!packages/**
