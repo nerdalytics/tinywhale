@@ -1,0 +1,16 @@
+# Ignore every file and folder
+*
+*/
+
+# Allow .gitignore files everywhere
+!.gitignore
+!**/.gitignore
+
+# Allow list for the current folder
+!.github/
+!.mise.toml
+!package.json
+!package-lock.json
+!pnpm-workspace.yaml
+!README.md
+!packages/

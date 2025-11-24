@@ -1,0 +1,30 @@
+{
+  "name": "@tinywhale/lsp",
+  "version": "0.0.0",
+  "description": "TinyWhale Language Server Protocol implementation",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "tinywhale-lsp": "./dist/server.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "echo 'Build script not yet configured'",
+    "test": "echo 'Test script not yet configured'",
+    "lint": "echo 'Lint script not yet configured'",
+    "clean": "rm -rf dist",
+    "dev": "echo 'Dev script not yet configured'"
+  },
+  "keywords": [
+    "lsp",
+    "language-server",
+    "tinywhale"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@tinywhale/compiler": "workspace:*"
+  }
+}

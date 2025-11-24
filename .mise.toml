@@ -1,0 +1,28 @@
+# mise configuration for tinywhale monorepo
+[tools]
+node = "24.11.0"
+pnpm = "10.23.0"
+
+[tasks.install]
+description = "Install dependencies"
+run = "pnpm install"
+
+[tasks.build]
+description = "Build all packages"
+run = "pnpm -r build"
+
+[tasks.test]
+description = "Run tests for all packages"
+run = "pnpm -r test"
+
+[tasks.lint]
+description = "Lint all packages"
+run = "pnpm -r lint"
+
+[tasks.clean]
+description = "Clean build artifacts"
+run = "pnpm -r clean"
+
+[tasks.dev]
+description = "Run development mode"
+run = "pnpm -r --parallel dev"

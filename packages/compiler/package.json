@@ -1,0 +1,29 @@
+{
+  "name": "@tinywhale/compiler",
+  "version": "0.0.0",
+  "description": "TinyWhale compiler library",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "echo 'Build script not yet configured'",
+    "test": "echo 'Test script not yet configured'",
+    "lint": "echo 'Lint script not yet configured'",
+    "clean": "rm -rf dist",
+    "dev": "echo 'Dev script not yet configured'"
+  },
+  "keywords": [
+    "compiler",
+    "tinywhale"
+  ],
+  "author": "",
+  "license": "MIT"
+}
