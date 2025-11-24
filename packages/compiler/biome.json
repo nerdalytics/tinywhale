@@ -1,0 +1,14 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.3.7/schema.json",
+  "extends": ["../../biome.json"],
+  "linter": {
+    "rules": {
+      "complexity": {
+        "noExcessiveCognitiveComplexity": "warn"
+      },
+      "performance": {
+        "noDelete": "error"
+      }
+    }
+  }
+}
