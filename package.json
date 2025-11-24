@@ -19,6 +19,6 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
-    "@biomejs/biome": "^2.3.7"
+    "@biomejs/biome": "2.3.7"
   }
 }
