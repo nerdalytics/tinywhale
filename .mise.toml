@@ -9,11 +9,16 @@ run = "pnpm install"
 
 [tasks.build]
 description = "Build all packages"
+depends_post = ["lint", "test"]
 run = "pnpm -r build"
 
 [tasks.test]
 description = "Run tests for all packages"
 run = "pnpm -r test"
+
+[tasks.check]
+description = "Run biome check"
+run = "biome check"
 
 [tasks.lint]
 description = "Lint all packages"
@@ -23,6 +28,7 @@ run = "pnpm -r lint"
 description = "Clean build artifacts"
 run = "pnpm -r clean"
 
-[tasks.dev]
-description = "Run development mode"
-run = "pnpm -r --parallel dev"
+[tasks.cli]
+description = "Run the TinyWhale CLI"
+depends = ["clean", "build"]
+run = "node packages/cli/dist/cli.js"
