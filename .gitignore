@@ -17,5 +17,7 @@
 !pnpm-workspace.yaml
 !README.md
 !biome.json
+!tsconfig.json
+!LICENSE
 !packages/
 !packages/**

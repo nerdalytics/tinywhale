@@ -1,37 +1,36 @@
 {
-  "name": "@tinywhale/compiler",
-  "version": "0.0.0",
+  "author": "",
+  "dependencies": {
+    "binaryen": "125.0.0",
+    "ohm-js": "17.2.1"
+  },
   "description": "TinyWhale compiler library",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "devDependencies": {
+    "@biomejs/biome": "2.3.7",
+    "typescript": "5.9.3"
+  },
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
+      "default": "./dist/index.js",
+      "types": "./dist/index.d.ts"
     }
   },
   "files": [
     "dist"
   ],
-  "scripts": {
-    "build": "echo 'Build script not yet configured'",
-    "test": "echo 'Test script not yet configured'",
-    "lint": "echo 'Lint script not yet configured'",
-    "clean": "rm -rf dist",
-    "dev": "echo 'Dev script not yet configured'"
-  },
   "keywords": [
     "compiler",
     "tinywhale"
   ],
-  "author": "",
   "license": "MIT",
-  "dependencies": {
-    "ohm-js": "17.2.1"
+  "main": "./dist/index.js",
+  "name": "@tinywhale/compiler",
+  "scripts": {
+    "build": "echo 'Build script not yet configured'",
+    "clean": "rm -rf dist",
+    "lint": "echo 'Lint script not yet configured'",
+    "test": "echo 'Test script not yet configured'"
   },
-  "devDependencies": {
-    "@biomejs/biome": "2.3.7",
-    "binaryen": "125.0.0",
-    "typescript": "5.9.3"
-  }
+  "types": "./dist/index.d.ts",
+  "version": "0.0.0"
 }

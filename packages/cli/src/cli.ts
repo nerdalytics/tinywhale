@@ -11,15 +11,15 @@ async function main(): Promise<void> {
   kernel.info.set('version', version);
 
   kernel.defineFlag('help', {
-    type: 'boolean',
     alias: 'h',
     description: 'Display help information',
+    type: 'boolean',
   });
 
   kernel.defineFlag('version', {
-    type: 'boolean',
     alias: 'v',
     description: 'Display version number',
+    type: 'boolean',
   });
 
   kernel.on('finding:command', async () => {

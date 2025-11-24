@@ -9,7 +9,7 @@ importers:
   .:
     devDependencies:
       '@biomejs/biome':
-        specifier: ^2.3.7
+        specifier: 2.3.7
         version: 2.3.7
 
   packages/cli:
@@ -20,21 +20,31 @@ importers:
       '@tinywhale/compiler':
         specifier: workspace:*
         version: link:../compiler
+    devDependencies:
+      '@biomejs/biome':
+        specifier: 2.3.7
+        version: 2.3.7
+      '@types/node':
+        specifier: 24.10.1
+        version: 24.10.1
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
 
   packages/compiler:
     dependencies:
+      binaryen:
+        specifier: 125.0.0
+        version: 125.0.0
       ohm-js:
-        specifier: ^17.2.1
+        specifier: 17.2.1
         version: 17.2.1
     devDependencies:
       '@biomejs/biome':
-        specifier: ^2.3.7
+        specifier: 2.3.7
         version: 2.3.7
-      binaryen:
-        specifier: ^125.0.0
-        version: 125.0.0
       typescript:
-        specifier: ^5.9.3
+        specifier: 5.9.3
         version: 5.9.3
 
   packages/lsp:
@@ -141,6 +151,9 @@ packages:
 
   '@types/bytes@3.1.5':
     resolution: {integrity: sha512-VgZkrJckypj85YxEsEavcMmmSOIzkUHqWmM4CCyia5dc54YwsXzJ5uT4fYxBQNEXx+oF1krlhgCbvfubXqZYsQ==}
+
+  '@types/node@24.10.1':
+    resolution: {integrity: sha512-GNWcUTRBgIRJD5zj+Tq0fKOJ5XZajIiBroOF0yvj2bSU1WvNdYS/dn9UxwsujGW4JX06dnHyjV2y9rRaybH0iQ==}
 
   '@types/pluralize@0.0.33':
     resolution: {integrity: sha512-JOqsl+ZoCpP4e8TDke9W79FDcSgPAR0l6pixx2JHkhnRjvShyYiAYw2LVsnA7K08Y6DeOnaU6ujmENO4os/cYg==}
@@ -344,6 +357,9 @@ packages:
     engines: {node: '>=14.17'}
     hasBin: true
 
+  undici-types@7.16.0:
+    resolution: {integrity: sha512-Zz+aZWSj8LE6zoxD+xrjh4VfkIG8Ya6LvYkZqtUQGJPZjYl53ypCaUwWqo7eI0x66KBGeRo+mlBEkMSeSZ38Nw==}
+
   wordwrap@1.0.0:
     resolution: {integrity: sha512-gvVzJFlPycKc5dZN4yPkP8w7Dc37BtP1yczEneOb4uq34pXZcvrtRTmWV8W+Ume+XCxKgbjM+nevkyFPMybd4Q==}
 
@@ -470,6 +486,10 @@ snapshots:
       secure-json-parse: 4.1.0
 
   '@types/bytes@3.1.5': {}
+
+  '@types/node@24.10.1':
+    dependencies:
+      undici-types: 7.16.0
 
   '@types/pluralize@0.0.33': {}
 
@@ -629,6 +649,8 @@ snapshots:
   truncatise@0.0.8: {}
 
   typescript@5.9.3: {}
+
+  undici-types@7.16.0: {}
 
   wordwrap@1.0.0: {}
 
