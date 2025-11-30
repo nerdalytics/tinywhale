@@ -8,4 +8,6 @@
 !biome.json
 !src/
 !src/**
+!test/
+!test/**
 !README.md
