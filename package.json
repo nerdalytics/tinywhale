@@ -2,7 +2,7 @@
   "author": "",
   "description": "A programming language with compiler, CLI, and LSP server",
   "devDependencies": {
-    "@biomejs/biome": "2.3.7"
+    "@biomejs/biome": "2.3.8"
   },
   "engines": {
     "node": "24.11.0",
