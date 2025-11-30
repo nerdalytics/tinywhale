@@ -258,7 +258,6 @@ export async function preprocess(
   for await (const chunk of stream) {
     let str = typeof chunk === 'string' ? chunk : chunk.toString('utf-8');
 
-    // Strip UTF-8 BOM if present at the very start
     if (state.isFirstChunk) {
       if (str.startsWith(UTF8_BOM)) {
         str = str.slice(1);
@@ -266,19 +265,14 @@ export async function preprocess(
       state.isFirstChunk = false;
     }
 
-    // Combine with any pending partial line from previous chunk
     pendingChunk += str;
-
-    // Process complete lines
     const lines = pendingChunk.split('\n');
-    // Keep the last element as pending (may be incomplete)
     pendingChunk = lines.pop() ?? '';
 
     for (const line of lines) {
       state.lineNumber++;
       const lineNumber = state.lineNumber;
 
-      // Check for directive in directive mode
       if (mode === 'directive' && !state.directiveFound) {
         const directive = parseDirective(line);
         if (directive !== null) {
@@ -287,13 +281,11 @@ export async function preprocess(
           state.expectedIndentType = directive;
           state.indentEstablishedAt = { line: lineNumber, source: 'directive' };
 
-          // Validate all buffered lines against the directive (but don't output them)
-          // Lines before the directive are discarded along with the directive
+          // Lines before directive are discarded with it
           for (const buffered of state.bufferedLines) {
             validateIndent(buffered.indentInfo, buffered.lineNumber, state);
           }
           state.bufferedLines = [];
-          // Don't output the directive line itself
           continue;
         }
       }
@@ -301,7 +293,6 @@ export async function preprocess(
       const indentInfo = analyzeLineIndent(line, lineNumber);
 
       if (mode === 'directive' && !state.directiveFound) {
-        // Buffer the line - we might find a directive later
         state.bufferedLines.push({ line, lineNumber, indentInfo });
       } else {
         validateIndent(indentInfo, lineNumber, state);
@@ -310,12 +301,10 @@ export async function preprocess(
     }
   }
 
-  // Process any remaining content (last line without trailing newline)
   if (pendingChunk.length > 0) {
     state.lineNumber++;
     const lineNumber = state.lineNumber;
 
-    // Check for directive
     if (mode === 'directive' && !state.directiveFound) {
       const directive = parseDirective(pendingChunk);
       if (directive !== null) {
@@ -324,12 +313,10 @@ export async function preprocess(
         state.expectedIndentType = directive;
         state.indentEstablishedAt = { line: lineNumber, source: 'directive' };
 
-        // Validate buffered lines (but don't output - they're discarded with directive)
         for (const buffered of state.bufferedLines) {
           validateIndent(buffered.indentInfo, buffered.lineNumber, state);
         }
         state.bufferedLines = [];
-        // Don't output the directive line
       } else {
         const indentInfo = analyzeLineIndent(pendingChunk, lineNumber);
         state.bufferedLines.push({ line: pendingChunk, lineNumber, indentInfo });
@@ -341,7 +328,6 @@ export async function preprocess(
     }
   }
 
-  // If in directive mode and no directive was found, validate and output buffered lines
   if (mode === 'directive' && !state.directiveFound && state.bufferedLines.length > 0) {
     for (const buffered of state.bufferedLines) {
       validateIndent(buffered.indentInfo, buffered.lineNumber, state);
@@ -349,13 +335,9 @@ export async function preprocess(
     }
   }
 
-  // Determine if original had trailing newline
-  // If the last chunk was empty string after split, there was a trailing newline
   const result = processedLines.join('\n');
 
-  // Check if stream ended with newline by seeing if pendingChunk was empty
-  // Actually we need to track this differently...
-  // If pendingChunk is empty after processing, that means the stream ended with \n
+  // Preserve trailing newline
   if (pendingChunk.length === 0 && state.lineNumber > 0) {
     return result + '\n';
   }
