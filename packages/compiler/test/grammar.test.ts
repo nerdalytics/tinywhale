@@ -40,22 +40,17 @@ describe('grammar', () => {
     });
 
     it('should match single INDENT token', () => {
-      const result = match('⟨1,1,1⟩⇥hello\n');
+      const result = match('⟨1,1⟩⇥hello\n');
       assert.ok(result.succeeded());
     });
 
     it('should match single DEDENT token', () => {
-      const result = match('⟨2,1,0⟩⇤hello\n');
-      assert.ok(result.succeeded());
-    });
-
-    it('should match multiple INDENT tokens', () => {
-      const result = match('⟨1,1,1⟩⇥⟨1,1,2⟩⇥hello\n');
+      const result = match('⟨2,0⟩⇤hello\n');
       assert.ok(result.succeeded());
     });
 
     it('should match INDENT followed by DEDENT', () => {
-      const input = 'hello\n⟨2,1,1⟩⇥world\n⟨3,1,0⟩⇤back\n';
+      const input = 'hello\n⟨2,1⟩⇥world\n⟨3,0⟩⇤back\n';
       const result = match(input);
       assert.ok(result.succeeded());
     });
@@ -66,7 +61,7 @@ describe('grammar', () => {
     });
 
     it('should match EOF dedents', () => {
-      const result = match('hello\n⟨2,1,1⟩⇥world\n⟨2,1,0⟩⇤');
+      const result = match('hello\n⟨2,1⟩⇥world\n⟨2,0⟩⇤');
       assert.ok(result.succeeded());
     });
   });
@@ -88,7 +83,7 @@ describe('grammar', () => {
     });
 
     it('should parse single INDENT token', () => {
-      const result = parse('⟨1,1,4⟩⇥hello\n');
+      const result = parse('⟨1,1⟩⇥hello\n');
       assert.strictEqual(result.succeeded, true);
       assert.strictEqual(result.lines.length, 1);
 
@@ -98,13 +93,12 @@ describe('grammar', () => {
       assert.strictEqual(line.indentTokens[0].type, 'indent');
       assert.deepStrictEqual(line.indentTokens[0].position, {
         line: 1,
-        col: 1,
-        len: 4,
+        level: 1,
       });
     });
 
     it('should parse DEDENT token', () => {
-      const result = parse('⟨2,1,0⟩⇤hello\n');
+      const result = parse('⟨2,0⟩⇤hello\n');
       assert.strictEqual(result.succeeded, true);
       assert.strictEqual(result.lines.length, 1);
 
@@ -114,8 +108,8 @@ describe('grammar', () => {
       assert.strictEqual(line.indentTokens[0].type, 'dedent');
     });
 
-    it('should parse multiple indent tokens on same line', () => {
-      const result = parse('⟨1,1,0⟩⇤⟨1,1,0⟩⇤hello\n');
+    it('should parse multiple dedent tokens on same line', () => {
+      const result = parse('⟨1,0⟩⇤⟨1,0⟩⇤hello\n');
       assert.strictEqual(result.succeeded, true);
       assert.strictEqual(result.lines.length, 1);
       assert.strictEqual(result.lines[0].indentTokens.length, 2);
@@ -126,9 +120,9 @@ describe('grammar', () => {
     it('should parse complex indentation sequence', () => {
       const input = [
         'root',
-        '⟨2,1,1⟩⇥child1',
-        '⟨3,1,2⟩⇥grandchild',
-        '⟨4,1,0⟩⇤⟨4,1,0⟩⇤sibling',
+        '⟨2,1⟩⇥child1',
+        '⟨3,2⟩⇥grandchild',
+        '⟨4,0⟩⇤⟨4,0⟩⇤sibling',
         '',
       ].join('\n');
 
@@ -140,15 +134,17 @@ describe('grammar', () => {
       assert.strictEqual(result.lines[0].content, 'root');
       assert.strictEqual(result.lines[0].indentTokens.length, 0);
 
-      // child1 - one INDENT
+      // child1 - one INDENT (level 1)
       assert.strictEqual(result.lines[1].content, 'child1');
       assert.strictEqual(result.lines[1].indentTokens.length, 1);
       assert.strictEqual(result.lines[1].indentTokens[0].type, 'indent');
+      assert.strictEqual(result.lines[1].indentTokens[0].position.level, 1);
 
-      // grandchild - one more INDENT
+      // grandchild - one more INDENT (level 2)
       assert.strictEqual(result.lines[2].content, 'grandchild');
       assert.strictEqual(result.lines[2].indentTokens.length, 1);
       assert.strictEqual(result.lines[2].indentTokens[0].type, 'indent');
+      assert.strictEqual(result.lines[2].indentTokens[0].position.level, 2);
 
       // sibling - two DEDENTs
       assert.strictEqual(result.lines[3].content, 'sibling');
@@ -167,26 +163,26 @@ describe('grammar', () => {
 
     it('should extract position from indent token', () => {
       const sem = createSemantics();
-      const matchResult = TinyWhaleGrammar.match('⟨5,1,3⟩⇥', 'indent');
+      const matchResult = TinyWhaleGrammar.match('⟨5,2⟩⇥', 'indent');
       assert.ok(matchResult.succeeded());
 
       const token: IndentToken = sem(matchResult).toIndentToken();
       assert.strictEqual(token.type, 'indent');
       assert.deepStrictEqual(token.position, {
         line: 5,
-        col: 1,
-        len: 3,
+        level: 2,
       });
     });
 
     it('should extract position from dedent token', () => {
       const sem = createSemantics();
-      const matchResult = TinyWhaleGrammar.match('⟨10,1,0⟩⇤', 'dedent');
+      const matchResult = TinyWhaleGrammar.match('⟨10,0⟩⇤', 'dedent');
       assert.ok(matchResult.succeeded());
 
       const token: IndentToken = sem(matchResult).toIndentToken();
       assert.strictEqual(token.type, 'dedent');
       assert.strictEqual(token.position.line, 10);
+      assert.strictEqual(token.position.level, 0);
     });
   });
 
@@ -229,9 +225,9 @@ describe('grammar', () => {
       const contentLines = result.lines.filter(l => l.content.length > 0);
       assert.strictEqual(contentLines.length, 3);
 
-      // Check INDENT positions encode original whitespace length
-      assert.strictEqual(contentLines[1].indentTokens[0].position.len, 2); // 2 spaces
-      assert.strictEqual(contentLines[2].indentTokens[0].position.len, 4); // 4 spaces
+      // Check INDENT positions encode indent levels
+      assert.strictEqual(contentLines[1].indentTokens[0].position.level, 1); // level 1
+      assert.strictEqual(contentLines[2].indentTokens[0].position.level, 2); // level 2
     });
 
     it('should handle file with no indentation', async () => {
@@ -293,7 +289,7 @@ describe('grammar', () => {
 
   describe('edge cases', () => {
     it('should handle line with only indent tokens', () => {
-      const result = parse('⟨1,1,1⟩⇥\n');
+      const result = parse('⟨1,1⟩⇥\n');
       assert.strictEqual(result.succeeded, true);
       assert.strictEqual(result.lines.length, 1);
       assert.strictEqual(result.lines[0].content, '');
@@ -316,11 +312,10 @@ describe('grammar', () => {
     });
 
     it('should handle large position numbers', () => {
-      const result = parse('⟨999,100,200⟩⇥content\n');
+      const result = parse('⟨999,100⟩⇥content\n');
       assert.strictEqual(result.succeeded, true);
       assert.strictEqual(result.lines[0].indentTokens[0].position.line, 999);
-      assert.strictEqual(result.lines[0].indentTokens[0].position.col, 100);
-      assert.strictEqual(result.lines[0].indentTokens[0].position.len, 200);
+      assert.strictEqual(result.lines[0].indentTokens[0].position.level, 100);
     });
   });
 });

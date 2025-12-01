@@ -34,8 +34,8 @@ describe('preprocessor', () => {
     it('should emit INDENT token for leading tab', async () => {
       const stream = streamFromString('\thello\n');
       const result = await preprocess(stream);
-      // Should have INDENT token with position, then content, then EOF DEDENT
-      assert.ok(result.includes('⟨1,1,1⟩⇥'));
+      // Should have INDENT token with position (line 1, level 1), then content, then EOF DEDENT
+      assert.ok(result.includes('⟨1,1⟩⇥'));
       assert.ok(result.includes('hello'));
       assert.ok(result.includes('⇤')); // EOF dedent
     });
@@ -43,8 +43,8 @@ describe('preprocessor', () => {
     it('should emit INDENT token for leading spaces', async () => {
       const stream = streamFromString('  hello\n');
       const result = await preprocess(stream);
-      // Position should encode 2 spaces: line 1, col 1, len 2
-      assert.ok(result.includes('⟨1,1,2⟩⇥'));
+      // Position should encode level 1 (first indent establishes unit)
+      assert.ok(result.includes('⟨1,1⟩⇥'));
       assert.ok(result.includes('hello'));
     });
 
@@ -92,7 +92,7 @@ describe('preprocessor', () => {
     it('should handle indentation on first line', async () => {
       const stream = streamFromString('\tfirst\nsecond\n');
       const result = await preprocess(stream);
-      assert.ok(result.startsWith('⟨1,1,1⟩⇥'));
+      assert.ok(result.startsWith('⟨1,1⟩⇥'));
     });
   });
 
@@ -234,33 +234,85 @@ describe('preprocessor', () => {
     });
   });
 
-  describe('position encoding', () => {
-    it('should encode correct position for single tab', async () => {
+  describe('level encoding', () => {
+    it('should encode level 1 for single tab', async () => {
       const stream = streamFromString('\thello\n');
       const result = await preprocess(stream);
-      // 1 tab at line 1, col 1, len 1
-      assert.ok(result.includes('⟨1,1,1⟩⇥'));
+      // 1 tab = level 1
+      assert.ok(result.includes('⟨1,1⟩⇥'));
     });
 
-    it('should encode correct position for multiple tabs', async () => {
-      const stream = streamFromString('a\n\t\thello\n');
+    it('should encode level 2 for two tabs (incremental)', async () => {
+      const stream = streamFromString('a\n\tb\n\t\thello\n');
       const result = await preprocess(stream);
-      // 2 tabs at line 2, col 1, len 2
-      assert.ok(result.includes('⟨2,1,2⟩⇥'));
+      // Line 2: level 1, Line 3: level 2
+      assert.ok(result.includes('⟨2,1⟩⇥')); // entering level 1
+      assert.ok(result.includes('⟨3,2⟩⇥')); // entering level 2
     });
 
-    it('should encode correct position for spaces', async () => {
+    it('should encode level 1 for spaces (unit detected)', async () => {
       const stream = streamFromString('    hello\n');
       const result = await preprocess(stream);
-      // 4 spaces at line 1, col 1, len 4
-      assert.ok(result.includes('⟨1,1,4⟩⇥'));
+      // 4 spaces = level 1 (unit = 4)
+      assert.ok(result.includes('⟨1,1⟩⇥'));
     });
 
     it('should encode DEDENT positions correctly', async () => {
       const stream = streamFromString('\thello\nworld\n');
       const result = await preprocess(stream);
-      // DEDENT at line 2, col 1, len 0 (dedents have no whitespace)
-      assert.ok(result.includes('⟨2,1,0⟩⇤'));
+      // DEDENT at line 2, level 0
+      assert.ok(result.includes('⟨2,0⟩⇤'));
+    });
+
+    it('should detect indent unit from first indent (2 spaces)', async () => {
+      const stream = streamFromString('a\n  b\n    c\n');
+      const result = await preprocess(stream);
+      // 2 spaces = unit, so 4 spaces = level 2
+      assert.ok(result.includes('⟨2,1⟩⇥')); // level 1
+      assert.ok(result.includes('⟨3,2⟩⇥')); // level 2
+    });
+
+    it('should detect indent unit from first indent (4 spaces)', async () => {
+      const stream = streamFromString('a\n    b\n        c\n');
+      const result = await preprocess(stream);
+      // 4 spaces = unit, so 8 spaces = level 2
+      assert.ok(result.includes('⟨2,1⟩⇥')); // level 1
+      assert.ok(result.includes('⟨3,2⟩⇥')); // level 2
+    });
+  });
+
+  describe('indent jump errors', () => {
+    it('should throw on jumping more than one level with tabs', async () => {
+      const stream = streamFromString('a\n\t\tb\n');
+      await assert.rejects(
+        () => preprocess(stream),
+        (err: IndentationError) => {
+          assert.ok(err.message.includes('jumped from level 0 to level 2'));
+          return true;
+        }
+      );
+    });
+
+    it('should throw on jumping more than one level with spaces', async () => {
+      const stream = streamFromString('a\n    b\n            c\n');
+      await assert.rejects(
+        () => preprocess(stream),
+        (err: IndentationError) => {
+          assert.ok(err.message.includes('jumped from level 1 to level 3'));
+          return true;
+        }
+      );
+    });
+
+    it('should throw on inconsistent space indentation', async () => {
+      const stream = streamFromString('a\n  b\n   c\n');
+      await assert.rejects(
+        () => preprocess(stream),
+        (err: IndentationError) => {
+          assert.ok(err.message.includes('not a multiple of 2'));
+          return true;
+        }
+      );
     });
   });
 

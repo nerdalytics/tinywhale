@@ -46,12 +46,11 @@ export class IndentationError extends Error {
 
 /**
  * Represents a position in the source text.
- * Line and column are 1-indexed.
+ * Line is 1-indexed. Level is the indent level (0 = root).
  */
 interface Position {
   line: number;
-  col: number;
-  len: number;
+  level: number;
 }
 
 /**
@@ -75,10 +74,10 @@ const INDENT_CHAR = '⇥'; // U+21E5 RIGHTWARDS ARROW TO BAR
 const DEDENT_CHAR = '⇤'; // U+21E4 LEFTWARDS ARROW TO BAR
 
 /**
- * Creates a position string in the format ⟨line,col,len⟩
+ * Creates a position string in the format ⟨line,level⟩
  */
 function formatPosition(pos: Position): string {
-  return `⟨${pos.line},${pos.col},${pos.len}⟩`;
+  return `⟨${pos.line},${pos.level}⟩`;
 }
 
 /**
@@ -156,14 +155,6 @@ function parseDirective(line: string): IndentType | null {
 }
 
 /**
- * Entry in the indent stack tracking indentation levels.
- */
-interface IndentStackEntry {
-  level: number;
-  lineNumber: number;
-}
-
-/**
  * State tracked during streaming processing.
  */
 interface ProcessingState {
@@ -175,8 +166,12 @@ interface ProcessingState {
   bufferedLines: { line: string; lineNumber: number; indentInfo: LineIndentInfo }[];
   directiveFound: boolean;
   isFirstChunk: boolean;
-  // Indent stack for tracking nested levels
-  indentStack: IndentStackEntry[];
+  // Current indent level (0 = root)
+  currentLevel: number;
+  // For spaces: the number of spaces per indent level (detected from first indent)
+  indentUnit: number | null;
+  // Line where indent unit was established
+  indentUnitLine: number | null;
 }
 
 /**
@@ -216,6 +211,48 @@ function validateIndent(
 }
 
 /**
+ * Calculates indent level from whitespace count.
+ * For tabs: level = count
+ * For spaces: level = count / indentUnit
+ * Throws if spaces don't divide evenly by unit.
+ */
+function calculateIndentLevel(
+  indentInfo: LineIndentInfo,
+  lineNumber: number,
+  state: ProcessingState
+): number {
+  if (indentInfo.count === 0) {
+    return 0;
+  }
+
+  if (indentInfo.type === 'tab') {
+    // Tabs: 1 tab = 1 level
+    return indentInfo.count;
+  }
+
+  // Spaces: need to use/detect indent unit
+  if (state.indentUnit === null) {
+    // First indented line with spaces - establish unit
+    state.indentUnit = indentInfo.count;
+    state.indentUnitLine = lineNumber;
+    return 1;
+  }
+
+  // Validate spaces divide evenly by unit
+  if (indentInfo.count % state.indentUnit !== 0) {
+    throw new IndentationError(
+      `${lineNumber}:1 Inconsistent indentation: ${indentInfo.count} spaces is not a multiple of ${state.indentUnit} (established on line ${state.indentUnitLine}).`,
+      lineNumber,
+      1,
+      'space',
+      'space'
+    );
+  }
+
+  return indentInfo.count / state.indentUnit;
+}
+
+/**
  * Processes a single line and returns the tokenized version with INDENT/DEDENT tokens.
  */
 function processLine(
@@ -224,39 +261,40 @@ function processLine(
   indentInfo: LineIndentInfo,
   state: ProcessingState
 ): string {
-  const currentLevel = indentInfo.count;
-  const topLevel = state.indentStack.length > 0
-    ? state.indentStack[state.indentStack.length - 1].level
-    : 0;
-
+  const newLevel = calculateIndentLevel(indentInfo, lineNumber, state);
   const content = line.slice(indentInfo.count);
   const tokens: string[] = [];
 
-  if (currentLevel > topLevel) {
-    // Indent increased - emit INDENT token
+  if (newLevel > state.currentLevel) {
+    // Indent increased - must only go up by 1 level
+    if (newLevel > state.currentLevel + 1) {
+      throw new IndentationError(
+        `${lineNumber}:1 Unexpected indent: jumped from level ${state.currentLevel} to level ${newLevel}. Can only increase by one level at a time.`,
+        lineNumber,
+        1,
+        indentInfo.type || 'tab',
+        indentInfo.type || 'tab'
+      );
+    }
+    // Emit INDENT token
     const pos: Position = {
       line: lineNumber,
-      col: 1,
-      len: indentInfo.count,
+      level: newLevel,
     };
     tokens.push(createIndentToken(pos));
-    state.indentStack.push({ level: currentLevel, lineNumber });
-  } else if (currentLevel < topLevel) {
+    state.currentLevel = newLevel;
+  } else if (newLevel < state.currentLevel) {
     // Indent decreased - emit DEDENT token(s)
-    while (
-      state.indentStack.length > 0 &&
-      state.indentStack[state.indentStack.length - 1].level > currentLevel
-    ) {
-      state.indentStack.pop();
+    while (state.currentLevel > newLevel) {
+      state.currentLevel--;
       const pos: Position = {
         line: lineNumber,
-        col: 1,
-        len: 0,
+        level: 0, // DEDENT tokens use level 0
       };
       tokens.push(createDedentToken(pos));
     }
   }
-  // If currentLevel === topLevel, no INDENT/DEDENT needed
+  // If newLevel === state.currentLevel, no INDENT/DEDENT needed
 
   tokens.push(content);
   return tokens.join('');
@@ -267,12 +305,11 @@ function processLine(
  */
 function generateEofDedents(state: ProcessingState, lastLineNumber: number): string {
   const dedents: string[] = [];
-  while (state.indentStack.length > 0) {
-    state.indentStack.pop();
+  while (state.currentLevel > 0) {
+    state.currentLevel--;
     const pos: Position = {
       line: lastLineNumber,
-      col: 1,
-      len: 0,
+      level: 0,
     };
     dedents.push(createDedentToken(pos));
   }
@@ -290,20 +327,25 @@ function generateEofDedents(state: ProcessingState, lastLineNumber: number): str
  * - 'detect' (default): First indentation character sets file-wide type
  * - 'directive': Respects "use spaces" directive, defaults to tabs
  *
- * Mixed indentation (tabs and spaces in the same file) causes an error.
+ * Indentation rules:
+ * - Mixed indentation (tabs and spaces in the same file) causes an error
+ * - Can only increase indent by one level at a time (like Python)
+ * - For tabs: 1 tab = 1 level
+ * - For spaces: indent unit detected from first indent (e.g., 2 or 4 spaces)
+ *   and must be consistent throughout the file
  *
  * Token format:
- *   INDENT: ⟨line,col,len⟩⇥
- *   DEDENT: ⟨line,col,len⟩⇤
+ *   INDENT: ⟨line,level⟩⇥
+ *   DEDENT: ⟨line,level⟩⇤
  *
  * Examples:
- *   - ⟨2,1,4⟩⇥fn bar()    (indent at line 2, col 1, 4 whitespace chars)
- *   - ⟨4,1,0⟩⇤fn baz()    (dedent at line 4)
+ *   - ⟨2,1⟩⇥fn bar()    (indent at line 2, entering level 1)
+ *   - ⟨4,0⟩⇤fn baz()    (dedent at line 4)
  *
  * @param stream - A readable stream of UTF-8 text
  * @param options - Preprocessor options
  * @returns The preprocessed text with INDENT/DEDENT tokens
- * @throws IndentationError if mixed indentation is detected
+ * @throws IndentationError if indentation rules are violated
  */
 export async function preprocess(
   stream: Readable,
@@ -320,7 +362,9 @@ export async function preprocess(
     bufferedLines: [],
     directiveFound: false,
     isFirstChunk: true,
-    indentStack: [],
+    currentLevel: 0,
+    indentUnit: null,
+    indentUnitLine: null,
   };
 
   const processedLines: string[] = [];

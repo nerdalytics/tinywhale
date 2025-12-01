@@ -5,8 +5,7 @@ import * as ohm from 'ohm-js';
  */
 export interface Position {
   line: number;
-  col: number;
-  len: number;
+  level: number;
 }
 
 /**
@@ -43,12 +42,12 @@ export interface ParseResult {
  * with position information.
  *
  * Token format from preprocessor:
- *   INDENT: ⟨line,col,len⟩⇥
- *   DEDENT: ⟨line,col,len⟩⇤
+ *   INDENT: ⟨line,level⟩⇥
+ *   DEDENT: ⟨line,level⟩⇤
  *
  * Examples:
- *   ⟨2,1,4⟩⇥fn bar()    (indent at line 2, col 1, 4 whitespace chars)
- *   ⟨4,1,0⟩⇤fn baz()    (dedent at line 4)
+ *   ⟨2,1⟩⇥fn bar()    (indent at line 2, entering level 1)
+ *   ⟨4,0⟩⇤fn baz()    (dedent at line 4)
  */
 const grammarSource = String.raw`
 TinyWhale {
@@ -83,8 +82,8 @@ TinyWhale {
   indent = position "⇥"
   dedent = position "⇤"
 
-  // Position format: ⟨line,col,len⟩
-  position = "⟨" digit+ "," digit+ "," digit+ "⟩"
+  // Position format: ⟨line,level⟩
+  position = "⟨" digit+ "," digit+ "⟩"
 
   // ============================================================
   // Line content
@@ -114,13 +113,13 @@ export const grammars = ohm.grammars(grammarSource);
 export const TinyWhaleGrammar = grammars['TinyWhale'];
 
 /**
- * Parse a position string like "⟨2,1,4⟩" into Position.
+ * Parse a position string like "⟨2,1⟩" into Position.
  */
 function parsePositionString(posStr: string): Position {
   // Remove the angle brackets and split by comma
   const inner = posStr.slice(1, -1); // Remove ⟨ and ⟩
-  const [line, col, len] = inner.split(',').map(Number);
-  return { line, col, len };
+  const [line, level] = inner.split(',').map(Number);
+  return { line, level };
 }
 
 /**
@@ -140,11 +139,10 @@ export function createSemantics() {
 
   // Extract Position from position node
   semantics.addOperation<Position>('toPosition', {
-    position(_open, lineDigits, _comma1, colDigits, _comma2, lenDigits, _close) {
+    position(_open, lineDigits, _comma, levelDigits, _close) {
       return {
         line: Number(lineDigits.sourceString),
-        col: Number(colDigits.sourceString),
-        len: Number(lenDigits.sourceString),
+        level: Number(levelDigits.sourceString),
       };
     },
   });
