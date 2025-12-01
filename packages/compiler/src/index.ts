@@ -16,7 +16,7 @@ export {
   trace,
   createSemantics,
   semantics,
-  type PositionSpan,
+  type Position,
   type IndentToken,
   type ParsedLine,
   type ParseResult,

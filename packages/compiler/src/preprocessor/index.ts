@@ -45,14 +45,13 @@ export class IndentationError extends Error {
 }
 
 /**
- * Represents a position span in the source text.
+ * Represents a position in the source text.
  * Line and column are 1-indexed.
  */
-interface PositionSpan {
-  startLine: number;
-  startCol: number;
-  endLine: number;
-  endCol: number;
+interface Position {
+  line: number;
+  col: number;
+  len: number;
 }
 
 /**
@@ -76,24 +75,24 @@ const INDENT_CHAR = '⇥'; // U+21E5 RIGHTWARDS ARROW TO BAR
 const DEDENT_CHAR = '⇤'; // U+21E4 LEFTWARDS ARROW TO BAR
 
 /**
- * Creates a position string in the format ⟨startLine,startCol;endLine,endCol⟩
+ * Creates a position string in the format ⟨line,col,len⟩
  */
-function formatPosition(span: PositionSpan): string {
-  return `⟨${span.startLine},${span.startCol};${span.endLine},${span.endCol}⟩`;
+function formatPosition(pos: Position): string {
+  return `⟨${pos.line},${pos.col},${pos.len}⟩`;
 }
 
 /**
  * Creates an INDENT token with position.
  */
-function createIndentToken(span: PositionSpan): string {
-  return `${formatPosition(span)}${INDENT_CHAR}`;
+function createIndentToken(pos: Position): string {
+  return `${formatPosition(pos)}${INDENT_CHAR}`;
 }
 
 /**
  * Creates a DEDENT token with position.
  */
-function createDedentToken(span: PositionSpan): string {
-  return `${formatPosition(span)}${DEDENT_CHAR}`;
+function createDedentToken(pos: Position): string {
+  return `${formatPosition(pos)}${DEDENT_CHAR}`;
 }
 
 /**
@@ -235,13 +234,12 @@ function processLine(
 
   if (currentLevel > topLevel) {
     // Indent increased - emit INDENT token
-    const span: PositionSpan = {
-      startLine: lineNumber,
-      startCol: 1,
-      endLine: lineNumber,
-      endCol: indentInfo.count,
+    const pos: Position = {
+      line: lineNumber,
+      col: 1,
+      len: indentInfo.count,
     };
-    tokens.push(createIndentToken(span));
+    tokens.push(createIndentToken(pos));
     state.indentStack.push({ level: currentLevel, lineNumber });
   } else if (currentLevel < topLevel) {
     // Indent decreased - emit DEDENT token(s)
@@ -250,13 +248,12 @@ function processLine(
       state.indentStack[state.indentStack.length - 1].level > currentLevel
     ) {
       state.indentStack.pop();
-      const span: PositionSpan = {
-        startLine: lineNumber,
-        startCol: 1,
-        endLine: lineNumber,
-        endCol: 1,
+      const pos: Position = {
+        line: lineNumber,
+        col: 1,
+        len: 0,
       };
-      tokens.push(createDedentToken(span));
+      tokens.push(createDedentToken(pos));
     }
   }
   // If currentLevel === topLevel, no INDENT/DEDENT needed
@@ -272,13 +269,12 @@ function generateEofDedents(state: ProcessingState, lastLineNumber: number): str
   const dedents: string[] = [];
   while (state.indentStack.length > 0) {
     state.indentStack.pop();
-    const span: PositionSpan = {
-      startLine: lastLineNumber,
-      startCol: 1,
-      endLine: lastLineNumber,
-      endCol: 1,
+    const pos: Position = {
+      line: lastLineNumber,
+      col: 1,
+      len: 0,
     };
-    dedents.push(createDedentToken(span));
+    dedents.push(createDedentToken(pos));
   }
   return dedents.join('');
 }
@@ -297,12 +293,12 @@ function generateEofDedents(state: ProcessingState, lastLineNumber: number): str
  * Mixed indentation (tabs and spaces in the same file) causes an error.
  *
  * Token format:
- *   INDENT: ⟨startLine,startCol;endLine,endCol⟩⇥
- *   DEDENT: ⟨startLine,startCol;endLine,endCol⟩⇤
+ *   INDENT: ⟨line,col,len⟩⇥
+ *   DEDENT: ⟨line,col,len⟩⇤
  *
  * Examples:
- *   - ⟨2,1;2,4⟩⇥fn bar()    (indent at line 2, whitespace cols 1-4)
- *   - ⟨4,1;4,1⟩⇤fn baz()    (dedent at line 4)
+ *   - ⟨2,1,4⟩⇥fn bar()    (indent at line 2, col 1, 4 whitespace chars)
+ *   - ⟨4,1,0⟩⇤fn baz()    (dedent at line 4)
  *
  * @param stream - A readable stream of UTF-8 text
  * @param options - Preprocessor options

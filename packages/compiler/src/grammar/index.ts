@@ -1,13 +1,12 @@
 import * as ohm from 'ohm-js';
 
 /**
- * Represents a position span in the source text.
+ * Represents a position in the source text.
  */
-export interface PositionSpan {
-  startLine: number;
-  startCol: number;
-  endLine: number;
-  endCol: number;
+export interface Position {
+  line: number;
+  col: number;
+  len: number;
 }
 
 /**
@@ -15,7 +14,7 @@ export interface PositionSpan {
  */
 export interface IndentToken {
   type: 'indent' | 'dedent';
-  position: PositionSpan;
+  position: Position;
 }
 
 /**
@@ -44,12 +43,12 @@ export interface ParseResult {
  * with position information.
  *
  * Token format from preprocessor:
- *   INDENT: ⟨startLine,startCol;endLine,endCol⟩⇥
- *   DEDENT: ⟨startLine,startCol;endLine,endCol⟩⇤
+ *   INDENT: ⟨line,col,len⟩⇥
+ *   DEDENT: ⟨line,col,len⟩⇤
  *
  * Examples:
- *   ⟨2,1;2,4⟩⇥fn bar()    (indent at line 2, whitespace cols 1-4)
- *   ⟨4,1;4,1⟩⇤fn baz()    (dedent at line 4)
+ *   ⟨2,1,4⟩⇥fn bar()    (indent at line 2, col 1, 4 whitespace chars)
+ *   ⟨4,1,0⟩⇤fn baz()    (dedent at line 4)
  */
 const grammarSource = String.raw`
 TinyWhale {
@@ -84,9 +83,8 @@ TinyWhale {
   indent = position "⇥"
   dedent = position "⇤"
 
-  // Position format: ⟨startLine,startCol;endLine,endCol⟩
-  position = "⟨" coords ";" coords "⟩"
-  coords = digit+ "," digit+
+  // Position format: ⟨line,col,len⟩
+  position = "⟨" digit+ "," digit+ "," digit+ "⟩"
 
   // ============================================================
   // Line content
@@ -116,26 +114,13 @@ export const grammars = ohm.grammars(grammarSource);
 export const TinyWhaleGrammar = grammars['TinyWhale'];
 
 /**
- * Parse a coords string like "2,4" into [line, col].
+ * Parse a position string like "⟨2,1,4⟩" into Position.
  */
-function parseCoords(coordsStr: string): [number, number] {
-  const [line, col] = coordsStr.split(',').map(Number);
-  return [line, col];
-}
-
-/**
- * Parse a position node into a PositionSpan.
- */
-function parsePosition(positionNode: ohm.Node): PositionSpan {
-  // position = "⟨" coords ";" coords "⟩"
-  const children = positionNode.children;
-  const startCoords = children[1].sourceString;
-  const endCoords = children[3].sourceString;
-
-  const [startLine, startCol] = parseCoords(startCoords);
-  const [endLine, endCol] = parseCoords(endCoords);
-
-  return { startLine, startCol, endLine, endCol };
+function parsePositionString(posStr: string): Position {
+  // Remove the angle brackets and split by comma
+  const inner = posStr.slice(1, -1); // Remove ⟨ and ⟩
+  const [line, col, len] = inner.split(',').map(Number);
+  return { line, col, len };
 }
 
 /**
@@ -153,12 +138,14 @@ function getLineNumber(node: ohm.Node): number {
 export function createSemantics() {
   const semantics = TinyWhaleGrammar.createSemantics();
 
-  // Extract PositionSpan from position node
-  semantics.addOperation<PositionSpan>('toPosition', {
-    position(_open, startCoords, _semi, endCoords, _close) {
-      const [startLine, startCol] = parseCoords(startCoords.sourceString);
-      const [endLine, endCol] = parseCoords(endCoords.sourceString);
-      return { startLine, startCol, endLine, endCol };
+  // Extract Position from position node
+  semantics.addOperation<Position>('toPosition', {
+    position(_open, lineDigits, _comma1, colDigits, _comma2, lenDigits, _close) {
+      return {
+        line: Number(lineDigits.sourceString),
+        col: Number(colDigits.sourceString),
+        len: Number(lenDigits.sourceString),
+      };
     },
   });
 
@@ -202,7 +189,7 @@ export function createSemantics() {
     regularLine_withContent(indentTokens, content, _newline) {
       const tokens = indentTokens.toIndentTokens();
       const lineNum = tokens.length > 0
-        ? tokens[0].position.startLine
+        ? tokens[0].position.line
         : getLineNumber(this);
 
       return {
@@ -222,7 +209,7 @@ export function createSemantics() {
     eofPart_indentAtEof(indentTokensIter, content) {
       const tokens = indentTokensIter.children.map(t => t.toIndentToken());
       const lineNum = tokens.length > 0
-        ? tokens[0].position.startLine
+        ? tokens[0].position.line
         : getLineNumber(this);
 
       return {
@@ -315,5 +302,5 @@ export function trace(input: string): string {
 }
 
 // Re-export for backwards compatibility
-export type { PositionSpan as SourcePosition };
+export type { Position as SourcePosition };
 export type IndentInfo = IndentToken;

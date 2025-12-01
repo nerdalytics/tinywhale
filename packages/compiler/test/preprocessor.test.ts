@@ -35,7 +35,7 @@ describe('preprocessor', () => {
       const stream = streamFromString('\thello\n');
       const result = await preprocess(stream);
       // Should have INDENT token with position, then content, then EOF DEDENT
-      assert.ok(result.includes('⟨1,1;1,1⟩⇥'));
+      assert.ok(result.includes('⟨1,1,1⟩⇥'));
       assert.ok(result.includes('hello'));
       assert.ok(result.includes('⇤')); // EOF dedent
     });
@@ -43,8 +43,8 @@ describe('preprocessor', () => {
     it('should emit INDENT token for leading spaces', async () => {
       const stream = streamFromString('  hello\n');
       const result = await preprocess(stream);
-      // Position should encode 2 spaces: columns 1-2
-      assert.ok(result.includes('⟨1,1;1,2⟩⇥'));
+      // Position should encode 2 spaces: line 1, col 1, len 2
+      assert.ok(result.includes('⟨1,1,2⟩⇥'));
       assert.ok(result.includes('hello'));
     });
 
@@ -92,7 +92,7 @@ describe('preprocessor', () => {
     it('should handle indentation on first line', async () => {
       const stream = streamFromString('\tfirst\nsecond\n');
       const result = await preprocess(stream);
-      assert.ok(result.startsWith('⟨1,1;1,1⟩⇥'));
+      assert.ok(result.startsWith('⟨1,1,1⟩⇥'));
     });
   });
 
@@ -238,29 +238,29 @@ describe('preprocessor', () => {
     it('should encode correct position for single tab', async () => {
       const stream = streamFromString('\thello\n');
       const result = await preprocess(stream);
-      // 1 tab at line 1, columns 1-1
-      assert.ok(result.includes('⟨1,1;1,1⟩⇥'));
+      // 1 tab at line 1, col 1, len 1
+      assert.ok(result.includes('⟨1,1,1⟩⇥'));
     });
 
     it('should encode correct position for multiple tabs', async () => {
       const stream = streamFromString('a\n\t\thello\n');
       const result = await preprocess(stream);
-      // 2 tabs at line 2, columns 1-2
-      assert.ok(result.includes('⟨2,1;2,2⟩⇥'));
+      // 2 tabs at line 2, col 1, len 2
+      assert.ok(result.includes('⟨2,1,2⟩⇥'));
     });
 
     it('should encode correct position for spaces', async () => {
       const stream = streamFromString('    hello\n');
       const result = await preprocess(stream);
-      // 4 spaces at line 1, columns 1-4
-      assert.ok(result.includes('⟨1,1;1,4⟩⇥'));
+      // 4 spaces at line 1, col 1, len 4
+      assert.ok(result.includes('⟨1,1,4⟩⇥'));
     });
 
     it('should encode DEDENT positions correctly', async () => {
       const stream = streamFromString('\thello\nworld\n');
       const result = await preprocess(stream);
-      // DEDENT should be at line 2 (where we detected the dedent)
-      assert.ok(result.includes('⟨2,1;2,1⟩⇤'));
+      // DEDENT at line 2, col 1, len 0 (dedents have no whitespace)
+      assert.ok(result.includes('⟨2,1,0⟩⇤'));
     });
   });
 
