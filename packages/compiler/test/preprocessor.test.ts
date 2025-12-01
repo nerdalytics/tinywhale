@@ -298,8 +298,8 @@ describe('preprocessor', () => {
       await assert.rejects(
         () => preprocess(stream),
         (err: IndentationError) => {
-          // 4 spaces = level 1 (unit=4), so level 2 should be 8 spaces, not 12
-          assert.ok(err.message.includes('expected 8 spaces'));
+          // 4 spaces = level 1 (unit=4), next should be +4, got +8
+          assert.ok(err.message.includes('expected +4 spaces, got +8'));
           return true;
         }
       );
@@ -310,8 +310,8 @@ describe('preprocessor', () => {
       await assert.rejects(
         () => preprocess(stream),
         (err: IndentationError) => {
-          // 2 spaces establishes unit=2, so next level should be 4, not 3
-          assert.ok(err.message.includes('expected 4 spaces'));
+          // 2 spaces establishes unit=2, next should be +2, got +1
+          assert.ok(err.message.includes('expected +2 spaces, got +1'));
           return true;
         }
       );
@@ -324,7 +324,7 @@ describe('preprocessor', () => {
         (err: IndentationError) => {
           // 3 spaces = level 1, 6 spaces = level 2 (unit=3)
           // 2 spaces doesn't align to unit of 3
-          assert.ok(err.message.includes("doesn't align to indent unit"));
+          assert.ok(err.message.includes("doesn't align to unit of 3"));
           return true;
         }
       );

@@ -166,9 +166,11 @@ interface ProcessingState {
   bufferedLines: { line: string; lineNumber: number; indentInfo: LineIndentInfo }[];
   directiveFound: boolean;
   isFirstChunk: boolean;
-  // Current indent level (0 = root)
-  currentLevel: number;
-  // For spaces: the consistent unit (detected from first indent)
+  // Previous line's indent level
+  previousLevel: number;
+  // Previous line's space count (for delta calculation)
+  previousSpaces: number;
+  // For spaces: the consistent unit (detected from first indent delta)
   indentUnit: number | null;
 }
 
@@ -211,7 +213,7 @@ function validateIndent(
 /**
  * Calculates indent level from whitespace count.
  * For tabs: level = count
- * For spaces: compares current line with previous to derive unit.
+ * For spaces: compares delta between lines to derive unit.
  */
 function calculateIndentLevel(
   indentInfo: LineIndentInfo,
@@ -219,52 +221,45 @@ function calculateIndentLevel(
   state: ProcessingState
 ): number {
   if (indentInfo.count === 0) {
+    state.previousSpaces = 0;
     return 0;
   }
 
   if (indentInfo.type === 'tab') {
-    // Tabs: 1 tab = 1 level
     return indentInfo.count;
   }
 
-  // Spaces: compare with current level to determine new level
-  const currentSpaces = state.currentLevel * (state.indentUnit ?? 0);
+  // Spaces: compare with previous line
+  const delta = indentInfo.count - state.previousSpaces;
 
-  if (indentInfo.count > currentSpaces) {
-    // Indenting - going up one level
-    const delta = indentInfo.count - currentSpaces;
-
+  if (delta > 0) {
+    // Indent
     if (state.indentUnit === null) {
-      // First indent - establish unit
       state.indentUnit = delta;
     } else if (delta !== state.indentUnit) {
-      // Delta doesn't match established unit
       throw new IndentationError(
-        `${lineNumber}:1 Inconsistent indentation: expected ${currentSpaces + state.indentUnit} spaces (${state.indentUnit} per level), got ${indentInfo.count}.`,
+        `${lineNumber}:1 Inconsistent indentation: expected +${state.indentUnit} spaces, got +${delta}.`,
         lineNumber,
         1,
         'space',
         'space'
       );
     }
-
-    return state.currentLevel + 1;
-  } else if (indentInfo.count < currentSpaces) {
-    // Dedenting - check if it aligns to a valid level
-    if (state.indentUnit === null || indentInfo.count % state.indentUnit !== 0) {
+  } else if (delta < 0 && state.indentUnit !== null) {
+    // Dedent - check alignment
+    if (indentInfo.count % state.indentUnit !== 0) {
       throw new IndentationError(
-        `${lineNumber}:1 Invalid dedent: ${indentInfo.count} spaces doesn't align to indent unit${state.indentUnit ? ` of ${state.indentUnit}` : ''}.`,
+        `${lineNumber}:1 Invalid dedent: ${indentInfo.count} spaces doesn't align to unit of ${state.indentUnit}.`,
         lineNumber,
         1,
         'space',
         'space'
       );
     }
-    return indentInfo.count / state.indentUnit;
-  } else {
-    // Same level
-    return state.currentLevel;
   }
+
+  state.previousSpaces = indentInfo.count;
+  return state.indentUnit ? indentInfo.count / state.indentUnit : 0;
 }
 
 /**
@@ -280,37 +275,26 @@ function processLine(
   const content = line.slice(indentInfo.count);
   const tokens: string[] = [];
 
-  if (newLevel > state.currentLevel) {
-    // Indent increased - must only go up by 1 level
-    if (newLevel > state.currentLevel + 1) {
+  if (newLevel > state.previousLevel) {
+    // Indent - must only go up by 1 level
+    if (newLevel > state.previousLevel + 1) {
       throw new IndentationError(
-        `${lineNumber}:1 Unexpected indent: jumped from level ${state.currentLevel} to level ${newLevel}. Can only increase by one level at a time.`,
+        `${lineNumber}:1 Unexpected indent: jumped from level ${state.previousLevel} to level ${newLevel}. Can only increase by one level at a time.`,
         lineNumber,
         1,
         indentInfo.type || 'tab',
         indentInfo.type || 'tab'
       );
     }
-    // Emit INDENT token
-    const pos: Position = {
-      line: lineNumber,
-      level: newLevel,
-    };
-    tokens.push(createIndentToken(pos));
-    state.currentLevel = newLevel;
-  } else if (newLevel < state.currentLevel) {
-    // Indent decreased - emit DEDENT token(s)
-    while (state.currentLevel > newLevel) {
-      state.currentLevel--;
-      const pos: Position = {
-        line: lineNumber,
-        level: 0, // DEDENT tokens use level 0
-      };
-      tokens.push(createDedentToken(pos));
+    tokens.push(createIndentToken({ line: lineNumber, level: newLevel }));
+  } else if (newLevel < state.previousLevel) {
+    // Dedent - emit DEDENT token(s)
+    for (let i = state.previousLevel; i > newLevel; i--) {
+      tokens.push(createDedentToken({ line: lineNumber, level: 0 }));
     }
   }
-  // If newLevel === state.currentLevel, no INDENT/DEDENT needed
 
+  state.previousLevel = newLevel;
   tokens.push(content);
   return tokens.join('');
 }
@@ -320,13 +304,8 @@ function processLine(
  */
 function generateEofDedents(state: ProcessingState, lastLineNumber: number): string {
   const dedents: string[] = [];
-  while (state.currentLevel > 0) {
-    state.currentLevel--;
-    const pos: Position = {
-      line: lastLineNumber,
-      level: 0,
-    };
-    dedents.push(createDedentToken(pos));
+  for (let i = state.previousLevel; i > 0; i--) {
+    dedents.push(createDedentToken({ line: lastLineNumber, level: 0 }));
   }
   return dedents.join('');
 }
@@ -377,7 +356,8 @@ export async function preprocess(
     bufferedLines: [],
     directiveFound: false,
     isFirstChunk: true,
-    currentLevel: 0,
+    previousLevel: 0,
+    previousSpaces: 0,
     indentUnit: null,
   };
 
