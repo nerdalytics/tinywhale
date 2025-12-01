@@ -168,9 +168,7 @@ interface ProcessingState {
   isFirstChunk: boolean;
   // Current indent level (0 = root)
   currentLevel: number;
-  // For spaces: track space count at each level [0, level1Spaces, level2Spaces, ...]
-  levelSpaces: number[];
-  // For spaces: the consistent delta between levels (detected from first level increase)
+  // For spaces: the consistent unit (detected from first indent)
   indentUnit: number | null;
 }
 
@@ -213,7 +211,7 @@ function validateIndent(
 /**
  * Calculates indent level from whitespace count.
  * For tabs: level = count
- * For spaces: tracks space counts per level and derives unit from deltas.
+ * For spaces: compares current line with previous to derive unit.
  */
 function calculateIndentLevel(
   indentInfo: LineIndentInfo,
@@ -229,15 +227,15 @@ function calculateIndentLevel(
     return indentInfo.count;
   }
 
-  // Spaces: check against known levels or calculate new level
-  const currentSpaces = state.levelSpaces[state.currentLevel] ?? 0;
+  // Spaces: compare with current level to determine new level
+  const currentSpaces = state.currentLevel * (state.indentUnit ?? 0);
 
   if (indentInfo.count > currentSpaces) {
     // Indenting - going up one level
     const delta = indentInfo.count - currentSpaces;
 
     if (state.indentUnit === null) {
-      // First indent increase - establish unit from delta
+      // First indent - establish unit
       state.indentUnit = delta;
     } else if (delta !== state.indentUnit) {
       // Delta doesn't match established unit
@@ -250,28 +248,19 @@ function calculateIndentLevel(
       );
     }
 
-    const newLevel = state.currentLevel + 1;
-    state.levelSpaces[newLevel] = indentInfo.count;
-    return newLevel;
+    return state.currentLevel + 1;
   } else if (indentInfo.count < currentSpaces) {
-    // Dedenting - find matching lower level
-    for (let level = state.currentLevel - 1; level >= 0; level--) {
-      if (state.levelSpaces[level] === indentInfo.count) {
-        return level;
-      }
+    // Dedenting - check if it aligns to a valid level
+    if (state.indentUnit === null || indentInfo.count % state.indentUnit !== 0) {
+      throw new IndentationError(
+        `${lineNumber}:1 Invalid dedent: ${indentInfo.count} spaces doesn't align to indent unit${state.indentUnit ? ` of ${state.indentUnit}` : ''}.`,
+        lineNumber,
+        1,
+        'space',
+        'space'
+      );
     }
-    // No matching level found
-    const knownLevels = state.levelSpaces
-      .slice(0, state.currentLevel)
-      .map((s, l) => `level ${l}: ${s} spaces`)
-      .join(', ');
-    throw new IndentationError(
-      `${lineNumber}:1 Invalid dedent: ${indentInfo.count} spaces doesn't match any known level (${knownLevels}).`,
-      lineNumber,
-      1,
-      'space',
-      'space'
-    );
+    return indentInfo.count / state.indentUnit;
   } else {
     // Same level
     return state.currentLevel;
@@ -389,7 +378,6 @@ export async function preprocess(
     directiveFound: false,
     isFirstChunk: true,
     currentLevel: 0,
-    levelSpaces: [0], // Level 0 = 0 spaces
     indentUnit: null,
   };
 

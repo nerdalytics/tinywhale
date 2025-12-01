@@ -323,8 +323,8 @@ describe('preprocessor', () => {
         () => preprocess(stream),
         (err: IndentationError) => {
           // 3 spaces = level 1, 6 spaces = level 2 (unit=3)
-          // 2 spaces doesn't match level 0 (0) or level 1 (3)
-          assert.ok(err.message.includes("doesn't match any known level"));
+          // 2 spaces doesn't align to unit of 3
+          assert.ok(err.message.includes("doesn't align to indent unit"));
           return true;
         }
       );
