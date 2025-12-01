@@ -238,7 +238,7 @@ function calculateIndentLevel(
       state.indentUnit = delta;
     } else if (delta !== state.indentUnit) {
       throw new IndentationError(
-        `${lineNumber}:1 Inconsistent indentation: expected +${state.indentUnit} spaces, got +${delta}.`,
+        `${lineNumber}:1 File uses ${state.indentUnit}-space indentation. Add ${state.indentUnit} spaces, not ${delta}.`,
         lineNumber,
         1,
         'space',
@@ -249,7 +249,7 @@ function calculateIndentLevel(
     // Dedent - check alignment
     if (indentInfo.count % state.indentUnit !== 0) {
       throw new IndentationError(
-        `${lineNumber}:1 Invalid dedent: ${indentInfo.count} spaces doesn't align to unit of ${state.indentUnit}.`,
+        `${lineNumber}:1 Unindent does not match any outer indentation level.`,
         lineNumber,
         1,
         'space',
@@ -278,8 +278,9 @@ function processLine(
   if (newLevel > state.previousLevel) {
     // Indent - must only go up by 1 level
     if (newLevel > state.previousLevel + 1) {
+      const unit = indentInfo.type === 'tab' ? '1 tab' : `${state.indentUnit} spaces`;
       throw new IndentationError(
-        `${lineNumber}:1 Unexpected indent: jumped from level ${state.previousLevel} to level ${newLevel}. Can only increase by one level at a time.`,
+        `${lineNumber}:1 Too much indentation. Indent one level at a time (${unit}).`,
         lineNumber,
         1,
         indentInfo.type || 'tab',
