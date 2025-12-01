@@ -287,7 +287,8 @@ describe('preprocessor', () => {
       await assert.rejects(
         () => preprocess(stream),
         (err: IndentationError) => {
-          assert.ok(err.message.includes('Too much indentation'));
+          // From level 0, jumping to 2 tabs = level 2
+          assert.ok(err.message.includes('Use 1 tab, not 2'));
           return true;
         }
       );
@@ -321,7 +322,8 @@ describe('preprocessor', () => {
       await assert.rejects(
         () => preprocess(stream),
         (err: IndentationError) => {
-          assert.ok(err.message.includes('Unindent does not match'));
+          // Valid levels: 0, 3, 6 spaces
+          assert.ok(err.message.includes('Unindent to 0, 3, 6 spaces'));
           return true;
         }
       );

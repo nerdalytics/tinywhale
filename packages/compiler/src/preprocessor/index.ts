@@ -248,8 +248,13 @@ function calculateIndentLevel(
   } else if (delta < 0 && state.indentUnit !== null) {
     // Dedent - check alignment
     if (indentInfo.count % state.indentUnit !== 0) {
+      // Show valid levels: 0, unit, 2*unit, ... up to previousSpaces
+      const validLevels: number[] = [];
+      for (let s = 0; s <= state.previousSpaces; s += state.indentUnit) {
+        validLevels.push(s);
+      }
       throw new IndentationError(
-        `${lineNumber}:1 Unindent does not match any outer indentation level.`,
+        `${lineNumber}:1 Unindent to ${validLevels.join(', ')} spaces.`,
         lineNumber,
         1,
         'space',
@@ -278,9 +283,11 @@ function processLine(
   if (newLevel > state.previousLevel) {
     // Indent - must only go up by 1 level
     if (newLevel > state.previousLevel + 1) {
-      const unit = indentInfo.type === 'tab' ? '1 tab' : `${state.indentUnit} spaces`;
+      const expected = state.previousLevel + 1;
+      const got = newLevel;
+      const unit = indentInfo.type === 'tab' ? 'tab' : 'spaces';
       throw new IndentationError(
-        `${lineNumber}:1 Too much indentation. Indent one level at a time (${unit}).`,
+        `${lineNumber}:1 Use ${expected} ${unit}, not ${got}.`,
         lineNumber,
         1,
         indentInfo.type || 'tab',
