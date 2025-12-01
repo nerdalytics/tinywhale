@@ -16,8 +16,11 @@ export {
   trace,
   createSemantics,
   semantics,
-  type SourcePosition,
-  type IndentInfo,
+  type PositionSpan,
+  type IndentToken,
   type ParsedLine,
   type ParseResult,
+  // Backwards compatibility
+  type SourcePosition,
+  type IndentInfo,
 } from './grammar/index.js';

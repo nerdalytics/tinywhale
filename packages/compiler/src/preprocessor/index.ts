@@ -45,12 +45,14 @@ export class IndentationError extends Error {
 }
 
 /**
- * Represents a position in the source text.
+ * Represents a position span in the source text.
  * Line and column are 1-indexed.
  */
-interface Position {
-  line: number;
-  column: number;
+interface PositionSpan {
+  startLine: number;
+  startCol: number;
+  endLine: number;
+  endCol: number;
 }
 
 /**
@@ -68,15 +70,30 @@ interface LineIndentInfo {
 const UTF8_BOM = '\uFEFF';
 
 /**
- * Creates an indentation token string.
- * Format: indent_<type>:<startLine>,<startCol>;<endLine>,<endCol>
+ * Unicode characters for INDENT and DEDENT tokens.
  */
-function createIndentToken(
-  type: IndentType,
-  start: Position,
-  end: Position
-): string {
-  return `indent_${type}:${start.line},${start.column};${end.line},${end.column}`;
+const INDENT_CHAR = '⇥'; // U+21E5 RIGHTWARDS ARROW TO BAR
+const DEDENT_CHAR = '⇤'; // U+21E4 LEFTWARDS ARROW TO BAR
+
+/**
+ * Creates a position string in the format ⟨startLine,startCol;endLine,endCol⟩
+ */
+function formatPosition(span: PositionSpan): string {
+  return `⟨${span.startLine},${span.startCol};${span.endLine},${span.endCol}⟩`;
+}
+
+/**
+ * Creates an INDENT token with position.
+ */
+function createIndentToken(span: PositionSpan): string {
+  return `${formatPosition(span)}${INDENT_CHAR}`;
+}
+
+/**
+ * Creates a DEDENT token with position.
+ */
+function createDedentToken(span: PositionSpan): string {
+  return `${formatPosition(span)}${DEDENT_CHAR}`;
 }
 
 /**
@@ -128,26 +145,6 @@ function analyzeLineIndent(line: string, lineNumber: number): LineIndentInfo {
 }
 
 /**
- * Processes a single line and returns the tokenized version.
- */
-function processLine(
-  line: string,
-  lineNumber: number,
-  indentInfo: LineIndentInfo
-): string {
-  if (line.length === 0 || indentInfo.type === null || indentInfo.count === 0) {
-    return line;
-  }
-
-  const start: Position = { line: lineNumber, column: 1 };
-  const end: Position = { line: lineNumber, column: indentInfo.count };
-  const token = createIndentToken(indentInfo.type, start, end);
-  const rest = line.slice(indentInfo.count);
-
-  return `${token} ${rest}`;
-}
-
-/**
  * Parses a "use spaces" directive from a line.
  * Returns 'space' if directive found, null otherwise.
  */
@@ -160,6 +157,14 @@ function parseDirective(line: string): IndentType | null {
 }
 
 /**
+ * Entry in the indent stack tracking indentation levels.
+ */
+interface IndentStackEntry {
+  level: number;
+  lineNumber: number;
+}
+
+/**
  * State tracked during streaming processing.
  */
 interface ProcessingState {
@@ -168,11 +173,11 @@ interface ProcessingState {
   expectedIndentType: IndentType | null;
   indentEstablishedAt: { line: number; source: 'directive' | 'detected' } | null;
   directiveLine: number | null;
-  // For directive mode: buffer lines until we find directive or finish
-  // We need to do a two-pass in directive mode since directive can appear after indented lines
   bufferedLines: { line: string; lineNumber: number; indentInfo: LineIndentInfo }[];
   directiveFound: boolean;
   isFirstChunk: boolean;
+  // Indent stack for tracking nested levels
+  indentStack: IndentStackEntry[];
 }
 
 /**
@@ -188,7 +193,6 @@ function validateIndent(
   }
 
   if (state.expectedIndentType === null) {
-    // First indent sets the type (detect mode)
     state.expectedIndentType = indentInfo.type;
     state.indentEstablishedAt = { line: lineNumber, source: 'detected' };
   } else if (indentInfo.type !== state.expectedIndentType) {
@@ -213,11 +217,78 @@ function validateIndent(
 }
 
 /**
+ * Processes a single line and returns the tokenized version with INDENT/DEDENT tokens.
+ */
+function processLine(
+  line: string,
+  lineNumber: number,
+  indentInfo: LineIndentInfo,
+  state: ProcessingState
+): string {
+  const currentLevel = indentInfo.count;
+  const topLevel = state.indentStack.length > 0
+    ? state.indentStack[state.indentStack.length - 1].level
+    : 0;
+
+  const content = line.slice(indentInfo.count);
+  const tokens: string[] = [];
+
+  if (currentLevel > topLevel) {
+    // Indent increased - emit INDENT token
+    const span: PositionSpan = {
+      startLine: lineNumber,
+      startCol: 1,
+      endLine: lineNumber,
+      endCol: indentInfo.count,
+    };
+    tokens.push(createIndentToken(span));
+    state.indentStack.push({ level: currentLevel, lineNumber });
+  } else if (currentLevel < topLevel) {
+    // Indent decreased - emit DEDENT token(s)
+    while (
+      state.indentStack.length > 0 &&
+      state.indentStack[state.indentStack.length - 1].level > currentLevel
+    ) {
+      state.indentStack.pop();
+      const span: PositionSpan = {
+        startLine: lineNumber,
+        startCol: 1,
+        endLine: lineNumber,
+        endCol: 1,
+      };
+      tokens.push(createDedentToken(span));
+    }
+  }
+  // If currentLevel === topLevel, no INDENT/DEDENT needed
+
+  tokens.push(content);
+  return tokens.join('');
+}
+
+/**
+ * Generates remaining DEDENT tokens at end of file.
+ */
+function generateEofDedents(state: ProcessingState, lastLineNumber: number): string {
+  const dedents: string[] = [];
+  while (state.indentStack.length > 0) {
+    state.indentStack.pop();
+    const span: PositionSpan = {
+      startLine: lastLineNumber,
+      startCol: 1,
+      endLine: lastLineNumber,
+      endCol: 1,
+    };
+    dedents.push(createDedentToken(span));
+  }
+  return dedents.join('');
+}
+
+/**
  * Preprocesses source code by tokenizing indentation.
  *
  * This is the first phase of compilation that operates on raw text streams.
- * It replaces leading whitespace (tabs or spaces) with explicit tokens that
- * include position information.
+ * It replaces leading whitespace (tabs or spaces) with explicit INDENT (⇥)
+ * and DEDENT (⇤) tokens that include position information.
  *
  * The preprocessor operates in two modes:
  * - 'detect' (default): First indentation character sets file-wide type
@@ -225,14 +296,17 @@ function validateIndent(
  *
  * Mixed indentation (tabs and spaces in the same file) causes an error.
  *
- * Token format: indent_<type>:<startLine>,<startCol>;<endLine>,<endCol>
+ * Token format:
+ *   INDENT: ⟨startLine,startCol;endLine,endCol⟩⇥
+ *   DEDENT: ⟨startLine,startCol;endLine,endCol⟩⇤
+ *
  * Examples:
- *   - indent_tab:1,1;1,1 (single tab on line 1)
- *   - indent_space:2,1;2,4 (4 spaces on line 2)
+ *   - ⟨2,1;2,4⟩⇥fn bar()    (indent at line 2, whitespace cols 1-4)
+ *   - ⟨4,1;4,1⟩⇤fn baz()    (dedent at line 4)
  *
  * @param stream - A readable stream of UTF-8 text
  * @param options - Preprocessor options
- * @returns The preprocessed text with indentation tokens
+ * @returns The preprocessed text with INDENT/DEDENT tokens
  * @throws IndentationError if mixed indentation is detected
  */
 export async function preprocess(
@@ -250,6 +324,7 @@ export async function preprocess(
     bufferedLines: [],
     directiveFound: false,
     isFirstChunk: true,
+    indentStack: [],
   };
 
   const processedLines: string[] = [];
@@ -281,7 +356,6 @@ export async function preprocess(
           state.expectedIndentType = directive;
           state.indentEstablishedAt = { line: lineNumber, source: 'directive' };
 
-          // Lines before directive are discarded with it
           for (const buffered of state.bufferedLines) {
             validateIndent(buffered.indentInfo, buffered.lineNumber, state);
           }
@@ -296,7 +370,7 @@ export async function preprocess(
         state.bufferedLines.push({ line, lineNumber, indentInfo });
       } else {
         validateIndent(indentInfo, lineNumber, state);
-        processedLines.push(processLine(line, lineNumber, indentInfo));
+        processedLines.push(processLine(line, lineNumber, indentInfo, state));
       }
     }
   }
@@ -324,18 +398,24 @@ export async function preprocess(
     } else {
       const indentInfo = analyzeLineIndent(pendingChunk, lineNumber);
       validateIndent(indentInfo, lineNumber, state);
-      processedLines.push(processLine(pendingChunk, lineNumber, indentInfo));
+      processedLines.push(processLine(pendingChunk, lineNumber, indentInfo, state));
     }
   }
 
   if (mode === 'directive' && !state.directiveFound && state.bufferedLines.length > 0) {
     for (const buffered of state.bufferedLines) {
       validateIndent(buffered.indentInfo, buffered.lineNumber, state);
-      processedLines.push(processLine(buffered.line, buffered.lineNumber, buffered.indentInfo));
+      processedLines.push(processLine(buffered.line, buffered.lineNumber, buffered.indentInfo, state));
     }
   }
 
-  const result = processedLines.join('\n');
+  let result = processedLines.join('\n');
+
+  // Add EOF dedents
+  const eofDedents = generateEofDedents(state, state.lineNumber);
+  if (eofDedents) {
+    result += '\n' + eofDedents;
+  }
 
   // Preserve trailing newline
   if (pendingChunk.length === 0 && state.lineNumber > 0) {
