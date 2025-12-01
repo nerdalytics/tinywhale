@@ -298,7 +298,8 @@ describe('preprocessor', () => {
       await assert.rejects(
         () => preprocess(stream),
         (err: IndentationError) => {
-          assert.ok(err.message.includes('jumped from level 1 to level 3'));
+          // 4 spaces = level 1 (unit=4), so level 2 should be 8 spaces, not 12
+          assert.ok(err.message.includes('expected 8 spaces'));
           return true;
         }
       );
@@ -309,7 +310,21 @@ describe('preprocessor', () => {
       await assert.rejects(
         () => preprocess(stream),
         (err: IndentationError) => {
-          assert.ok(err.message.includes('not a multiple of 2'));
+          // 2 spaces establishes unit=2, so next level should be 4, not 3
+          assert.ok(err.message.includes('expected 4 spaces'));
+          return true;
+        }
+      );
+    });
+
+    it('should throw on invalid dedent (mismatched spaces)', async () => {
+      const stream = streamFromString('a\n   b\n      c\n  d\n');
+      await assert.rejects(
+        () => preprocess(stream),
+        (err: IndentationError) => {
+          // 3 spaces = level 1, 6 spaces = level 2 (unit=3)
+          // 2 spaces doesn't match level 0 (0) or level 1 (3)
+          assert.ok(err.message.includes("doesn't match any known level"));
           return true;
         }
       );
