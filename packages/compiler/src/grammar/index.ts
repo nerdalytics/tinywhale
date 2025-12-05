@@ -17,24 +17,10 @@ export interface IndentToken {
 }
 
 /**
- * Segment type in parsed content.
- */
-export type SegmentType = 'text' | 'comment';
-
-/**
- * A segment of content on a line.
- */
-export interface Segment {
-  type: SegmentType;
-  content: string;
-}
-
-/**
  * Represents a parsed line from the preprocessed input.
  */
 export interface ParsedLine {
   indentTokens: IndentToken[];
-  segments: Segment[];
   lineNumber: number;
 }
 
@@ -54,45 +40,33 @@ export interface ParseResult {
  *   ⟨line,level⟩⇥ content   (INDENT - increase indent level)
  *   ⟨line,level⟩⇤           (DEDENT - decrease indent level)
  *
- * Comment syntax:
+ * Comment syntax (treated as whitespace):
  *   # starts a comment, ends at next # or EOL
- *   Examples: `# full line`, `text # inline # back`
+ *   Examples: `# full line`, `code # inline # code`
  */
 const grammarSource = String.raw`
 TinyWhale {
-  program = line*
+  Program (a program) = Line*
+  Line (a line) = IndentedLine | DedentLine
 
-  line = indentedLine | dedentLine | contentLine | blankLine
+  IndentedLine = indentToken
+  DedentLine = dedentToken+
 
-  indentedLine = indentToken lineContent terminator
-  dedentLine = dedentToken+ lineContent? terminator
-  contentLine = lineContent terminator
-  blankLine = newline
-
-  lineContent = segment+
-  segment = comment | text
-  comment = "#" commentContent ("#" | &newline | &dedentToken | end)
-  commentContent = (~("#" | newline | dedentToken) any)*
-  text = (~("#" | newline | dedentToken) any)+
-
+  // Lexical token rules
   indentToken = position "⇥"
   dedentToken = position "⇤"
-  position = "⟨" digit+ "," digit+ "⟩"
+  position (a position marker) = "⟨" digit+ "," digit+ "⟩"
 
-  terminator = newline | end
-  newline = "\n" | "\r\n" | "\r"
+  // Comments treated as whitespace (newlines already in built-in space)
+  space += comment
+  comment = "#" (~("#" | "\n" | "\r" | dedentToken) any)* ("#" | &"\n" | &"\r" | &dedentToken | end)
 }
 `;
 
 /**
  * The compiled TinyWhale grammar.
  */
-export const grammars = ohm.grammars(grammarSource);
-
-/**
- * The base TinyWhale grammar for indentation handling.
- */
-export const TinyWhaleGrammar = grammars['TinyWhale'];
+export const TinyWhaleGrammar = ohm.grammar(grammarSource);
 
 /**
  * Helper to get line number from a node's source position.
@@ -114,103 +88,50 @@ export function createSemantics() {
   semantics.addOperation<Position>('toPosition', {
     position(_open, lineDigits, _comma, levelDigits, _close) {
       return {
-        line: Number(lineDigits.sourceString),
         level: Number(levelDigits.sourceString),
+        line: Number(lineDigits.sourceString),
       };
     },
   });
 
   // Extract IndentToken from indent/dedent nodes
   semantics.addOperation<IndentToken>('toIndentToken', {
-    indentToken(position, _marker) {
-      return {
-        type: 'indent',
-        position: position.toPosition(),
-      };
-    },
-
     dedentToken(position, _marker) {
       return {
-        type: 'dedent',
         position: position.toPosition(),
+        type: 'dedent',
       };
     },
-  });
-
-  // Extract Segment from segment nodes
-  semantics.addOperation<Segment>('toSegment', {
-    comment(_hash1, content, _hash2OrEnd) {
+    indentToken(position, _marker) {
       return {
-        type: 'comment',
-        content: content.sourceString,
+        position: position.toPosition(),
+        type: 'indent',
       };
-    },
-
-    text(chars) {
-      return {
-        type: 'text',
-        content: chars.sourceString,
-      };
-    },
-
-    segment(inner) {
-      return inner.toSegment();
-    },
-  });
-
-  // Extract array of Segments from lineContent
-  semantics.addOperation<Segment[]>('toSegments', {
-    lineContent(segments) {
-      return segments.children.map(s => s.toSegment());
     },
   });
 
   // Convert line nodes to ParsedLine
-  semantics.addOperation<ParsedLine | null>('toLine', {
-    indentedLine(indentToken, lineContent, _terminator) {
-      const token = indentToken.toIndentToken();
-      return {
-        indentTokens: [token],
-        segments: lineContent.toSegments(),
-        lineNumber: token.position.line,
-      };
-    },
-
-    dedentLine(dedentTokens, lineContent, _terminator) {
-      const tokens: IndentToken[] = dedentTokens.children.map(t => t.toIndentToken());
-      const segments = lineContent.children.length > 0
-        ? lineContent.children[0].toSegments()
-        : [];
+  semantics.addOperation<ParsedLine>('toLine', {
+    DedentLine(dedentTokens) {
+      const tokens: IndentToken[] = dedentTokens.children.map((t) => t.toIndentToken());
       return {
         indentTokens: tokens,
-        segments,
         lineNumber: tokens.length > 0 ? tokens[0].position.line : getLineNumber(this),
       };
     },
-
-    contentLine(lineContent, _terminator) {
+    IndentedLine(indentToken) {
+      const token = indentToken.toIndentToken();
       return {
-        indentTokens: [],
-        segments: lineContent.toSegments(),
-        lineNumber: getLineNumber(this),
+        indentTokens: [token],
+        lineNumber: token.position.line,
       };
-    },
-
-    blankLine(_newline) {
-      return null;
-    },
-
-    line(inner) {
-      return inner.toLine();
     },
   });
 
   // Collect all lines from a Program
   semantics.addOperation<ParsedLine[]>('toLines', {
-    program(lines) {
-      return lines.children
-        .map(line => line.toLine())
-        .filter((line): line is ParsedLine => line !== null);
+    Program(lines) {
+      return lines.children.map((line) => line.toLine());
     },
   });
 
@@ -234,8 +155,8 @@ export function parse(input: string): ParseResult {
   if (matchResult.failed()) {
     return {
       lines: [],
-      succeeded: false,
       message: matchResult.message,
+      succeeded: false,
     };
   }
 

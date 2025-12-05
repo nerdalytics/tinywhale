@@ -1,10 +1,10 @@
-import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { createReadStream } from 'node:fs';
-import { Readable } from 'node:stream';
-import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { preprocess, IndentationError } from '../src/preprocessor/index.ts';
+import { Readable } from 'node:stream';
+import { describe, it } from 'node:test';
+import { fileURLToPath } from 'node:url';
+import { type IndentationError, preprocess } from '../src/preprocessor/index.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -85,7 +85,7 @@ describe('preprocessor', () => {
       const result = await preprocess(stream);
       // Should have DEDENT at end to close the indent
       const lines = result.split('\n');
-      const lastNonEmpty = lines.filter(l => l.length > 0).pop();
+      const lastNonEmpty = lines.filter((l) => l.length > 0).pop();
       assert.ok(lastNonEmpty?.includes('⇤'));
     });
 
