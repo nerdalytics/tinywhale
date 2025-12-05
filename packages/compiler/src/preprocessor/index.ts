@@ -1,4 +1,4 @@
-import { Readable } from 'node:stream';
+import type { Readable } from 'node:stream';
 
 /**
  * Token types for indentation.
@@ -100,7 +100,7 @@ function createDedentToken(pos: Position): string {
  */
 function analyzeLineIndent(line: string, lineNumber: number): LineIndentInfo {
   if (line.length === 0) {
-    return { type: null, count: 0 };
+    return { count: 0, type: null };
   }
 
   let indentEnd = 0;
@@ -139,7 +139,7 @@ function analyzeLineIndent(line: string, lineNumber: number): LineIndentInfo {
     }
   }
 
-  return { type: indentType, count: indentEnd };
+  return { count: indentEnd, type: indentType };
 }
 
 /**
@@ -194,9 +194,10 @@ function validateIndent(
     const foundPlural = indentInfo.type === 'tab' ? 'tabs' : 'spaces';
     let context: string;
     if (state.indentEstablishedAt?.source === 'directive') {
-      context = state.indentEstablishedAt.line === 0
-        ? `File uses ${plural} by default (no "use spaces" directive at the top of file found).`
-        : `File uses ${plural} ("use spaces" directive on line ${state.indentEstablishedAt.line}).`;
+      context =
+        state.indentEstablishedAt.line === 0
+          ? `File uses ${plural} by default (no "use spaces" directive at the top of file found).`
+          : `File uses ${plural} ("use spaces" directive on line ${state.indentEstablishedAt.line}).`;
     } else {
       context = `File uses ${plural} (first indented line: ${state.indentEstablishedAt?.line}).`;
     }
@@ -294,11 +295,11 @@ function processLine(
         indentInfo.type || 'tab'
       );
     }
-    tokens.push(createIndentToken({ line: lineNumber, level: newLevel }));
+    tokens.push(createIndentToken({ level: newLevel, line: lineNumber }));
   } else if (newLevel < state.previousLevel) {
     // Dedent - emit DEDENT token(s)
     for (let i = state.previousLevel; i > newLevel; i--) {
-      tokens.push(createDedentToken({ line: lineNumber, level: 0 }));
+      tokens.push(createDedentToken({ level: 0, line: lineNumber }));
     }
   }
 
@@ -313,7 +314,7 @@ function processLine(
 function generateEofDedents(state: ProcessingState, lastLineNumber: number): string {
   const dedents: string[] = [];
   for (let i = state.previousLevel; i > 0; i--) {
-    dedents.push(createDedentToken({ line: lastLineNumber, level: 0 }));
+    dedents.push(createDedentToken({ level: 0, line: lastLineNumber }));
   }
   return dedents.join('');
 }
@@ -356,17 +357,17 @@ export async function preprocess(
   const { mode = 'detect' } = options;
 
   const state: ProcessingState = {
-    mode,
-    lineNumber: 0,
-    expectedIndentType: mode === 'directive' ? 'tab' : null,
-    indentEstablishedAt: mode === 'directive' ? { line: 0, source: 'directive' } : null,
-    directiveLine: null,
     bufferedLines: [],
     directiveFound: false,
+    directiveLine: null,
+    expectedIndentType: mode === 'directive' ? 'tab' : null,
+    indentEstablishedAt: mode === 'directive' ? { line: 0, source: 'directive' } : null,
+    indentUnit: null,
     isFirstChunk: true,
+    lineNumber: 0,
+    mode,
     previousLevel: 0,
     previousSpaces: 0,
-    indentUnit: null,
   };
 
   const processedLines: string[] = [];
@@ -409,7 +410,7 @@ export async function preprocess(
       const indentInfo = analyzeLineIndent(line, lineNumber);
 
       if (mode === 'directive' && !state.directiveFound) {
-        state.bufferedLines.push({ line, lineNumber, indentInfo });
+        state.bufferedLines.push({ indentInfo, line, lineNumber });
       } else {
         validateIndent(indentInfo, lineNumber, state);
         processedLines.push(processLine(line, lineNumber, indentInfo, state));
@@ -435,7 +436,7 @@ export async function preprocess(
         state.bufferedLines = [];
       } else {
         const indentInfo = analyzeLineIndent(pendingChunk, lineNumber);
-        state.bufferedLines.push({ line: pendingChunk, lineNumber, indentInfo });
+        state.bufferedLines.push({ indentInfo, line: pendingChunk, lineNumber });
       }
     } else {
       const indentInfo = analyzeLineIndent(pendingChunk, lineNumber);
@@ -447,7 +448,9 @@ export async function preprocess(
   if (mode === 'directive' && !state.directiveFound && state.bufferedLines.length > 0) {
     for (const buffered of state.bufferedLines) {
       validateIndent(buffered.indentInfo, buffered.lineNumber, state);
-      processedLines.push(processLine(buffered.line, buffered.lineNumber, buffered.indentInfo, state));
+      processedLines.push(
+        processLine(buffered.line, buffered.lineNumber, buffered.indentInfo, state)
+      );
     }
   }
 
