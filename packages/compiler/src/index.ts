@@ -18,6 +18,8 @@ export {
   semantics,
   type Position,
   type IndentToken,
+  type Segment,
+  type SegmentType,
   type ParsedLine,
   type ParseResult,
   // Backwards compatibility

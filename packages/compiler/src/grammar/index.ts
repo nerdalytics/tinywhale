@@ -17,11 +17,24 @@ export interface IndentToken {
 }
 
 /**
+ * Segment type in parsed content.
+ */
+export type SegmentType = 'text' | 'comment';
+
+/**
+ * A segment of content on a line.
+ */
+export interface Segment {
+  type: SegmentType;
+  content: string;
+}
+
+/**
  * Represents a parsed line from the preprocessed input.
  */
 export interface ParsedLine {
   indentTokens: IndentToken[];
-  content: string;
+  segments: Segment[];
   lineNumber: number;
 }
 
@@ -37,67 +50,36 @@ export interface ParseResult {
 /**
  * TinyWhale Grammar Source
  *
- * This grammar is designed to work with preprocessed input where leading
- * whitespace has been converted to explicit INDENT (⇥) and DEDENT (⇤) tokens
- * with position information.
- *
  * Token format from preprocessor:
- *   INDENT: ⟨line,level⟩⇥
- *   DEDENT: ⟨line,level⟩⇤
+ *   ⟨line,level⟩⇥ content   (INDENT - increase indent level)
+ *   ⟨line,level⟩⇤           (DEDENT - decrease indent level)
  *
- * Examples:
- *   ⟨2,1⟩⇥fn bar()    (indent at line 2, entering level 1)
- *   ⟨4,0⟩⇤fn baz()    (dedent at line 4)
+ * Comment syntax:
+ *   # starts a comment, ends at next # or EOL
+ *   Examples: `# full line`, `text # inline # back`
  */
 const grammarSource = String.raw`
 TinyWhale {
-  // ============================================================
-  // Top-level structure
-  // All rules use lowercase (lexical) to avoid implicit space skipping.
-  // Each alternative must consume at least one character to avoid
-  // infinite loops in repetitions.
-  // ============================================================
+  program = line*
 
-  program = regularLine* eofPart
+  line = indentedLine | dedentLine | contentLine | blankLine
 
-  // Lines terminated by newline - each consumes at least one character
-  regularLine = indentTokens content newline  -- withContent
-              | newline                        -- blank
+  indentedLine = indentToken lineContent terminator
+  dedentLine = dedentToken+ lineContent? terminator
+  contentLine = lineContent terminator
+  blankLine = newline
 
-  // Final part of file (no trailing newline)
-  // Each non-empty alternative consumes at least one character
-  eofPart = indentToken+ content              -- indentAtEof
-          | contentChar+                       -- contentAtEof
-          |                                    -- empty
+  lineContent = segment+
+  segment = comment | text
+  comment = "#" commentContent ("#" | &newline | &dedentToken | end)
+  commentContent = (~("#" | newline | dedentToken) any)*
+  text = (~("#" | newline | dedentToken) any)+
 
-  // Zero or more INDENT/DEDENT tokens at the start of a line
-  indentTokens = indentToken*
-
-  indentToken = indent | dedent
-
-  // ============================================================
-  // INDENT and DEDENT tokens with position
-  // ============================================================
-
-  indent = position "⇥"
-  dedent = position "⇤"
-
-  // Position format: ⟨line,level⟩
+  indentToken = position "⇥"
+  dedentToken = position "⇤"
   position = "⟨" digit+ "," digit+ "⟩"
 
-  // ============================================================
-  // Line content
-  // ============================================================
-
-  // Content after indent tokens until newline
-  content = contentChar*
-
-  contentChar = ~newline ~"⇥" ~"⇤" any
-
-  // ============================================================
-  // Lexical rules
-  // ============================================================
-
+  terminator = newline | end
   newline = "\n" | "\r\n" | "\r"
 }
 `;
@@ -113,21 +95,12 @@ export const grammars = ohm.grammars(grammarSource);
 export const TinyWhaleGrammar = grammars['TinyWhale'];
 
 /**
- * Parse a position string like "⟨2,1⟩" into Position.
- */
-function parsePositionString(posStr: string): Position {
-  // Remove the angle brackets and split by comma
-  const inner = posStr.slice(1, -1); // Remove ⟨ and ⟩
-  const [line, level] = inner.split(',').map(Number);
-  return { line, level };
-}
-
-/**
  * Helper to get line number from a node's source position.
  */
 function getLineNumber(node: ohm.Node): number {
   const interval = node.source;
-  const textBefore = interval.sourceString.substring(0, interval.startIdx);
+  const fullSource = interval.sourceString;
+  const textBefore = fullSource.substring(0, interval.startIdx);
   return (textBefore.match(/\n/g) || []).length + 1;
 }
 
@@ -149,100 +122,95 @@ export function createSemantics() {
 
   // Extract IndentToken from indent/dedent nodes
   semantics.addOperation<IndentToken>('toIndentToken', {
-    indent(position, _marker) {
+    indentToken(position, _marker) {
       return {
         type: 'indent',
         position: position.toPosition(),
       };
     },
 
-    dedent(position, _marker) {
+    dedentToken(position, _marker) {
       return {
         type: 'dedent',
         position: position.toPosition(),
       };
     },
+  });
 
-    indentToken(token) {
-      return token.toIndentToken();
+  // Extract Segment from segment nodes
+  semantics.addOperation<Segment>('toSegment', {
+    comment(_hash1, content, _hash2OrEnd) {
+      return {
+        type: 'comment',
+        content: content.sourceString,
+      };
+    },
+
+    text(chars) {
+      return {
+        type: 'text',
+        content: chars.sourceString,
+      };
+    },
+
+    segment(inner) {
+      return inner.toSegment();
     },
   });
 
-  // Extract array of IndentTokens
-  semantics.addOperation<IndentToken[]>('toIndentTokens', {
-    indentTokens(tokens) {
-      return tokens.children.map(t => t.toIndentToken());
+  // Extract array of Segments from lineContent
+  semantics.addOperation<Segment[]>('toSegments', {
+    lineContent(segments) {
+      return segments.children.map(s => s.toSegment());
     },
   });
 
-  // Extract content string
-  semantics.addOperation<string>('toContent', {
-    content(chars) {
-      return this.sourceString;
-    },
-  });
-
-  // Convert regularLine nodes to ParsedLine
+  // Convert line nodes to ParsedLine
   semantics.addOperation<ParsedLine | null>('toLine', {
-    regularLine_withContent(indentTokens, content, _newline) {
-      const tokens = indentTokens.toIndentTokens();
-      const lineNum = tokens.length > 0
-        ? tokens[0].position.line
-        : getLineNumber(this);
-
+    indentedLine(indentToken, lineContent, _terminator) {
+      const token = indentToken.toIndentToken();
       return {
-        indentTokens: tokens,
-        content: content.toContent(),
-        lineNumber: lineNum,
+        indentTokens: [token],
+        segments: lineContent.toSegments(),
+        lineNumber: token.position.line,
       };
     },
 
-    regularLine_blank(_newline) {
-      return null;
-    },
-  });
-
-  // Convert eofPart to ParsedLine (or null if empty)
-  semantics.addOperation<ParsedLine | null>('toEofLine', {
-    eofPart_indentAtEof(indentTokensIter, content) {
-      const tokens = indentTokensIter.children.map(t => t.toIndentToken());
-      const lineNum = tokens.length > 0
-        ? tokens[0].position.line
-        : getLineNumber(this);
-
+    dedentLine(dedentTokens, lineContent, _terminator) {
+      const tokens: IndentToken[] = dedentTokens.children.map(t => t.toIndentToken());
+      const segments = lineContent.children.length > 0
+        ? lineContent.children[0].toSegments()
+        : [];
       return {
         indentTokens: tokens,
-        content: content.toContent(),
-        lineNumber: lineNum,
+        segments,
+        lineNumber: tokens.length > 0 ? tokens[0].position.line : getLineNumber(this),
       };
     },
 
-    eofPart_contentAtEof(contentChars) {
+    contentLine(lineContent, _terminator) {
       return {
         indentTokens: [],
-        content: this.sourceString,
+        segments: lineContent.toSegments(),
         lineNumber: getLineNumber(this),
       };
     },
 
-    eofPart_empty() {
+    blankLine(_newline) {
       return null;
+    },
+
+    line(inner) {
+      return inner.toLine();
     },
   });
 
   // Collect all lines from a Program
   semantics.addOperation<ParsedLine[]>('toLines', {
-    program(regularLines, eofPart) {
-      const lines: ParsedLine[] = regularLines.children
+    program(lines) {
+      return lines.children
         .map(line => line.toLine())
         .filter((line): line is ParsedLine => line !== null);
-
-      const eofLine = eofPart.toEofLine();
-      if (eofLine !== null) {
-        lines.push(eofLine);
-      }
-
-      return lines;
     },
   });
 

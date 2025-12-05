@@ -336,23 +336,23 @@ describe('preprocessor', () => {
       const result = await preprocess(stream);
       // Should have INDENT tokens
       assert.ok(result.includes('⇥'));
-      // Should have content
-      assert.ok(result.includes('hello'));
-      assert.ok(result.includes('world'));
-      assert.ok(result.includes('nested'));
+      // Should have content (comments)
+      assert.ok(result.includes('# top level'));
+      assert.ok(result.includes('# indented'));
+      assert.ok(result.includes('# nested'));
     });
 
     it('should process spaces-only.tw fixture', async () => {
       const stream = createReadStream(fixturesPath('spaces-only.tw'), 'utf-8');
       const result = await preprocess(stream);
       assert.ok(result.includes('⇥'));
-      assert.ok(result.includes('hello'));
+      assert.ok(result.includes('# top level'));
     });
 
     it('should process no-indent.tw fixture', async () => {
       const stream = createReadStream(fixturesPath('no-indent.tw'), 'utf-8');
       const result = await preprocess(stream);
-      assert.strictEqual(result, 'hello\nworld\ndone\n');
+      assert.strictEqual(result, '# first\n# second\n# third\n');
     });
 
     it('should process empty.tw fixture', async () => {
