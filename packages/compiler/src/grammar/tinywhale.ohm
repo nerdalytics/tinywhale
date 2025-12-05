@@ -1,0 +1,37 @@
+/*
+ * TinyWhale Grammar - Indentation + Comments
+ *
+ * Token format from preprocessor:
+ *   ⟨line,level⟩⇥ content   (INDENT - increase indent level)
+ *   ⟨line,level⟩⇤           (DEDENT - decrease indent level)
+ *
+ * Comment syntax:
+ *   # starts a comment, ends at next # or EOL
+ *   Examples: `# full line`, `text # inline # back`
+ *
+ * All rules use lowercase (lexical) to avoid implicit space skipping.
+ */
+
+TinyWhale {
+  program = line*
+
+  line = indentedLine | dedentLine | contentLine | blankLine
+
+  indentedLine = indentToken lineContent terminator
+  dedentLine = dedentToken+ lineContent? terminator
+  contentLine = lineContent terminator
+  blankLine = newline
+
+  lineContent = segment+
+  segment = comment | text
+  comment = "#" commentContent ("#" | &newline | &dedentToken | end)
+  commentContent = (~("#" | newline | dedentToken) any)*
+  text = (~("#" | newline | dedentToken) any)+
+
+  indentToken = position "⇥"
+  dedentToken = position "⇤"
+  position = "⟨" digit+ "," digit+ "⟩"
+
+  terminator = newline | end
+  newline = "\n" | "\r\n" | "\r"
+}

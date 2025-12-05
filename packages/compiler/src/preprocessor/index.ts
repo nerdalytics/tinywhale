@@ -46,11 +46,11 @@ export class IndentationError extends Error {
 
 /**
  * Represents a position in the source text.
- * Line and column are 1-indexed.
+ * Line is 1-indexed. Level is the indent level (0 = root).
  */
 interface Position {
   line: number;
-  column: number;
+  level: number;
 }
 
 /**
@@ -68,15 +68,30 @@ interface LineIndentInfo {
 const UTF8_BOM = '\uFEFF';
 
 /**
- * Creates an indentation token string.
- * Format: indent_<type>:<startLine>,<startCol>;<endLine>,<endCol>
+ * Unicode characters for INDENT and DEDENT tokens.
  */
-function createIndentToken(
-  type: IndentType,
-  start: Position,
-  end: Position
-): string {
-  return `indent_${type}:${start.line},${start.column};${end.line},${end.column}`;
+const INDENT_CHAR = '⇥'; // U+21E5 RIGHTWARDS ARROW TO BAR
+const DEDENT_CHAR = '⇤'; // U+21E4 LEFTWARDS ARROW TO BAR
+
+/**
+ * Creates a position string in the format ⟨line,level⟩
+ */
+function formatPosition(pos: Position): string {
+  return `⟨${pos.line},${pos.level}⟩`;
+}
+
+/**
+ * Creates an INDENT token with position.
+ */
+function createIndentToken(pos: Position): string {
+  return `${formatPosition(pos)}${INDENT_CHAR}`;
+}
+
+/**
+ * Creates a DEDENT token with position.
+ */
+function createDedentToken(pos: Position): string {
+  return `${formatPosition(pos)}${DEDENT_CHAR}`;
 }
 
 /**
@@ -128,26 +143,6 @@ function analyzeLineIndent(line: string, lineNumber: number): LineIndentInfo {
 }
 
 /**
- * Processes a single line and returns the tokenized version.
- */
-function processLine(
-  line: string,
-  lineNumber: number,
-  indentInfo: LineIndentInfo
-): string {
-  if (line.length === 0 || indentInfo.type === null || indentInfo.count === 0) {
-    return line;
-  }
-
-  const start: Position = { line: lineNumber, column: 1 };
-  const end: Position = { line: lineNumber, column: indentInfo.count };
-  const token = createIndentToken(indentInfo.type, start, end);
-  const rest = line.slice(indentInfo.count);
-
-  return `${token} ${rest}`;
-}
-
-/**
  * Parses a "use spaces" directive from a line.
  * Returns 'space' if directive found, null otherwise.
  */
@@ -168,11 +163,15 @@ interface ProcessingState {
   expectedIndentType: IndentType | null;
   indentEstablishedAt: { line: number; source: 'directive' | 'detected' } | null;
   directiveLine: number | null;
-  // For directive mode: buffer lines until we find directive or finish
-  // We need to do a two-pass in directive mode since directive can appear after indented lines
   bufferedLines: { line: string; lineNumber: number; indentInfo: LineIndentInfo }[];
   directiveFound: boolean;
   isFirstChunk: boolean;
+  // Previous line's indent level
+  previousLevel: number;
+  // Previous line's space count (for delta calculation)
+  previousSpaces: number;
+  // For spaces: the consistent unit (detected from first indent delta)
+  indentUnit: number | null;
 }
 
 /**
@@ -188,7 +187,6 @@ function validateIndent(
   }
 
   if (state.expectedIndentType === null) {
-    // First indent sets the type (detect mode)
     state.expectedIndentType = indentInfo.type;
     state.indentEstablishedAt = { line: lineNumber, source: 'detected' };
   } else if (indentInfo.type !== state.expectedIndentType) {
@@ -213,27 +211,143 @@ function validateIndent(
 }
 
 /**
+ * Calculates indent level from whitespace count.
+ * For tabs: level = count
+ * For spaces: compares delta between lines to derive unit.
+ */
+function calculateIndentLevel(
+  indentInfo: LineIndentInfo,
+  lineNumber: number,
+  state: ProcessingState
+): number {
+  if (indentInfo.count === 0) {
+    state.previousSpaces = 0;
+    return 0;
+  }
+
+  if (indentInfo.type === 'tab') {
+    return indentInfo.count;
+  }
+
+  // Spaces: compare with previous line
+  const delta = indentInfo.count - state.previousSpaces;
+
+  if (delta > 0) {
+    // Indent
+    if (state.indentUnit === null) {
+      state.indentUnit = delta;
+    } else if (delta !== state.indentUnit) {
+      throw new IndentationError(
+        `${lineNumber}:1 File uses ${state.indentUnit}-space indentation. Add ${state.indentUnit} spaces, not ${delta}.`,
+        lineNumber,
+        1,
+        'space',
+        'space'
+      );
+    }
+  } else if (delta < 0 && state.indentUnit !== null) {
+    // Dedent - check alignment
+    if (indentInfo.count % state.indentUnit !== 0) {
+      // Show valid levels: 0, unit, 2*unit, ... up to previousSpaces
+      const validLevels: number[] = [];
+      for (let s = 0; s <= state.previousSpaces; s += state.indentUnit) {
+        validLevels.push(s);
+      }
+      throw new IndentationError(
+        `${lineNumber}:1 Unindent to ${validLevels.join(', ')} spaces.`,
+        lineNumber,
+        1,
+        'space',
+        'space'
+      );
+    }
+  }
+
+  state.previousSpaces = indentInfo.count;
+  return state.indentUnit ? indentInfo.count / state.indentUnit : 0;
+}
+
+/**
+ * Processes a single line and returns the tokenized version with INDENT/DEDENT tokens.
+ */
+function processLine(
+  line: string,
+  lineNumber: number,
+  indentInfo: LineIndentInfo,
+  state: ProcessingState
+): string {
+  const newLevel = calculateIndentLevel(indentInfo, lineNumber, state);
+  const content = line.slice(indentInfo.count);
+  const tokens: string[] = [];
+
+  if (newLevel > state.previousLevel) {
+    // Indent - must only go up by 1 level
+    if (newLevel > state.previousLevel + 1) {
+      const expected = state.previousLevel + 1;
+      const got = newLevel;
+      const unit = indentInfo.type === 'tab' ? 'tab' : 'spaces';
+      throw new IndentationError(
+        `${lineNumber}:1 Use ${expected} ${unit}, not ${got}.`,
+        lineNumber,
+        1,
+        indentInfo.type || 'tab',
+        indentInfo.type || 'tab'
+      );
+    }
+    tokens.push(createIndentToken({ line: lineNumber, level: newLevel }));
+  } else if (newLevel < state.previousLevel) {
+    // Dedent - emit DEDENT token(s)
+    for (let i = state.previousLevel; i > newLevel; i--) {
+      tokens.push(createDedentToken({ line: lineNumber, level: 0 }));
+    }
+  }
+
+  state.previousLevel = newLevel;
+  tokens.push(content);
+  return tokens.join('');
+}
+
+/**
+ * Generates remaining DEDENT tokens at end of file.
+ */
+function generateEofDedents(state: ProcessingState, lastLineNumber: number): string {
+  const dedents: string[] = [];
+  for (let i = state.previousLevel; i > 0; i--) {
+    dedents.push(createDedentToken({ line: lastLineNumber, level: 0 }));
+  }
+  return dedents.join('');
+}
+
+/**
  * Preprocesses source code by tokenizing indentation.
  *
  * This is the first phase of compilation that operates on raw text streams.
- * It replaces leading whitespace (tabs or spaces) with explicit tokens that
- * include position information.
+ * It replaces leading whitespace (tabs or spaces) with explicit INDENT (⇥)
+ * and DEDENT (⇤) tokens that include position information.
  *
  * The preprocessor operates in two modes:
  * - 'detect' (default): First indentation character sets file-wide type
  * - 'directive': Respects "use spaces" directive, defaults to tabs
  *
- * Mixed indentation (tabs and spaces in the same file) causes an error.
+ * Indentation rules:
+ * - Mixed indentation (tabs and spaces in the same file) causes an error
+ * - Can only increase indent by one level at a time (like Python)
+ * - For tabs: 1 tab = 1 level
+ * - For spaces: indent unit detected from first indent (e.g., 2 or 4 spaces)
+ *   and must be consistent throughout the file
  *
- * Token format: indent_<type>:<startLine>,<startCol>;<endLine>,<endCol>
+ * Token format:
+ *   INDENT: ⟨line,level⟩⇥
+ *   DEDENT: ⟨line,level⟩⇤
+ *
  * Examples:
- *   - indent_tab:1,1;1,1 (single tab on line 1)
- *   - indent_space:2,1;2,4 (4 spaces on line 2)
+ *   - ⟨2,1⟩⇥fn bar()    (indent at line 2, entering level 1)
+ *   - ⟨4,0⟩⇤fn baz()    (dedent at line 4)
  *
  * @param stream - A readable stream of UTF-8 text
  * @param options - Preprocessor options
- * @returns The preprocessed text with indentation tokens
- * @throws IndentationError if mixed indentation is detected
+ * @returns The preprocessed text with INDENT/DEDENT tokens
+ * @throws IndentationError if indentation rules are violated
  */
 export async function preprocess(
   stream: Readable,
@@ -250,6 +364,9 @@ export async function preprocess(
     bufferedLines: [],
     directiveFound: false,
     isFirstChunk: true,
+    previousLevel: 0,
+    previousSpaces: 0,
+    indentUnit: null,
   };
 
   const processedLines: string[] = [];
@@ -281,7 +398,6 @@ export async function preprocess(
           state.expectedIndentType = directive;
           state.indentEstablishedAt = { line: lineNumber, source: 'directive' };
 
-          // Lines before directive are discarded with it
           for (const buffered of state.bufferedLines) {
             validateIndent(buffered.indentInfo, buffered.lineNumber, state);
           }
@@ -296,7 +412,7 @@ export async function preprocess(
         state.bufferedLines.push({ line, lineNumber, indentInfo });
       } else {
         validateIndent(indentInfo, lineNumber, state);
-        processedLines.push(processLine(line, lineNumber, indentInfo));
+        processedLines.push(processLine(line, lineNumber, indentInfo, state));
       }
     }
   }
@@ -324,18 +440,24 @@ export async function preprocess(
     } else {
       const indentInfo = analyzeLineIndent(pendingChunk, lineNumber);
       validateIndent(indentInfo, lineNumber, state);
-      processedLines.push(processLine(pendingChunk, lineNumber, indentInfo));
+      processedLines.push(processLine(pendingChunk, lineNumber, indentInfo, state));
     }
   }
 
   if (mode === 'directive' && !state.directiveFound && state.bufferedLines.length > 0) {
     for (const buffered of state.bufferedLines) {
       validateIndent(buffered.indentInfo, buffered.lineNumber, state);
-      processedLines.push(processLine(buffered.line, buffered.lineNumber, buffered.indentInfo));
+      processedLines.push(processLine(buffered.line, buffered.lineNumber, buffered.indentInfo, state));
     }
   }
 
-  const result = processedLines.join('\n');
+  let result = processedLines.join('\n');
+
+  // Add EOF dedents
+  const eofDedents = generateEofDedents(state, state.lineNumber);
+  if (eofDedents) {
+    result += '\n' + eofDedents;
+  }
 
   // Preserve trailing newline
   if (pendingChunk.length === 0 && state.lineNumber > 0) {
