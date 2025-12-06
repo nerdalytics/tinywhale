@@ -7,16 +7,19 @@ export {
 	type IndentInfo,
 	type IndentToken,
 	match,
+	type PanicStatementNode,
 	type ParsedLine,
 	type ParseResult,
 	type Position,
 	parse,
 	// Backwards compatibility
 	type SourcePosition,
+	type Statement,
+	type StatementNode,
 	semantics,
 	TinyWhaleGrammar,
 	trace,
-} from './grammar/index.js'
+} from './grammar/index.ts'
 export {
 	IndentationError,
 	type IndentMode,

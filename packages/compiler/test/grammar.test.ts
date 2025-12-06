@@ -351,4 +351,81 @@ describe('grammar', () => {
 			assert.strictEqual(result.lines.length, 0)
 		})
 	})
+
+	describe('panic keyword', () => {
+		describe('match function', () => {
+			it('should match panic keyword', () => {
+				const result = match('⟨1,1⟩⇥ panic\n')
+				assert.ok(result.succeeded())
+			})
+
+			it('should match panic with trailing comment', () => {
+				const result = match('⟨1,1⟩⇥ panic # comment\n')
+				assert.ok(result.succeeded())
+			})
+
+			it('should not match panicMode as panic (keyword protection)', () => {
+				// panicMode should not be recognized as panic keyword
+				// The grammar should fail since panicMode is not a valid statement
+				const result = match('⟨1,1⟩⇥ panicMode\n')
+				assert.ok(result.failed())
+			})
+
+			it('should not match panic123 as panic (keyword protection)', () => {
+				const result = match('⟨1,1⟩⇥ panic123\n')
+				assert.ok(result.failed())
+			})
+		})
+
+		describe('parse function', () => {
+			it('should parse panic statement', () => {
+				const result = parse('⟨1,1⟩⇥ panic\n')
+				assert.strictEqual(result.succeeded, true)
+				assert.strictEqual(result.lines.length, 1)
+				const line = result.lines[0]
+				assert.ok(line)
+				assert.ok(line.statement)
+				assert.strictEqual(line.statement.type, 'panic')
+			})
+
+			it('should parse line with no statement (backward compat)', () => {
+				const result = parse('⟨1,1⟩⇥\n')
+				assert.strictEqual(result.succeeded, true)
+				assert.strictEqual(result.lines.length, 1)
+				const line = result.lines[0]
+				assert.ok(line)
+				assert.strictEqual(line.statement, undefined)
+			})
+
+			it('should parse panic with position information', () => {
+				const result = parse('⟨5,2⟩⇥ panic\n')
+				assert.strictEqual(result.succeeded, true)
+				const line = result.lines[0]
+				assert.ok(line)
+				assert.ok(line.statement)
+				assert.strictEqual(line.statement.type, 'panic')
+				assert.ok(line.statement.lineNumber > 0)
+			})
+
+			it('should parse multiple lines with panic', () => {
+				const input = '⟨1,1⟩⇥ panic\n⟨2,0⟩⇤\n⟨3,1⟩⇥ panic\n'
+				const result = parse(input)
+				assert.strictEqual(result.succeeded, true)
+
+				const panicLines = result.lines.filter((l) => l.statement?.type === 'panic')
+				assert.strictEqual(panicLines.length, 2)
+			})
+		})
+
+		describe('semantics', () => {
+			it('should extract panic statement via toStatement', () => {
+				const sem = createSemantics()
+				const matchResult = TinyWhaleGrammar.match('panic', 'PanicStatement')
+				assert.ok(matchResult.succeeded())
+
+				const statement = sem(matchResult)['toStatement']()
+				assert.strictEqual(statement.type, 'panic')
+			})
+		})
+	})
 })

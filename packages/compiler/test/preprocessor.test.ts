@@ -367,5 +367,16 @@ describe('preprocessor', () => {
 				}
 			)
 		})
+
+		it('should process panic.tw fixture', async () => {
+			const stream = createReadStream(fixturesPath('panic.tw'), 'utf-8')
+			const result = await preprocess(stream)
+			// Should have INDENT tokens
+			assert.ok(result.includes('⇥'))
+			// Should have DEDENT tokens
+			assert.ok(result.includes('⇤'))
+			// Should have panic statements preserved
+			assert.ok(result.includes('panic'))
+		})
 	})
 })

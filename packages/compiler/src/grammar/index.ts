@@ -17,11 +17,32 @@ export interface IndentToken {
 }
 
 /**
+ * Base interface for all AST statement nodes.
+ */
+export interface StatementNode {
+	type: string
+	lineNumber: number
+}
+
+/**
+ * Represents a panic statement in the AST.
+ */
+export interface PanicStatementNode extends StatementNode {
+	type: 'panic'
+}
+
+/**
+ * Union type for all statement types.
+ */
+export type Statement = PanicStatementNode
+
+/**
  * Represents a parsed line from the preprocessed input.
  */
 export interface ParsedLine {
 	indentTokens: IndentToken[]
 	lineNumber: number
+	statement?: Statement
 }
 
 /**
@@ -49,8 +70,17 @@ TinyWhale {
   Program (a program) = Line*
   Line (a line) = IndentedLine | DedentLine
 
-  IndentedLine = indentToken
-  DedentLine = dedentToken+
+  IndentedLine = indentToken Statement?
+  DedentLine = dedentToken+ Statement?
+
+  // Statements
+  Statement = PanicStatement
+  PanicStatement = panic
+
+  // Keywords
+  keyword = panic
+  panic = "panic" ~identifierPart
+  identifierPart = alnum | "_"
 
   // Lexical token rules
   indentToken = position "⇥"
@@ -110,21 +140,40 @@ export function createSemantics() {
 		},
 	})
 
+	// Extract Statement from statement nodes
+	semantics.addOperation<Statement>('toStatement', {
+		PanicStatement(_panicKeyword) {
+			return {
+				lineNumber: getLineNumber(this),
+				type: 'panic',
+			} as PanicStatementNode
+		},
+		Statement(stmt) {
+			return stmt['toStatement']()
+		},
+	})
+
 	// Convert line nodes to ParsedLine
 	semantics.addOperation<ParsedLine>('toLine', {
-		DedentLine(dedentTokens) {
+		DedentLine(dedentTokens, optionalStatement) {
 			const tokens: IndentToken[] = dedentTokens.children.map((t) => t['toIndentToken']())
 			const firstToken = tokens[0]
+			const stmtNode = optionalStatement.children[0]
+			const statement = stmtNode !== undefined ? stmtNode['toStatement']() : undefined
 			return {
 				indentTokens: tokens,
 				lineNumber: firstToken !== undefined ? firstToken.position.line : getLineNumber(this),
+				statement,
 			}
 		},
-		IndentedLine(indentToken) {
+		IndentedLine(indentToken, optionalStatement) {
 			const token = indentToken['toIndentToken']()
+			const stmtNode = optionalStatement.children[0]
+			const statement = stmtNode !== undefined ? stmtNode['toStatement']() : undefined
 			return {
 				indentTokens: [token],
 				lineNumber: token.position.line,
+				statement,
 			}
 		},
 	})
