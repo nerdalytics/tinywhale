@@ -9,10 +9,10 @@
 # Allow list for the current folder
 !.gitattributes
 !.github/
-!.mise.toml
 !.npmrc
 !biome.json
 !LICENSE
+!mise.toml
 !package-lock.json
 !package.json
 !packages/

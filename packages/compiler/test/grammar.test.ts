@@ -95,9 +95,14 @@ describe('grammar', () => {
 			assert.strictEqual(result.lines.length, 1)
 
 			const line = result.lines[0]
+			assert.ok(line)
 			assert.strictEqual(line.indentTokens.length, 1)
-			assert.strictEqual(line.indentTokens[0].type, 'indent')
-			assert.deepStrictEqual(line.indentTokens[0].position, {
+			const token = line.indentTokens[0]
+			assert.ok(token)
+			const tokenType = token.type
+			assert.strictEqual(tokenType, 'indent')
+			const tokenPosition = token.position
+			assert.deepStrictEqual(tokenPosition, {
 				level: 1,
 				line: 1,
 			})
@@ -109,17 +114,26 @@ describe('grammar', () => {
 			assert.strictEqual(result.lines.length, 1)
 
 			const line = result.lines[0]
+			assert.ok(line)
 			assert.strictEqual(line.indentTokens.length, 1)
-			assert.strictEqual(line.indentTokens[0].type, 'dedent')
+			const token = line.indentTokens[0]
+			assert.ok(token)
+			assert.strictEqual(token.type, 'dedent')
 		})
 
 		it('should parse multiple dedent tokens on same line', () => {
 			const result = parse('⟨1,0⟩⇤⟨1,0⟩⇤\n')
 			assert.strictEqual(result.succeeded, true)
 			assert.strictEqual(result.lines.length, 1)
-			assert.strictEqual(result.lines[0].indentTokens.length, 2)
-			assert.strictEqual(result.lines[0].indentTokens[0].type, 'dedent')
-			assert.strictEqual(result.lines[0].indentTokens[1].type, 'dedent')
+			const line = result.lines[0]
+			assert.ok(line)
+			assert.strictEqual(line.indentTokens.length, 2)
+			const token1 = line.indentTokens[0]
+			assert.ok(token1)
+			const token2 = line.indentTokens[1]
+			assert.ok(token2)
+			assert.strictEqual(token1.type, 'dedent')
+			assert.strictEqual(token2.type, 'dedent')
 		})
 
 		it('should parse complex indentation sequence', () => {
@@ -130,15 +144,27 @@ describe('grammar', () => {
 			assert.strictEqual(result.lines.length, 3)
 
 			// Line 1 - one INDENT (level 1)
-			assert.strictEqual(result.lines[0].indentTokens.length, 1)
-			assert.strictEqual(result.lines[0].indentTokens[0].type, 'indent')
-			assert.strictEqual(result.lines[0].indentTokens[0].position.level, 1)
+			const line1 = result.lines[0]
+			assert.ok(line1)
+			assert.strictEqual(line1.indentTokens.length, 1)
+			const line1Token1 = line1.indentTokens[0]
+			assert.ok(line1Token1)
+			assert.strictEqual(line1Token1.type, 'indent')
+			assert.strictEqual(line1Token1.position.level, 1)
 
 			// Line 2 - one more INDENT (level 2)
-			assert.strictEqual(result.lines[1].indentTokens[0].position.level, 2)
+			const line2 = result.lines[1]
+			assert.ok(line2)
+			assert.strictEqual(line2.indentTokens.length, 1)
+			const line2Token1 = line2.indentTokens[0]
+			assert.ok(line2Token1)
+			assert.strictEqual(line2Token1.type, 'indent')
+			assert.strictEqual(line2Token1.position.level, 2)
 
 			// Line 3 - two DEDENTs
-			assert.strictEqual(result.lines[2].indentTokens.length, 2)
+			const line3 = result.lines[2]
+			assert.ok(line3)
+			assert.strictEqual(line3.indentTokens.length, 2)
 		})
 
 		it('should skip comments (not in AST)', () => {
@@ -152,8 +178,12 @@ describe('grammar', () => {
 			const result = parse('# comment # ⟨1,1⟩⇥ # trailing\n')
 			assert.strictEqual(result.succeeded, true)
 			assert.strictEqual(result.lines.length, 1)
-			assert.strictEqual(result.lines[0].indentTokens.length, 1)
-			assert.strictEqual(result.lines[0].indentTokens[0].type, 'indent')
+			const line1 = result.lines[0]
+			assert.ok(line1)
+			assert.strictEqual(line1.indentTokens.length, 1)
+			const token = line1.indentTokens[0]
+			assert.ok(token)
+			assert.strictEqual(token.type, 'indent')
 		})
 	})
 
@@ -169,7 +199,7 @@ describe('grammar', () => {
 			const matchResult = TinyWhaleGrammar.match('⟨5,2⟩⇥', 'indentToken')
 			assert.ok(matchResult.succeeded())
 
-			const token: IndentToken = sem(matchResult).toIndentToken()
+			const token: IndentToken = sem(matchResult)['toIndentToken']()
 			assert.strictEqual(token.type, 'indent')
 			assert.deepStrictEqual(token.position, {
 				level: 2,
@@ -182,7 +212,7 @@ describe('grammar', () => {
 			const matchResult = TinyWhaleGrammar.match('⟨10,0⟩⇤', 'dedentToken')
 			assert.ok(matchResult.succeeded())
 
-			const token: IndentToken = sem(matchResult).toIndentToken()
+			const token: IndentToken = sem(matchResult)['toIndentToken']()
 			assert.strictEqual(token.type, 'dedent')
 			assert.strictEqual(token.position.line, 10)
 			assert.strictEqual(token.position.level, 0)
@@ -221,8 +251,16 @@ describe('grammar', () => {
 			const indentLines = result.lines.filter((l) =>
 				l.indentTokens.some((t) => t.type === 'indent')
 			)
-			assert.strictEqual(indentLines[0].indentTokens[0].position.level, 1)
-			assert.strictEqual(indentLines[1].indentTokens[0].position.level, 2)
+			const line1 = indentLines[0]
+			assert.ok(line1)
+			const line2 = indentLines[1]
+			assert.ok(line2)
+			const line1Token1 = line1.indentTokens[0]
+			assert.ok(line1Token1)
+			const line2Token1 = line2.indentTokens[0]
+			assert.ok(line2Token1)
+			assert.strictEqual(line1Token1.position.level, 1)
+			assert.strictEqual(line2Token1.position.level, 2)
 		})
 
 		it('should handle file with no indentation', async () => {
@@ -297,8 +335,13 @@ describe('grammar', () => {
 		it('should handle large position numbers', () => {
 			const result = parse('⟨999,100⟩⇥\n')
 			assert.strictEqual(result.succeeded, true)
-			assert.strictEqual(result.lines[0].indentTokens[0].position.line, 999)
-			assert.strictEqual(result.lines[0].indentTokens[0].position.level, 100)
+			const line1 = result.lines[0]
+			assert.ok(line1)
+			assert.strictEqual(line1.indentTokens.length, 1)
+			const line1Token1 = line1.indentTokens[0]
+			assert.ok(line1Token1)
+			assert.strictEqual(line1Token1.position.line, 999)
+			assert.strictEqual(line1Token1.position.level, 100)
 		})
 
 		it('should handle comment-only lines as blank', () => {

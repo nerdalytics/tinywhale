@@ -30,7 +30,7 @@ export interface ParsedLine {
 export interface ParseResult {
 	lines: ParsedLine[]
 	succeeded: boolean
-	message?: string
+	message?: string | undefined
 }
 
 /**
@@ -98,13 +98,13 @@ export function createSemantics() {
 	semantics.addOperation<IndentToken>('toIndentToken', {
 		dedentToken(position, _marker) {
 			return {
-				position: position.toPosition(),
+				position: position['toPosition'](),
 				type: 'dedent',
 			}
 		},
 		indentToken(position, _marker) {
 			return {
-				position: position.toPosition(),
+				position: position['toPosition'](),
 				type: 'indent',
 			}
 		},
@@ -113,7 +113,7 @@ export function createSemantics() {
 	// Convert line nodes to ParsedLine
 	semantics.addOperation<ParsedLine>('toLine', {
 		DedentLine(dedentTokens) {
-			const tokens: IndentToken[] = dedentTokens.children.map((t) => t.toIndentToken())
+			const tokens: IndentToken[] = dedentTokens.children.map((t) => t['toIndentToken']())
 			const firstToken = tokens[0]
 			return {
 				indentTokens: tokens,
@@ -121,7 +121,7 @@ export function createSemantics() {
 			}
 		},
 		IndentedLine(indentToken) {
-			const token = indentToken.toIndentToken()
+			const token = indentToken['toIndentToken']()
 			return {
 				indentTokens: [token],
 				lineNumber: token.position.line,
@@ -132,7 +132,7 @@ export function createSemantics() {
 	// Collect all lines from a Program
 	semantics.addOperation<ParsedLine[]>('toLines', {
 		Program(lines) {
-			return lines.children.map((line) => line.toLine())
+			return lines.children.map((line) => line['toLine']())
 		},
 	})
 
@@ -161,7 +161,7 @@ export function parse(input: string): ParseResult {
 		}
 	}
 
-	const lines = semantics(matchResult).toLines()
+	const lines = semantics(matchResult)['toLines']()
 
 	return {
 		lines,
