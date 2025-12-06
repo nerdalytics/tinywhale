@@ -1,65 +1,33 @@
 import type { Readable } from 'node:stream'
+import { analyzeLineIndent, parseDirective } from './analysis.ts'
+import type { ProcessingState } from './state.ts'
+import { createProcessingState } from './state.ts'
+import { createDedentToken, createIndentToken } from './tokens.ts'
+import type { IndentType, LineIndentInfo, PreprocessOptions } from './types.ts'
+import { handleSpaceIndentDelta, validateIndent, validateIndentJump } from './validation.ts'
 
-/**
- * Token types for indentation.
- */
-type IndentType = 'tab' | 'space'
-
-/**
- * Indentation mode for the preprocessor.
- * - 'detect': First indentation character encountered sets the file-wide type (default)
- * - 'directive': Respects "use spaces" directive, otherwise defaults to tabs
- */
-export type IndentMode = 'detect' | 'directive'
-
-/**
- * Options for the preprocessor.
- */
-export interface PreprocessOptions {
-	mode?: IndentMode
-}
-
-/**
- * Error thrown when mixed indentation is detected.
- */
-export class IndentationError extends Error {
-	readonly line: number
-	readonly column: number
-	readonly expected: IndentType
-	readonly found: IndentType
-
-	constructor(
-		message: string,
-		line: number,
-		column: number,
-		expected: IndentType,
-		found: IndentType
-	) {
-		super(message)
-		this.name = 'IndentationError'
-		this.line = line
-		this.column = column
-		this.expected = expected
-		this.found = found
-	}
-}
-
-/**
- * Represents a position in the source text.
- * Line is 1-indexed. Level is the indent level (0 = root).
- */
-interface Position {
-	line: number
-	level: number
-}
-
-/**
- * Result of analyzing a line's indentation.
- */
-interface LineIndentInfo {
-	type: IndentType | null
-	count: number
-}
+export { analyzeLineIndent, parseDirective } from './analysis.ts'
+// Re-export public API
+export { IndentationError } from './errors.ts'
+export type { ProcessingState } from './state.ts'
+export { createProcessingState } from './state.ts'
+// Re-export for testing
+export { createDedentToken, createIndentToken, formatPosition } from './tokens.ts'
+export type {
+	IndentMode,
+	IndentType,
+	LineIndentInfo,
+	Position,
+	PreprocessOptions,
+} from './types.ts'
+export {
+	handleSpaceIndentDelta,
+	validateIndent,
+	validateIndentJump,
+	validateSpaceDedent,
+	validateSpaceIndent,
+} from './validation.ts'
+export { classifyWhitespace, updateIndentType } from './whitespace.ts'
 
 /**
  * UTF-8 Byte Order Mark (BOM) character.
@@ -68,155 +36,11 @@ interface LineIndentInfo {
 const UTF8_BOM = '\uFEFF'
 
 /**
- * Unicode characters for INDENT and DEDENT tokens.
- */
-const INDENT_CHAR = '⇥' // U+21E5 RIGHTWARDS ARROW TO BAR
-const DEDENT_CHAR = '⇤' // U+21E4 LEFTWARDS ARROW TO BAR
-
-/**
- * Creates a position string in the format ⟨line,level⟩
- */
-function formatPosition(pos: Position): string {
-	return `⟨${pos.line},${pos.level}⟩`
-}
-
-/**
- * Creates an INDENT token with position.
- */
-function createIndentToken(pos: Position): string {
-	return `${formatPosition(pos)}${INDENT_CHAR}`
-}
-
-/**
- * Creates a DEDENT token with position.
- */
-function createDedentToken(pos: Position): string {
-	return `${formatPosition(pos)}${DEDENT_CHAR}`
-}
-
-/**
- * Analyzes a line's leading whitespace.
- * Throws IndentationError if mixed indentation is found on the same line.
- */
-function analyzeLineIndent(line: string, lineNumber: number): LineIndentInfo {
-	if (line.length === 0) {
-		return { count: 0, type: null }
-	}
-
-	let indentEnd = 0
-	let indentType: IndentType | null = null
-
-	while (indentEnd < line.length) {
-		const char = line[indentEnd]
-		if (char === '\t') {
-			if (indentType === null) {
-				indentType = 'tab'
-			} else if (indentType !== 'tab') {
-				throw new IndentationError(
-					`${lineNumber}:${indentEnd + 1} Mixed indentation: found tab after spaces. Use spaces only for indentation on this line.`,
-					lineNumber,
-					indentEnd + 1,
-					indentType,
-					'tab'
-				)
-			}
-			indentEnd++
-		} else if (char === ' ') {
-			if (indentType === null) {
-				indentType = 'space'
-			} else if (indentType !== 'space') {
-				throw new IndentationError(
-					`${lineNumber}:${indentEnd + 1} Mixed indentation: found space after tabs. Use tabs only for indentation on this line.`,
-					lineNumber,
-					indentEnd + 1,
-					indentType,
-					'space'
-				)
-			}
-			indentEnd++
-		} else {
-			break
-		}
-	}
-
-	return { count: indentEnd, type: indentType }
-}
-
-/**
- * Parses a "use spaces" directive from a line.
- * Returns 'space' if directive found, null otherwise.
- */
-function parseDirective(line: string): IndentType | null {
-	const trimmed = line.trim()
-	if (trimmed === '"use spaces"' || trimmed === "'use spaces'") {
-		return 'space'
-	}
-	return null
-}
-
-/**
- * State tracked during streaming processing.
- */
-interface ProcessingState {
-	mode: IndentMode
-	lineNumber: number
-	expectedIndentType: IndentType | null
-	indentEstablishedAt: { line: number; source: 'directive' | 'detected' } | null
-	directiveLine: number | null
-	bufferedLines: { line: string; lineNumber: number; indentInfo: LineIndentInfo }[]
-	directiveFound: boolean
-	isFirstChunk: boolean
-	// Previous line's indent level
-	previousLevel: number
-	// Previous line's space count (for delta calculation)
-	previousSpaces: number
-	// For spaces: the consistent unit (detected from first indent delta)
-	indentUnit: number | null
-}
-
-/**
- * Validates indentation consistency and throws if mismatched.
- */
-function validateIndent(
-	indentInfo: LineIndentInfo,
-	lineNumber: number,
-	state: ProcessingState
-): void {
-	if (indentInfo.type === null) {
-		return
-	}
-
-	if (state.expectedIndentType === null) {
-		state.expectedIndentType = indentInfo.type
-		state.indentEstablishedAt = { line: lineNumber, source: 'detected' }
-	} else if (indentInfo.type !== state.expectedIndentType) {
-		const plural = state.expectedIndentType === 'tab' ? 'tabs' : 'spaces'
-		const foundPlural = indentInfo.type === 'tab' ? 'tabs' : 'spaces'
-		let context: string
-		if (state.indentEstablishedAt?.source === 'directive') {
-			context =
-				state.indentEstablishedAt.line === 0
-					? `File uses ${plural} by default (no "use spaces" directive at the top of file found).`
-					: `File uses ${plural} ("use spaces" directive on line ${state.indentEstablishedAt.line}).`
-		} else {
-			context = `File uses ${plural} (first indented line: ${state.indentEstablishedAt?.line}).`
-		}
-		throw new IndentationError(
-			`${lineNumber}:1 Unexpected ${foundPlural}. ${context} Convert this line to use ${plural}.`,
-			lineNumber,
-			1,
-			state.expectedIndentType,
-			indentInfo.type
-		)
-	}
-}
-
-/**
  * Calculates indent level from whitespace count.
  * For tabs: level = count
  * For spaces: compares delta between lines to derive unit.
  */
-function calculateIndentLevel(
+export function calculateIndentLevel(
 	indentInfo: LineIndentInfo,
 	lineNumber: number,
 	state: ProcessingState
@@ -230,40 +54,7 @@ function calculateIndentLevel(
 		return indentInfo.count
 	}
 
-	// Spaces: compare with previous line
-	const delta = indentInfo.count - state.previousSpaces
-
-	if (delta > 0) {
-		// Indent
-		if (state.indentUnit === null) {
-			state.indentUnit = delta
-		} else if (delta !== state.indentUnit) {
-			throw new IndentationError(
-				`${lineNumber}:1 File uses ${state.indentUnit}-space indentation. Add ${state.indentUnit} spaces, not ${delta}.`,
-				lineNumber,
-				1,
-				'space',
-				'space'
-			)
-		}
-	} else if (delta < 0 && state.indentUnit !== null) {
-		// Dedent - check alignment
-		if (indentInfo.count % state.indentUnit !== 0) {
-			// Show valid levels: 0, unit, 2*unit, ... up to previousSpaces
-			const validLevels: number[] = []
-			for (let s = 0; s <= state.previousSpaces; s += state.indentUnit) {
-				validLevels.push(s)
-			}
-			throw new IndentationError(
-				`${lineNumber}:1 Unindent to ${validLevels.join(', ')} spaces.`,
-				lineNumber,
-				1,
-				'space',
-				'space'
-			)
-		}
-	}
-
+	handleSpaceIndentDelta(indentInfo, lineNumber, state)
 	state.previousSpaces = indentInfo.count
 	return state.indentUnit ? indentInfo.count / state.indentUnit : 0
 }
@@ -271,7 +62,7 @@ function calculateIndentLevel(
 /**
  * Processes a single line and returns the tokenized version with INDENT/DEDENT tokens.
  */
-function processLine(
+export function processLine(
 	line: string,
 	lineNumber: number,
 	indentInfo: LineIndentInfo,
@@ -282,22 +73,9 @@ function processLine(
 	const tokens: string[] = []
 
 	if (newLevel > state.previousLevel) {
-		// Indent - must only go up by 1 level
-		if (newLevel > state.previousLevel + 1) {
-			const expected = state.previousLevel + 1
-			const got = newLevel
-			const unit = indentInfo.type === 'tab' ? 'tab' : 'spaces'
-			throw new IndentationError(
-				`${lineNumber}:1 Use ${expected} ${unit}, not ${got}.`,
-				lineNumber,
-				1,
-				indentInfo.type || 'tab',
-				indentInfo.type || 'tab'
-			)
-		}
+		validateIndentJump(newLevel, state.previousLevel, lineNumber, indentInfo)
 		tokens.push(createIndentToken({ level: newLevel, line: lineNumber }))
 	} else if (newLevel < state.previousLevel) {
-		// Dedent - emit DEDENT token(s)
 		for (let i = state.previousLevel; i > newLevel; i--) {
 			tokens.push(createDedentToken({ level: 0, line: lineNumber }))
 		}
@@ -311,12 +89,99 @@ function processLine(
 /**
  * Generates remaining DEDENT tokens at end of file.
  */
-function generateEofDedents(state: ProcessingState, lastLineNumber: number): string {
+export function generateEofDedents(state: ProcessingState, lastLineNumber: number): string {
 	const dedents: string[] = []
 	for (let i = state.previousLevel; i > 0; i--) {
 		dedents.push(createDedentToken({ level: 0, line: lastLineNumber }))
 	}
 	return dedents.join('')
+}
+
+/**
+ * Processes and flushes all buffered lines.
+ */
+function flushBufferedLines(state: ProcessingState, processedLines: string[]): void {
+	for (const buffered of state.bufferedLines) {
+		validateIndent(buffered.indentInfo, buffered.lineNumber, state)
+		processedLines.push(processLine(buffered.line, buffered.lineNumber, buffered.indentInfo, state))
+	}
+	state.bufferedLines = []
+}
+
+/**
+ * Handles a directive found in a line.
+ */
+function handleDirective(directive: IndentType, lineNumber: number, state: ProcessingState): void {
+	state.directiveFound = true
+	state.directiveLine = lineNumber
+	if (state.mode === 'directive') {
+		state.expectedIndentType = directive
+		state.indentEstablishedAt = { line: lineNumber, source: 'directive' }
+	}
+}
+
+/**
+ * Converts a chunk to string and strips BOM if first chunk.
+ */
+function chunkToString(chunk: unknown, state: ProcessingState): string {
+	let str = typeof chunk === 'string' ? chunk : (chunk as Buffer).toString('utf-8')
+	if (state.isFirstChunk) {
+		if (str.startsWith(UTF8_BOM)) {
+			str = str.slice(1)
+		}
+		state.isFirstChunk = false
+	}
+	return str
+}
+
+/**
+ * Finalizes the result with EOF dedents and trailing newline handling.
+ */
+function finalizeResult(
+	processedLines: string[],
+	state: ProcessingState,
+	hadTrailingNewline: boolean
+): string {
+	let result = processedLines.join('\n')
+
+	const eofDedents = generateEofDedents(state, state.lineNumber)
+	if (eofDedents) {
+		result += `\n${eofDedents}`
+	}
+
+	if (hadTrailingNewline && state.lineNumber > 0) {
+		return `${result}\n`
+	}
+
+	return result
+}
+
+/**
+ * Processes a single source line.
+ * Returns true if line was a directive and should be skipped.
+ */
+function processSourceLine(
+	line: string,
+	lineNumber: number,
+	state: ProcessingState,
+	processedLines: string[]
+): boolean {
+	const directive = parseDirective(line)
+	if (directive !== null) {
+		handleDirective(directive, lineNumber, state)
+		flushBufferedLines(state, processedLines)
+		return true
+	}
+
+	const indentInfo = analyzeLineIndent(line, lineNumber)
+
+	if (state.mode === 'directive' && !state.directiveFound) {
+		state.bufferedLines.push({ indentInfo, line, lineNumber })
+	} else {
+		validateIndent(indentInfo, lineNumber, state)
+		processedLines.push(processLine(line, lineNumber, indentInfo, state))
+	}
+	return false
 }
 
 /**
@@ -350,131 +215,44 @@ function generateEofDedents(state: ProcessingState, lastLineNumber: number): str
  * @returns The preprocessed text with INDENT/DEDENT tokens
  * @throws IndentationError if indentation rules are violated
  */
-export async function preprocess(
+async function processStream(
 	stream: Readable,
-	options: PreprocessOptions = {}
+	state: ProcessingState,
+	processedLines: string[]
 ): Promise<string> {
-	const { mode = 'detect' } = options
-
-	const state: ProcessingState = {
-		bufferedLines: [],
-		directiveFound: false,
-		directiveLine: null,
-		expectedIndentType: mode === 'directive' ? 'tab' : null,
-		indentEstablishedAt: mode === 'directive' ? { line: 0, source: 'directive' } : null,
-		indentUnit: null,
-		isFirstChunk: true,
-		lineNumber: 0,
-		mode,
-		previousLevel: 0,
-		previousSpaces: 0,
-	}
-
-	const processedLines: string[] = []
 	let pendingChunk = ''
-
 	for await (const chunk of stream) {
-		let str = typeof chunk === 'string' ? chunk : chunk.toString('utf-8')
-
-		if (state.isFirstChunk) {
-			if (str.startsWith(UTF8_BOM)) {
-				str = str.slice(1)
-			}
-			state.isFirstChunk = false
-		}
-
+		const str = chunkToString(chunk, state)
 		pendingChunk += str
 		const lines = pendingChunk.split('\n')
 		pendingChunk = lines.pop() ?? ''
 
 		for (const line of lines) {
 			state.lineNumber++
-			const lineNumber = state.lineNumber
-
-			// Always check for and strip directives, regardless of mode
-			const directive = parseDirective(line)
-			if (directive !== null) {
-				state.directiveFound = true
-				state.directiveLine = lineNumber
-				// Only apply directive's instruction in 'directive' mode
-				if (mode === 'directive') {
-					state.expectedIndentType = directive
-					state.indentEstablishedAt = { line: lineNumber, source: 'directive' }
-				}
-				// Process any buffered lines before continuing
-				for (const buffered of state.bufferedLines) {
-					validateIndent(buffered.indentInfo, buffered.lineNumber, state)
-					processedLines.push(
-						processLine(buffered.line, buffered.lineNumber, buffered.indentInfo, state)
-					)
-				}
-				state.bufferedLines = []
-				continue // Skip the directive line itself
-			}
-
-			const indentInfo = analyzeLineIndent(line, lineNumber)
-
-			if (mode === 'directive' && !state.directiveFound) {
-				state.bufferedLines.push({ indentInfo, line, lineNumber })
-			} else {
-				validateIndent(indentInfo, lineNumber, state)
-				processedLines.push(processLine(line, lineNumber, indentInfo, state))
-			}
+			processSourceLine(line, state.lineNumber, state, processedLines)
 		}
 	}
+	return pendingChunk
+}
+
+export async function preprocess(
+	stream: Readable,
+	options: PreprocessOptions = {}
+): Promise<string> {
+	const { mode = 'detect' } = options
+	const state = createProcessingState(mode)
+	const processedLines: string[] = []
+
+	const pendingChunk = await processStream(stream, state, processedLines)
 
 	if (pendingChunk.length > 0) {
 		state.lineNumber++
-		const lineNumber = state.lineNumber
-
-		// Always check for and strip directives, regardless of mode
-		const directive = parseDirective(pendingChunk)
-		if (directive !== null) {
-			state.directiveFound = true
-			state.directiveLine = lineNumber
-			if (mode === 'directive') {
-				state.expectedIndentType = directive
-				state.indentEstablishedAt = { line: lineNumber, source: 'directive' }
-			}
-			// Process any buffered lines
-			for (const buffered of state.bufferedLines) {
-				validateIndent(buffered.indentInfo, buffered.lineNumber, state)
-				processedLines.push(
-					processLine(buffered.line, buffered.lineNumber, buffered.indentInfo, state)
-				)
-			}
-			state.bufferedLines = []
-		} else if (mode === 'directive' && !state.directiveFound) {
-			const indentInfo = analyzeLineIndent(pendingChunk, lineNumber)
-			state.bufferedLines.push({ indentInfo, line: pendingChunk, lineNumber })
-		} else {
-			const indentInfo = analyzeLineIndent(pendingChunk, lineNumber)
-			validateIndent(indentInfo, lineNumber, state)
-			processedLines.push(processLine(pendingChunk, lineNumber, indentInfo, state))
-		}
+		processSourceLine(pendingChunk, state.lineNumber, state, processedLines)
 	}
 
-	if (mode === 'directive' && !state.directiveFound && state.bufferedLines.length > 0) {
-		for (const buffered of state.bufferedLines) {
-			validateIndent(buffered.indentInfo, buffered.lineNumber, state)
-			processedLines.push(
-				processLine(buffered.line, buffered.lineNumber, buffered.indentInfo, state)
-			)
-		}
+	if (state.bufferedLines.length > 0) {
+		flushBufferedLines(state, processedLines)
 	}
 
-	let result = processedLines.join('\n')
-
-	// Add EOF dedents
-	const eofDedents = generateEofDedents(state, state.lineNumber)
-	if (eofDedents) {
-		result += `\n${eofDedents}`
-	}
-
-	// Preserve trailing newline
-	if (pendingChunk.length === 0 && state.lineNumber > 0) {
-		return `${result}\n`
-	}
-
-	return result
+	return finalizeResult(processedLines, state, pendingChunk.length === 0)
 }

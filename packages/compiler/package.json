@@ -28,7 +28,7 @@
 	"scripts": {
 		"build": "tsc -p tsconfig.build.json",
 		"clean": "rm -rf dist",
-		"test": "node --test test/**/*.test.ts"
+		"test": "node --test test/*.test.ts test/preprocessor/*.test.ts"
 	},
 	"type": "module",
 	"types": "./dist/index.d.ts",

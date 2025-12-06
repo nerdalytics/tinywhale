@@ -11,6 +11,13 @@ function getErrorMessage(error: unknown): string {
 	return error instanceof Error ? error.message : String(error)
 }
 
+function formatReadError(filePath: string, error: unknown): string {
+	if (isNodeError(error) && error.code === 'ENOENT') {
+		return `File not found: ${filePath}`
+	}
+	return `Cannot read file: ${getErrorMessage(error)}`
+}
+
 export default class BuildCommand extends BaseCommand {
 	static override commandName = 'build'
 	static override description = 'Compile a TinyWhale source file and output the AST'
@@ -21,24 +28,19 @@ export default class BuildCommand extends BaseCommand {
 	@flags.string({ alias: 'o', description: 'Output file (defaults to stdout)' })
 	declare output?: string
 
-	override async run(): Promise<void> {
-		let source: string
-
+	private async readSourceFile(): Promise<string | null> {
 		try {
-			source = await readFile(this.input, 'utf-8')
+			return await readFile(this.input, 'utf-8')
 		} catch (error: unknown) {
-			if (isNodeError(error) && error.code === 'ENOENT') {
-				this.logger.error(`File not found: ${this.input}`)
-			} else {
-				this.logger.error(`Cannot read file: ${getErrorMessage(error)}`)
-			}
+			this.logger.error(formatReadError(this.input, error))
 			this.exitCode = 1
-			return
+			return null
 		}
+	}
 
-		let preprocessed: string
+	private async preprocessSource(source: string): Promise<string | null> {
 		try {
-			preprocessed = await preprocess(Readable.from(source))
+			return await preprocess(Readable.from(source))
 		} catch (error: unknown) {
 			if (error instanceof IndentationError) {
 				this.logger.error(error.message)
@@ -46,22 +48,38 @@ export default class BuildCommand extends BaseCommand {
 				this.logger.error(`Preprocessing failed: ${getErrorMessage(error)}`)
 			}
 			this.exitCode = 1
-			return
+			return null
 		}
+	}
+
+	private async writeOutput(json: string): Promise<boolean> {
+		if (!this.output) {
+			console.log(json)
+			return true
+		}
+		try {
+			await writeFile(this.output, json, 'utf-8')
+			return true
+		} catch (error: unknown) {
+			this.logger.error(`Cannot write to ${this.output}: ${getErrorMessage(error)}`)
+			return false
+		}
+	}
+
+	override async run(): Promise<void> {
+		const source = await this.readSourceFile()
+		if (source === null) return
+
+		const preprocessed = await this.preprocessSource(source)
+		if (preprocessed === null) return
 
 		const result = parse(preprocessed)
 		const json = JSON.stringify(result, null, '\t')
 
-		if (this.output) {
-			try {
-				await writeFile(this.output, json, 'utf-8')
-			} catch (error: unknown) {
-				this.logger.error(`Cannot write to ${this.output}: ${getErrorMessage(error)}`)
-				this.exitCode = 1
-				return
-			}
-		} else {
-			console.log(json)
+		const written = await this.writeOutput(json)
+		if (!written) {
+			this.exitCode = 1
+			return
 		}
 
 		if (!result.succeeded) {
