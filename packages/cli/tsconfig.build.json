@@ -1,10 +1,11 @@
 {
 	"compilerOptions": {
-		"allowImportingTsExtensions": false,
+		"allowImportingTsExtensions": true,
 		"emitDecoratorMetadata": true,
 		"experimentalDecorators": true,
 		"noEmit": false,
 		"outDir": "./dist",
+		"rewriteRelativeImportExtensions": true,
 		"rootDir": "./src"
 	},
 	"exclude": ["node_modules", "dist"],

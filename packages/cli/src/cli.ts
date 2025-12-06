@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { HelpCommand, Kernel, ListLoader } from '@adonisjs/ace'
-import BuildCommand from './commands/build.js'
+import BuildCommand from './commands/build.ts'
 
 const version = '0.0.0'
 
