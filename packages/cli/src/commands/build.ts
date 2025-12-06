@@ -12,8 +12,8 @@ function getErrorMessage(error: unknown): string {
 }
 
 export default class BuildCommand extends BaseCommand {
-	static commandName = 'build'
-	static description = 'Compile a TinyWhale source file and output the AST'
+	static override commandName = 'build'
+	static override description = 'Compile a TinyWhale source file and output the AST'
 
 	@args.string({ description: 'Input .tw file to compile' })
 	declare input: string
@@ -21,7 +21,7 @@ export default class BuildCommand extends BaseCommand {
 	@flags.string({ alias: 'o', description: 'Output file (defaults to stdout)' })
 	declare output?: string
 
-	async run(): Promise<void> {
+	override async run(): Promise<void> {
 		let source: string
 
 		try {

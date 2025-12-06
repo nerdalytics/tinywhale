@@ -9,8 +9,8 @@
 	"description": "TinyWhale Language Server Protocol implementation",
 	"exports": {
 		".": {
-			"types": "./dist/index.d.ts",
-			"default": "./dist/index.js"
+			"default": "./dist/index.js",
+			"types": "./dist/index.d.ts"
 		}
 	},
 	"files": [

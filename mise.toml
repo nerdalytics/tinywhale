@@ -24,6 +24,10 @@ run = "pnpm -r test"
 description = "Run biome check (lint & format)"
 run = "pnpm exec biome check --write"
 
+[tasks.typecheck]
+description = "Run TypeScript type checking"
+run = "pnpm exec tsc"
+
 [tasks.clean]
 description = "Clean build artifacts"
 run = "pnpm -r clean"
