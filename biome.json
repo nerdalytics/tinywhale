@@ -33,6 +33,12 @@
 		"enabled": true,
 		"rules": {
 			"complexity": {
+				"noExcessiveCognitiveComplexity": {
+					"level": "error",
+					"options": {
+						"maxAllowedComplexity": 4
+					}
+				},
 				"useLiteralKeys": "off"
 			},
 			"recommended": true
