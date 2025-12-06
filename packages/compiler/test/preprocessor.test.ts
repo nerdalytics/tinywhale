@@ -1,16 +1,12 @@
 import assert from 'node:assert'
 import { createReadStream } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { join } from 'node:path'
 import { Readable } from 'node:stream'
 import { describe, it } from 'node:test'
-import { fileURLToPath } from 'node:url'
 import { type IndentationError, preprocess } from '../src/preprocessor/index.ts'
 
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = dirname(__filename)
-
 function fixturesPath(name: string): string {
-	return join(__dirname, 'fixtures', name)
+	return join(import.meta.dirname, 'fixtures', name)
 }
 
 function streamFromString(text: string): Readable {

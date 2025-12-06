@@ -22,4 +22,4 @@ export {
 	type IndentMode,
 	type PreprocessOptions,
 	preprocess,
-} from './preprocessor/index.js'
+} from './preprocessor/index.ts'

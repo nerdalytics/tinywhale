@@ -3,6 +3,14 @@ import { Readable } from 'node:stream'
 import { args, BaseCommand, flags } from '@adonisjs/ace'
 import { IndentationError, parse, preprocess } from '@tinywhale/compiler'
 
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+	return error instanceof Error && 'code' in error
+}
+
+function getErrorMessage(error: unknown): string {
+	return error instanceof Error ? error.message : String(error)
+}
+
 export default class BuildCommand extends BaseCommand {
 	static commandName = 'build'
 	static description = 'Compile a TinyWhale source file and output the AST'
@@ -18,12 +26,11 @@ export default class BuildCommand extends BaseCommand {
 
 		try {
 			source = await readFile(this.input, 'utf-8')
-		} catch (error) {
-			const err = error as NodeJS.ErrnoException
-			if (err.code === 'ENOENT') {
+		} catch (error: unknown) {
+			if (isNodeError(error) && error.code === 'ENOENT') {
 				this.logger.error(`File not found: ${this.input}`)
 			} else {
-				this.logger.error(`Cannot read file: ${err.message}`)
+				this.logger.error(`Cannot read file: ${getErrorMessage(error)}`)
 			}
 			this.exitCode = 1
 			return
@@ -32,11 +39,11 @@ export default class BuildCommand extends BaseCommand {
 		let preprocessed: string
 		try {
 			preprocessed = await preprocess(Readable.from(source))
-		} catch (error) {
+		} catch (error: unknown) {
 			if (error instanceof IndentationError) {
 				this.logger.error(error.message)
 			} else {
-				this.logger.error(`Preprocessing failed: ${(error as Error).message}`)
+				this.logger.error(`Preprocessing failed: ${getErrorMessage(error)}`)
 			}
 			this.exitCode = 1
 			return
@@ -48,8 +55,8 @@ export default class BuildCommand extends BaseCommand {
 		if (this.output) {
 			try {
 				await writeFile(this.output, json, 'utf-8')
-			} catch (error) {
-				this.logger.error(`Cannot write to ${this.output}: ${(error as Error).message}`)
+			} catch (error: unknown) {
+				this.logger.error(`Cannot write to ${this.output}: ${getErrorMessage(error)}`)
 				this.exitCode = 1
 				return
 			}

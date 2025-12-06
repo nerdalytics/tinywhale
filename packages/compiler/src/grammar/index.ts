@@ -114,9 +114,10 @@ export function createSemantics() {
 	semantics.addOperation<ParsedLine>('toLine', {
 		DedentLine(dedentTokens) {
 			const tokens: IndentToken[] = dedentTokens.children.map((t) => t.toIndentToken())
+			const firstToken = tokens[0]
 			return {
 				indentTokens: tokens,
-				lineNumber: tokens.length > 0 ? tokens[0].position.line : getLineNumber(this),
+				lineNumber: firstToken !== undefined ? firstToken.position.line : getLineNumber(this),
 			}
 		},
 		IndentedLine(indentToken) {
