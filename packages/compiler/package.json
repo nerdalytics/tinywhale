@@ -1,37 +1,36 @@
 {
-  "author": "",
-  "dependencies": {
-    "binaryen": "125.0.0",
-    "ohm-js": "17.2.1"
-  },
-  "description": "TinyWhale compiler library",
-  "devDependencies": {
-    "@types/node": "24.10.1",
-    "typescript": "5.9.3"
-  },
-  "exports": {
-    ".": {
-      "default": "./dist/index.js",
-      "types": "./dist/index.d.ts"
-    }
-  },
-  "files": [
-    "dist"
-  ],
-  "keywords": [
-    "compiler",
-    "tinywhale"
-  ],
-  "license": "MIT",
-  "main": "./dist/index.js",
-  "name": "@tinywhale/compiler",
-  "scripts": {
-    "build": "tsc",
-    "clean": "rm -rf dist",
-    "lint": "biome check src test",
-    "test": "node --test test/**/*.test.ts"
-  },
-  "type": "module",
-  "types": "./dist/index.d.ts",
-  "version": "0.0.0"
+	"author": "",
+	"dependencies": {
+		"binaryen": "125.0.0",
+		"ohm-js": "17.2.1"
+	},
+	"description": "TinyWhale compiler library",
+	"devDependencies": {
+		"@types/node": "24.10.1",
+		"typescript": "5.9.3"
+	},
+	"exports": {
+		".": {
+			"default": "./dist/index.js",
+			"types": "./dist/index.d.ts"
+		}
+	},
+	"files": [
+		"dist"
+	],
+	"keywords": [
+		"compiler",
+		"tinywhale"
+	],
+	"license": "MIT",
+	"main": "./dist/index.js",
+	"name": "@tinywhale/compiler",
+	"scripts": {
+		"build": "tsc -p tsconfig.build.json",
+		"clean": "rm -rf dist",
+		"test": "node --test test/**/*.test.ts"
+	},
+	"type": "module",
+	"types": "./dist/index.d.ts",
+	"version": "0.0.0"
 }

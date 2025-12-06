@@ -1,36 +1,36 @@
-import * as ohm from 'ohm-js';
+import * as ohm from 'ohm-js'
 
 /**
  * Represents a position in the source text.
  */
 export interface Position {
-  line: number;
-  level: number;
+	line: number
+	level: number
 }
 
 /**
  * Represents an INDENT or DEDENT token with its position.
  */
 export interface IndentToken {
-  type: 'indent' | 'dedent';
-  position: Position;
+	type: 'indent' | 'dedent'
+	position: Position
 }
 
 /**
  * Represents a parsed line from the preprocessed input.
  */
 export interface ParsedLine {
-  indentTokens: IndentToken[];
-  lineNumber: number;
+	indentTokens: IndentToken[]
+	lineNumber: number
 }
 
 /**
  * Result of parsing a program.
  */
 export interface ParseResult {
-  lines: ParsedLine[];
-  succeeded: boolean;
-  message?: string;
+	lines: ParsedLine[]
+	succeeded: boolean
+	message?: string
 }
 
 /**
@@ -61,87 +61,87 @@ TinyWhale {
   space += comment
   comment = "#" (~("#" | "\n" | "\r" | dedentToken) any)* ("#" | &"\n" | &"\r" | &dedentToken | end)
 }
-`;
+`
 
 /**
  * The compiled TinyWhale grammar.
  */
-export const TinyWhaleGrammar = ohm.grammar(grammarSource);
+export const TinyWhaleGrammar = ohm.grammar(grammarSource)
 
 /**
  * Helper to get line number from a node's source position.
  */
 function getLineNumber(node: ohm.Node): number {
-  const interval = node.source;
-  const fullSource = interval.sourceString;
-  const textBefore = fullSource.substring(0, interval.startIdx);
-  return (textBefore.match(/\n/g) || []).length + 1;
+	const interval = node.source
+	const fullSource = interval.sourceString
+	const textBefore = fullSource.substring(0, interval.startIdx)
+	return (textBefore.match(/\n/g) || []).length + 1
 }
 
 /**
  * Create semantics for the TinyWhale grammar.
  */
 export function createSemantics() {
-  const semantics = TinyWhaleGrammar.createSemantics();
+	const semantics = TinyWhaleGrammar.createSemantics()
 
-  // Extract Position from position node
-  semantics.addOperation<Position>('toPosition', {
-    position(_open, lineDigits, _comma, levelDigits, _close) {
-      return {
-        level: Number(levelDigits.sourceString),
-        line: Number(lineDigits.sourceString),
-      };
-    },
-  });
+	// Extract Position from position node
+	semantics.addOperation<Position>('toPosition', {
+		position(_open, lineDigits, _comma, levelDigits, _close) {
+			return {
+				level: Number(levelDigits.sourceString),
+				line: Number(lineDigits.sourceString),
+			}
+		},
+	})
 
-  // Extract IndentToken from indent/dedent nodes
-  semantics.addOperation<IndentToken>('toIndentToken', {
-    dedentToken(position, _marker) {
-      return {
-        position: position.toPosition(),
-        type: 'dedent',
-      };
-    },
-    indentToken(position, _marker) {
-      return {
-        position: position.toPosition(),
-        type: 'indent',
-      };
-    },
-  });
+	// Extract IndentToken from indent/dedent nodes
+	semantics.addOperation<IndentToken>('toIndentToken', {
+		dedentToken(position, _marker) {
+			return {
+				position: position.toPosition(),
+				type: 'dedent',
+			}
+		},
+		indentToken(position, _marker) {
+			return {
+				position: position.toPosition(),
+				type: 'indent',
+			}
+		},
+	})
 
-  // Convert line nodes to ParsedLine
-  semantics.addOperation<ParsedLine>('toLine', {
-    DedentLine(dedentTokens) {
-      const tokens: IndentToken[] = dedentTokens.children.map((t) => t.toIndentToken());
-      return {
-        indentTokens: tokens,
-        lineNumber: tokens.length > 0 ? tokens[0].position.line : getLineNumber(this),
-      };
-    },
-    IndentedLine(indentToken) {
-      const token = indentToken.toIndentToken();
-      return {
-        indentTokens: [token],
-        lineNumber: token.position.line,
-      };
-    },
-  });
+	// Convert line nodes to ParsedLine
+	semantics.addOperation<ParsedLine>('toLine', {
+		DedentLine(dedentTokens) {
+			const tokens: IndentToken[] = dedentTokens.children.map((t) => t.toIndentToken())
+			return {
+				indentTokens: tokens,
+				lineNumber: tokens.length > 0 ? tokens[0].position.line : getLineNumber(this),
+			}
+		},
+		IndentedLine(indentToken) {
+			const token = indentToken.toIndentToken()
+			return {
+				indentTokens: [token],
+				lineNumber: token.position.line,
+			}
+		},
+	})
 
-  // Collect all lines from a Program
-  semantics.addOperation<ParsedLine[]>('toLines', {
-    Program(lines) {
-      return lines.children.map((line) => line.toLine());
-    },
-  });
+	// Collect all lines from a Program
+	semantics.addOperation<ParsedLine[]>('toLines', {
+		Program(lines) {
+			return lines.children.map((line) => line.toLine())
+		},
+	})
 
-  return semantics;
+	return semantics
 }
 
 /**
  * Default semantics instance.
  */
-export const semantics = createSemantics();
+export const semantics = createSemantics()
 
 /**
  * Parse preprocessed input and return structured result.
@@ -150,22 +150,22 @@ export const semantics = createSemantics();
  * @returns Parse result with lines and success status
  */
 export function parse(input: string): ParseResult {
-  const matchResult = TinyWhaleGrammar.match(input);
+	const matchResult = TinyWhaleGrammar.match(input)
 
-  if (matchResult.failed()) {
-    return {
-      lines: [],
-      message: matchResult.message,
-      succeeded: false,
-    };
-  }
+	if (matchResult.failed()) {
+		return {
+			lines: [],
+			message: matchResult.message,
+			succeeded: false,
+		}
+	}
 
-  const lines = semantics(matchResult).toLines();
+	const lines = semantics(matchResult).toLines()
 
-  return {
-    lines,
-    succeeded: true,
-  };
+	return {
+		lines,
+		succeeded: true,
+	}
 }
 
 /**
@@ -175,7 +175,7 @@ export function parse(input: string): ParseResult {
  * @returns Ohm match result
  */
 export function match(input: string): ohm.MatchResult {
-  return TinyWhaleGrammar.match(input);
+	return TinyWhaleGrammar.match(input)
 }
 
 /**
@@ -185,9 +185,9 @@ export function match(input: string): ohm.MatchResult {
  * @returns Trace string
  */
 export function trace(input: string): string {
-  return TinyWhaleGrammar.trace(input).toString();
+	return TinyWhaleGrammar.trace(input).toString()
 }
 
 // Re-export for backwards compatibility
-export type { Position as SourcePosition };
-export type IndentInfo = IndentToken;
+export type { Position as SourcePosition }
+export type IndentInfo = IndentToken

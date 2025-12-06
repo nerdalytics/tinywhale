@@ -7,17 +7,17 @@
 !**/.gitignore
 
 # Allow list for the current folder
-!.github/
 !.gitattributes
+!.github/
 !.mise.toml
 !.npmrc
-!package.json
+!biome.json
+!LICENSE
 !package-lock.json
+!package.json
+!packages/
+!packages/**
 !pnpm-lock.yaml
 !pnpm-workspace.yaml
 !README.md
-!biome.json
 !tsconfig.json
-!LICENSE
-!packages/
-!packages/**
