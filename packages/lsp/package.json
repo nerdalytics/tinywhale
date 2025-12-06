@@ -7,6 +7,12 @@
 		"@tinywhale/compiler": "workspace:*"
 	},
 	"description": "TinyWhale Language Server Protocol implementation",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"default": "./dist/index.js"
+		}
+	},
 	"files": [
 		"dist"
 	],
@@ -23,6 +29,7 @@
 		"clean": "rm -rf dist",
 		"test": "echo 'Test script not yet configured'"
 	},
+	"type": "module",
 	"types": "./dist/index.d.ts",
 	"version": "0.0.0"
 }
