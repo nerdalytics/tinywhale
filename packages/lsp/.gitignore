@@ -5,6 +5,6 @@
 # Allow list for the current folder
 !.gitignore
 !package.json
-!tsconfig.json
-!src/
 !README.md
+!src/
+!tsconfig.json

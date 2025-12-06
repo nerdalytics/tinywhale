@@ -7,9 +7,13 @@ pnpm = "10.23.0"
 description = "Install dependencies"
 run = "pnpm install"
 
+[tasks.update]
+description = "Update dependencies"
+run = "pnpm up --latest --workspace --interactive --recursive"
+
 [tasks.build]
 description = "Build all packages"
-depends_post = ["lint", "test"]
+# depends_post = ["lint", "test"]
 run = "pnpm -r build"
 
 [tasks.test]
@@ -17,18 +21,15 @@ description = "Run tests for all packages"
 run = "pnpm -r test"
 
 [tasks.check]
-description = "Run biome check"
-run = "biome check"
-
-[tasks.lint]
-description = "Lint all packages"
-run = "pnpm -r lint"
+description = "Run biome check (lint & format)"
+run = "pnpm exec biome check --write"
 
 [tasks.clean]
 description = "Clean build artifacts"
 run = "pnpm -r clean"
 
 [tasks.cli]
-description = "Run the TinyWhale CLI"
+description = "Run the TinyWhale CLI build command"
 depends = ["clean", "build"]
-run = "node packages/cli/dist/cli.js"
+usage = 'arg "<file>" help="TinyWhale source file to compile"'
+run = "node packages/cli/dist/cli.js build ${usage_file?}"

@@ -1,41 +1,40 @@
 {
-  "author": "",
-  "bin": {
-    "tinywhale": "./dist/cli.js"
-  },
-  "dependencies": {
-    "@adonisjs/ace": "13.4.0",
-    "@tinywhale/compiler": "workspace:*"
-  },
-  "description": "TinyWhale command-line interface",
-  "devDependencies": {
-    "@types/node": "24.10.1",
-    "typescript": "5.9.3"
-  },
-  "exports": {
-    ".": {
-      "default": "./dist/index.js",
-      "types": "./dist/index.d.ts"
-    }
-  },
-  "files": [
-    "dist"
-  ],
-  "keywords": [
-    "cli",
-    "tinywhale"
-  ],
-  "license": "MIT",
-  "main": "./dist/index.js",
-  "name": "@tinywhale/cli",
-  "scripts": {
-    "build": "tsc",
-    "clean": "rm -rf dist",
-    "lint": "biome check src",
-    "test": "echo 'Test script not yet configured'",
-    "typecheck": "tsc --noEmit"
-  },
-  "type": "module",
-  "types": "./dist/index.d.ts",
-  "version": "0.0.0"
+	"author": "",
+	"bin": {
+		"tinywhale": "./dist/cli.js"
+	},
+	"dependencies": {
+		"@adonisjs/ace": "13.4.0",
+		"@tinywhale/compiler": "workspace:*"
+	},
+	"description": "TinyWhale command-line interface",
+	"devDependencies": {
+		"@types/node": "24.10.1",
+		"typescript": "5.9.3"
+	},
+	"exports": {
+		".": {
+			"default": "./dist/index.js",
+			"types": "./dist/index.d.ts"
+		}
+	},
+	"files": [
+		"dist"
+	],
+	"keywords": [
+		"cli",
+		"tinywhale"
+	],
+	"license": "MIT",
+	"main": "./dist/index.js",
+	"name": "@tinywhale/cli",
+	"scripts": {
+		"build": "tsc -p tsconfig.build.json",
+		"clean": "rm -rf dist",
+		"test": "echo 'Test script not yet configured'",
+		"typecheck": "tsc --noEmit"
+	},
+	"type": "module",
+	"types": "./dist/index.d.ts",
+	"version": "0.0.0"
 }

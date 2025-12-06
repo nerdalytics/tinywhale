@@ -21,9 +21,6 @@ importers:
         specifier: workspace:*
         version: link:../compiler
     devDependencies:
-      '@biomejs/biome':
-        specifier: 2.3.8
-        version: 2.3.8
       '@types/node':
         specifier: 24.10.1
         version: 24.10.1
@@ -40,9 +37,6 @@ importers:
         specifier: 17.2.1
         version: 17.2.1
     devDependencies:
-      '@biomejs/biome':
-        specifier: 2.3.8
-        version: 2.3.8
       '@types/node':
         specifier: 24.10.1
         version: 24.10.1

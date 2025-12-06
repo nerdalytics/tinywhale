@@ -4,9 +4,10 @@
 
 # Allow list for the current folder
 !.gitignore
-!package.json
-!tsconfig.json
 !biome.json
+!package.json
+!README.md
 !src/
 !src/**
-!README.md
+!tsconfig.build.json
+!tsconfig.json
