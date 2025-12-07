@@ -31,7 +31,7 @@
 	"scripts": {
 		"build": "tsc -p tsconfig.build.json",
 		"clean": "rm -rf dist",
-		"test": "echo 'Test script not yet configured'",
+		"test": "node --test test/*.test.ts",
 		"typecheck": "tsc --noEmit"
 	},
 	"type": "module",

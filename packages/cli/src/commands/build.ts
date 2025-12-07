@@ -1,32 +1,39 @@
-import { readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { Readable } from 'node:stream'
 import { args, BaseCommand, flags } from '@adonisjs/ace'
-import { IndentationError, parse, preprocess } from '@tinywhale/compiler'
-
-function isNodeError(error: unknown): error is NodeJS.ErrnoException {
-	return error instanceof Error && 'code' in error
-}
-
-function getErrorMessage(error: unknown): string {
-	return error instanceof Error ? error.message : String(error)
-}
-
-function formatReadError(filePath: string, error: unknown): string {
-	if (isNodeError(error) && error.code === 'ENOENT') {
-		return `File not found: ${filePath}`
-	}
-	return `Cannot read file: ${getErrorMessage(error)}`
-}
+import {
+	type CompileResult,
+	compile,
+	IndentationError,
+	type ParseResult,
+	parse,
+	preprocess,
+} from '@tinywhale/compiler'
+import {
+	formatCompileError,
+	formatReadError,
+	getErrorMessage,
+	getOutputContent,
+	isValidTarget,
+	type OutputTarget,
+	resolveOutputPath,
+} from '../utils.ts'
 
 export default class BuildCommand extends BaseCommand {
 	static override commandName = 'build'
-	static override description = 'Compile a TinyWhale source file and output the AST'
+	static override description = 'Compile a TinyWhale source file to WebAssembly'
 
 	@args.string({ description: 'Input .tw file to compile' })
 	declare input: string
 
-	@flags.string({ alias: 'o', description: 'Output file (defaults to stdout)' })
+	@flags.string({ alias: 'o', description: 'Output directory (created if not exists)' })
 	declare output?: string
+
+	@flags.string({ alias: 't', default: 'wasm', description: 'Output format: wasm (binary) or wat (text)' })
+	declare target: string
+
+	@flags.boolean({ description: 'Run optimization passes' })
+	declare optimize: boolean
 
 	private async readSourceFile(): Promise<string | null> {
 		try {
@@ -38,52 +45,104 @@ export default class BuildCommand extends BaseCommand {
 		}
 	}
 
+	private formatPreprocessError(error: unknown): string {
+		if (error instanceof IndentationError) {
+			return error.message
+		}
+		return `Preprocessing failed: ${getErrorMessage(error)}`
+	}
+
 	private async preprocessSource(source: string): Promise<string | null> {
 		try {
 			return await preprocess(Readable.from(source))
 		} catch (error: unknown) {
-			if (error instanceof IndentationError) {
-				this.logger.error(error.message)
-			} else {
-				this.logger.error(`Preprocessing failed: ${getErrorMessage(error)}`)
-			}
+			this.logger.error(this.formatPreprocessError(error))
 			this.exitCode = 1
 			return null
 		}
 	}
 
-	private async writeOutput(json: string): Promise<boolean> {
-		if (!this.output) {
-			console.log(json)
-			return true
+	private parseSource(preprocessed: string): ParseResult | null {
+		const parseResult = parse(preprocessed)
+		if (!parseResult.succeeded) {
+			this.logger.error(`Parse error: ${parseResult.message}`)
+			this.exitCode = 1
+			return null
 		}
+		return parseResult
+	}
+
+	private compileToWasm(parseResult: ParseResult): CompileResult | null {
 		try {
-			await writeFile(this.output, json, 'utf-8')
+			const result = compile(parseResult, { optimize: this.optimize })
+			if (!result.valid) {
+				this.logger.error('Generated WebAssembly module failed validation')
+				this.exitCode = 1
+				return null
+			}
+			return result
+		} catch (error: unknown) {
+			this.logger.error(formatCompileError(error))
+			this.exitCode = 1
+			return null
+		}
+	}
+
+	private validateTarget(): boolean {
+		if (!isValidTarget(this.target)) {
+			this.logger.error(`Invalid target "${this.target}". Use "wasm" or "wat".`)
+			this.exitCode = 1
+			return false
+		}
+		return true
+	}
+
+	private async writeOutputFile(
+		outputPath: string,
+		content: Uint8Array | string
+	): Promise<boolean> {
+		try {
+			await writeFile(outputPath, content)
 			return true
 		} catch (error: unknown) {
-			this.logger.error(`Cannot write to ${this.output}: ${getErrorMessage(error)}`)
+			this.logger.error(`Cannot write to ${outputPath}: ${getErrorMessage(error)}`)
 			return false
 		}
 	}
 
-	override async run(): Promise<void> {
-		const source = await this.readSourceFile()
-		if (source === null) return
+	private async emitOutput(result: CompileResult): Promise<void> {
+		const target = this.target as OutputTarget
+		const dir = this.output ?? '.'
 
-		const preprocessed = await this.preprocessSource(source)
-		if (preprocessed === null) return
+		await mkdir(dir, { recursive: true })
 
-		const result = parse(preprocessed)
-		const json = JSON.stringify(result, null, '\t')
-
-		const written = await this.writeOutput(json)
+		const outputPath = resolveOutputPath(this.input, this.output, target)
+		const content = getOutputContent(result, target)
+		const written = await this.writeOutputFile(outputPath, content)
 		if (!written) {
 			this.exitCode = 1
-			return
 		}
+	}
 
-		if (!result.succeeded) {
-			this.exitCode = 1
-		}
+	private async parseAndCompile(): Promise<CompileResult | null> {
+		const source = await this.readSourceFile()
+		if (source === null) return null
+
+		const preprocessed = await this.preprocessSource(source)
+		if (preprocessed === null) return null
+
+		const parseResult = this.parseSource(preprocessed)
+		if (parseResult === null) return null
+
+		return this.compileToWasm(parseResult)
+	}
+
+	override async run(): Promise<void> {
+		if (!this.validateTarget()) return
+
+		const result = await this.parseAndCompile()
+		if (result === null) return
+
+		await this.emitOutput(result)
 	}
 }

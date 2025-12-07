@@ -24,7 +24,7 @@ kernel.defineFlag('version', {
 
 kernel.addLoader(new ListLoader([BuildCommand, HelpCommand]))
 
-kernel.on('finding:command', async () => {
+kernel.on('finding:command', async (): Promise<boolean> => {
 	console.log(`TinyWhale v${version}`)
 	console.log('')
 	console.log('Usage: tinywhale [command] [options]')
