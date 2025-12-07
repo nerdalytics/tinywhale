@@ -1,3 +1,4 @@
+import type { Node, Semantics } from 'ohm-js'
 import * as ohm from 'ohm-js'
 
 /**
@@ -68,10 +69,11 @@ export interface ParseResult {
 const grammarSource = String.raw`
 TinyWhale {
   Program (a program) = Line*
-  Line (a line) = IndentedLine | DedentLine
+  Line (a line) = IndentedLine | DedentLine | RootLine
 
   IndentedLine = indentToken Statement?
   DedentLine = dedentToken+ Statement?
+  RootLine = Statement
 
   // Statements
   Statement = PanicStatement
@@ -111,12 +113,12 @@ function getLineNumber(node: ohm.Node): number {
 /**
  * Create semantics for the TinyWhale grammar.
  */
-export function createSemantics() {
+export function createSemantics(): Semantics {
 	const semantics = TinyWhaleGrammar.createSemantics()
 
 	// Extract Position from position node
 	semantics.addOperation<Position>('toPosition', {
-		position(_open, lineDigits, _comma, levelDigits, _close) {
+		position(_open: Node, lineDigits: Node, _comma: Node, levelDigits: Node, _close: Node) {
 			return {
 				level: Number(levelDigits.sourceString),
 				line: Number(lineDigits.sourceString),
@@ -126,13 +128,13 @@ export function createSemantics() {
 
 	// Extract IndentToken from indent/dedent nodes
 	semantics.addOperation<IndentToken>('toIndentToken', {
-		dedentToken(position, _marker) {
+		dedentToken(position: Node, _marker: Node) {
 			return {
 				position: position['toPosition'](),
 				type: 'dedent',
 			}
 		},
-		indentToken(position, _marker) {
+		indentToken(position: Node, _marker: Node) {
 			return {
 				position: position['toPosition'](),
 				type: 'indent',
@@ -142,21 +144,21 @@ export function createSemantics() {
 
 	// Extract Statement from statement nodes
 	semantics.addOperation<Statement>('toStatement', {
-		PanicStatement(_panicKeyword) {
+		PanicStatement(_panicKeyword: Node): PanicStatementNode {
 			return {
 				lineNumber: getLineNumber(this),
 				type: 'panic',
 			} as PanicStatementNode
 		},
-		Statement(stmt) {
+		Statement(stmt: Node) {
 			return stmt['toStatement']()
 		},
 	})
 
 	// Convert line nodes to ParsedLine
 	semantics.addOperation<ParsedLine>('toLine', {
-		DedentLine(dedentTokens, optionalStatement) {
-			const tokens: IndentToken[] = dedentTokens.children.map((t) => t['toIndentToken']())
+		DedentLine(dedentTokens: Node, optionalStatement: Node) {
+			const tokens: IndentToken[] = dedentTokens.children.map((t: Node) => t['toIndentToken']())
 			const firstToken = tokens[0]
 			const stmtNode = optionalStatement.children[0]
 			const statement = stmtNode !== undefined ? stmtNode['toStatement']() : undefined
@@ -166,7 +168,7 @@ export function createSemantics() {
 				statement,
 			}
 		},
-		IndentedLine(indentToken, optionalStatement) {
+		IndentedLine(indentToken: Node, optionalStatement: Node) {
 			const token = indentToken['toIndentToken']()
 			const stmtNode = optionalStatement.children[0]
 			const statement = stmtNode !== undefined ? stmtNode['toStatement']() : undefined
@@ -176,12 +178,19 @@ export function createSemantics() {
 				statement,
 			}
 		},
+		RootLine(statement: Node) {
+			return {
+				indentTokens: [],
+				lineNumber: getLineNumber(this),
+				statement: statement['toStatement'](),
+			}
+		},
 	})
 
 	// Collect all lines from a Program
 	semantics.addOperation<ParsedLine[]>('toLines', {
-		Program(lines) {
-			return lines.children.map((line) => line['toLine']())
+		Program(lines: Node) {
+			return lines.children.map((line: Node) => line['toLine']())
 		},
 	})
 

@@ -9,5 +9,7 @@
 !README.md
 !src/
 !src/**
+!test/
+!test/**
 !tsconfig.build.json
 !tsconfig.json

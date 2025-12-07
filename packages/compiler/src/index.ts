@@ -3,6 +3,12 @@ import * as ohm from 'ohm-js'
 export { ohm }
 
 export {
+	CompileError,
+	type CompileOptions,
+	type CompileResult,
+	compile,
+} from './codegen/index.ts'
+export {
 	createSemantics,
 	type IndentInfo,
 	type IndentToken,
