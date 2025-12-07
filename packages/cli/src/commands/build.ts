@@ -29,7 +29,7 @@ export default class BuildCommand extends BaseCommand {
 	@flags.string({ alias: 'o', description: 'Output directory (created if not exists)' })
 	declare output?: string
 
-	@flags.string({ default: 'wasm', description: 'Output format: wasm (binary) or wat (text)' })
+	@flags.string({ alias: 't', default: 'wasm', description: 'Output format: wasm (binary) or wat (text)' })
 	declare target: string
 
 	@flags.boolean({ description: 'Run optimization passes' })
