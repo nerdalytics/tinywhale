@@ -1,14 +1,6 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { Readable } from 'node:stream'
 import { args, BaseCommand, flags } from '@adonisjs/ace'
-import {
-	type CompileResult,
-	compile,
-	IndentationError,
-	type ParseResult,
-	parse,
-	preprocess,
-} from '@tinywhale/compiler'
+import { compile, CompileError, type CompileResult } from '@tinywhale/compiler'
 import {
 	formatCompileError,
 	formatReadError,
@@ -29,7 +21,11 @@ export default class BuildCommand extends BaseCommand {
 	@flags.string({ alias: 'o', description: 'Output directory (created if not exists)' })
 	declare output?: string
 
-	@flags.string({ alias: 't', default: 'wasm', description: 'Output format: wasm (binary) or wat (text)' })
+	@flags.string({
+		alias: 't',
+		default: 'wasm',
+		description: 'Output format: wasm (binary) or wat (text)',
+	})
 	declare target: string
 
 	@flags.boolean({ description: 'Run optimization passes' })
@@ -45,36 +41,9 @@ export default class BuildCommand extends BaseCommand {
 		}
 	}
 
-	private formatPreprocessError(error: unknown): string {
-		if (error instanceof IndentationError) {
-			return error.message
-		}
-		return `Preprocessing failed: ${getErrorMessage(error)}`
-	}
-
-	private async preprocessSource(source: string): Promise<string | null> {
+	private compileSource(source: string): CompileResult | null {
 		try {
-			return await preprocess(Readable.from(source))
-		} catch (error: unknown) {
-			this.logger.error(this.formatPreprocessError(error))
-			this.exitCode = 1
-			return null
-		}
-	}
-
-	private parseSource(preprocessed: string): ParseResult | null {
-		const parseResult = parse(preprocessed)
-		if (!parseResult.succeeded) {
-			this.logger.error(`Parse error: ${parseResult.message}`)
-			this.exitCode = 1
-			return null
-		}
-		return parseResult
-	}
-
-	private compileToWasm(parseResult: ParseResult): CompileResult | null {
-		try {
-			const result = compile(parseResult, { optimize: this.optimize })
+			const result = compile(source, { optimize: this.optimize })
 			if (!result.valid) {
 				this.logger.error('Generated WebAssembly module failed validation')
 				this.exitCode = 1
@@ -124,23 +93,13 @@ export default class BuildCommand extends BaseCommand {
 		}
 	}
 
-	private async parseAndCompile(): Promise<CompileResult | null> {
-		const source = await this.readSourceFile()
-		if (source === null) return null
-
-		const preprocessed = await this.preprocessSource(source)
-		if (preprocessed === null) return null
-
-		const parseResult = this.parseSource(preprocessed)
-		if (parseResult === null) return null
-
-		return this.compileToWasm(parseResult)
-	}
-
 	override async run(): Promise<void> {
 		if (!this.validateTarget()) return
 
-		const result = await this.parseAndCompile()
+		const source = await this.readSourceFile()
+		if (source === null) return
+
+		const result = this.compileSource(source)
 		if (result === null) return
 
 		await this.emitOutput(result)
