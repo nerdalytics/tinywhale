@@ -6,6 +6,8 @@
 !biome.json
 !package.json
 !README.md
+!docs/
+!docs/**
 !src/
 !src/**
 !test/

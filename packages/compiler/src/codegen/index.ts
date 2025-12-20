@@ -1,6 +1,7 @@
 import binaryen from 'binaryen'
 
-import type { ParseResult, Statement } from '../grammar/index.ts'
+import type { CompilationContext } from '../core/context.ts'
+import { NodeKind, type NodeId } from '../core/nodes.ts'
 
 /**
  * Error thrown when compilation fails.
@@ -13,9 +14,9 @@ export class CompileError extends Error {
 }
 
 /**
- * Options for the compile function.
+ * Options for the emit function.
  */
-export interface CompileOptions {
+export interface EmitOptions {
 	/** Run Binaryen optimization passes (default: false) */
 	optimize?: boolean
 }
@@ -32,28 +33,39 @@ export interface CompileResult {
 	valid: boolean
 }
 
-function compileStatement(mod: binaryen.Module, stmt: Statement): binaryen.ExpressionRef {
-	switch (stmt.type) {
-		case 'panic':
-			return mod.unreachable()
-		default:
-			throw new CompileError(`Unknown statement type: ${(stmt as Statement).type}`)
-	}
-}
-
+/**
+ * Collects Binaryen expressions from the NodeStore.
+ * Iterates all nodes looking for statement kinds.
+ */
 function collectExpressions(
 	mod: binaryen.Module,
-	parseResult: ParseResult
+	context: CompilationContext
 ): binaryen.ExpressionRef[] {
 	const expressions: binaryen.ExpressionRef[] = []
-	for (const line of parseResult.lines) {
-		if (line.statement) {
-			expressions.push(compileStatement(mod, line.statement))
+
+	for (let i = 0; i < context.nodes.count(); i++) {
+		const node = context.nodes.get(i as NodeId)
+
+		switch (node.kind) {
+			case NodeKind.PanicStatement:
+				expressions.push(mod.unreachable())
+				break
+			// Line and Program nodes don't emit expressions themselves
+			case NodeKind.IndentedLine:
+			case NodeKind.DedentLine:
+			case NodeKind.RootLine:
+			case NodeKind.Program:
+				// These are structural nodes, skip them
+				break
 		}
 	}
+
 	return expressions
 }
 
+/**
+ * Creates a function body from collected expressions.
+ */
 function createFunctionBody(
 	mod: binaryen.Module,
 	expressions: binaryen.ExpressionRef[]
@@ -63,6 +75,9 @@ function createFunctionBody(
 		: mod.block(null, expressions)
 }
 
+/**
+ * Sets up the _start function with export and module start.
+ */
 function setupStartFunction(mod: binaryen.Module, body: binaryen.ExpressionRef): void {
 	mod.addFunction('_start', binaryen.none, binaryen.none, [], body)
 	mod.addFunctionExport('_start', '_start')
@@ -72,6 +87,9 @@ function setupStartFunction(mod: binaryen.Module, body: binaryen.ExpressionRef):
 	}
 }
 
+/**
+ * Emits the final compilation result.
+ */
 function emitResult(mod: binaryen.Module): CompileResult {
 	const valid = mod.validate() === 1
 	const binary = mod.emitBinary()
@@ -81,16 +99,16 @@ function emitResult(mod: binaryen.Module): CompileResult {
 }
 
 /**
- * Compile a parsed TinyWhale program to WebAssembly.
+ * Emit WebAssembly from a compiled program.
  *
- * @param parseResult - The result of parsing a TinyWhale program
- * @param options - Compilation options
+ * @param context - Compilation context with populated nodes
+ * @param options - Emission options
  * @returns The compilation result containing binary, text, and validation status
  * @throws {CompileError} If the program is empty or contains unknown statement types
  */
-export function compile(parseResult: ParseResult, options: CompileOptions = {}): CompileResult {
+export function emit(context: CompilationContext, options: EmitOptions = {}): CompileResult {
 	const mod = new binaryen.Module()
-	const expressions = collectExpressions(mod, parseResult)
+	const expressions = collectExpressions(mod, context)
 
 	if (expressions.length === 0) {
 		mod.dispose()
