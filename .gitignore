@@ -23,3 +23,6 @@
 !pnpm-workspace.yaml
 !README.md
 !tsconfig.json
+
+# Disallow dist folders everywhere
+**/dist/**

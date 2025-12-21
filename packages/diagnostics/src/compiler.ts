@@ -112,27 +112,16 @@ export const TWGEN001: DiagnosticDef = {
 // CATALOG
 // =============================================================================
 
-/**
- * Central catalog of all compiler diagnostics.
- */
 export const COMPILER_DIAGNOSTICS = {
-	// Checker errors
 	TWCHECK001,
-	// Checker warnings
 	TWCHECK050,
-	// Codegen errors
 	TWGEN001,
-	// Lexer errors
 	TWLEX001,
 	TWLEX002,
 	TWLEX003,
 	TWLEX004,
 	TWLEX005,
-	// Parser errors
 	TWPARSE001,
 } as const
 
-/**
- * All valid compiler diagnostic codes.
- */
 export type CompilerDiagnosticCode = keyof typeof COMPILER_DIAGNOSTICS

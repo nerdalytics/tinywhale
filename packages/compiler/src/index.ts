@@ -35,6 +35,7 @@ export {
 	type EmitOptions,
 	emit,
 } from './codegen/index.ts'
+// CompileOptions is exported from the compile function definition below
 export {
 	CompilationContext,
 	type Diagnostic,
@@ -46,14 +47,39 @@ export { type TokenizeOptions, type TokenizeResult, tokenize } from './lex/token
 export { matchOnly, type ParseResult, parse } from './parse/parser.ts'
 
 /**
- * Get the first error message from context or return a fallback.
- * Includes error code if available.
+ * Options for the compile function.
  */
-function getFirstErrorMessage(context: CompilationContext, fallback: string): string {
+export interface CompileOptions {
+	/** Path to the source file (for error messages) */
+	filename?: string
+	/** Run optimization passes on the output */
+	optimize?: boolean
+}
+
+/**
+ * Get the formatted error message from the first diagnostic.
+ */
+function getFormattedError(context: CompilationContext, fallback: string): string {
 	const error = context.getErrors()[0]
 	if (!error) return fallback
-	const code = error.def.code !== 'LEGACY' ? `[${error.def.code}] ` : ''
-	return `${code}${error.message}`
+	return context.formatDiagnostic(error)
+}
+
+/**
+ * Run the emission phase with proper error formatting.
+ */
+function runEmitPhase(
+	context: CompilationContext,
+	optimize: boolean
+): import('./codegen/index.ts').CompileResult {
+	try {
+		return emit(context, { optimize })
+	} catch {
+		if (context.hasErrors()) {
+			throw new CompileError(getFormattedError(context, 'Emission failed'))
+		}
+		throw new CompileError('Emission failed')
+	}
 }
 
 /**
@@ -72,28 +98,28 @@ function getFirstErrorMessage(context: CompilationContext, fallback: string): st
  */
 export function compile(
 	source: string,
-	options: { optimize?: boolean } = {}
+	options: CompileOptions = {}
 ): import('./codegen/index.ts').CompileResult {
-	const context = new CompilationContext(source)
+	const context = new CompilationContext(source, options.filename)
 
 	// Phase 1: Tokenization
 	const tokenResult = tokenize(context)
 	if (!tokenResult.succeeded) {
-		throw new CompileError(getFirstErrorMessage(context, 'Tokenization failed'))
+		throw new CompileError(getFormattedError(context, 'Tokenization failed'))
 	}
 
 	// Phase 2: Parsing
 	const parseResult = parse(context)
 	if (!parseResult.succeeded) {
-		throw new CompileError(getFirstErrorMessage(context, 'Parse failed'))
+		throw new CompileError(getFormattedError(context, 'Parse failed'))
 	}
 
 	// Phase 3: Checking (semantic analysis)
 	const checkResult = check(context)
 	if (!checkResult.succeeded) {
-		throw new CompileError(getFirstErrorMessage(context, 'Check failed'))
+		throw new CompileError(getFormattedError(context, 'Check failed'))
 	}
 
 	// Phase 4: Emission
-	return emit(context, { optimize: options.optimize ?? false })
+	return runEmitPhase(context, options.optimize ?? false)
 }

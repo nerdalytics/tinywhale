@@ -51,7 +51,7 @@ describe('codegen', () => {
 				() => emit(ctx),
 				(err: Error) => {
 					assert.ok(err instanceof CompileError)
-					assert.ok(err.message.includes('Empty program'))
+					assert.ok(err.message.includes('empty program'))
 					return true
 				}
 			)
@@ -66,7 +66,7 @@ describe('codegen', () => {
 				() => emit(ctx),
 				(err: Error) => {
 					assert.ok(err instanceof CompileError)
-					assert.ok(err.message.includes('Empty program'))
+					assert.ok(err.message.includes('empty program'))
 					return true
 				}
 			)

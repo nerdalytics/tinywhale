@@ -63,9 +63,6 @@ export const TWCLI006: DiagnosticDef = {
 // CATALOG
 // =============================================================================
 
-/**
- * Central catalog of all CLI diagnostics.
- */
 export const CLI_DIAGNOSTICS = {
 	TWCLI001,
 	TWCLI002,
@@ -75,7 +72,4 @@ export const CLI_DIAGNOSTICS = {
 	TWCLI006,
 } as const
 
-/**
- * All valid CLI diagnostic codes.
- */
 export type CliDiagnosticCode = keyof typeof CLI_DIAGNOSTICS

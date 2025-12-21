@@ -1,6 +1,7 @@
 import binaryen from 'binaryen'
 
 import { type CompilationContext, DiagnosticSeverity } from '../core/context.ts'
+import type { DiagnosticCode } from '../core/diagnostics.ts'
 import { type NodeId, NodeKind } from '../core/nodes.ts'
 
 export class CompileError extends Error {
@@ -41,7 +42,6 @@ function collectExpressions(
 			case NodeKind.PanicStatement:
 				expressions.push(mod.unreachable())
 				break
-			// Line and Program nodes don't emit expressions themselves
 			case NodeKind.IndentedLine:
 			case NodeKind.DedentLine:
 			case NodeKind.RootLine:
@@ -105,7 +105,8 @@ export function emit(context: CompilationContext, options: EmitOptions = {}): Co
 
 	if (expressions.length === 0) {
 		mod.dispose()
-		throw new CompileError('Empty program: at least one statement is required')
+		context.emit('TWGEN001' as DiagnosticCode, 1, 1, {})
+		throw new CompileError('empty program')
 	}
 
 	const body = createFunctionBody(mod, expressions)

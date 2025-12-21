@@ -54,7 +54,7 @@ export default class BuildCommand extends BaseCommand {
 
 	private compileSource(source: string): CompileResult | null {
 		try {
-			const result = compile(source, { optimize: this.optimize })
+			const result = compile(source, { filename: this.input, optimize: this.optimize })
 			this.displayWarnings(result.warnings)
 			if (!result.valid) {
 				this.logger.error(formatValidationError())

@@ -38,29 +38,17 @@ export {
 import { CLI_DIAGNOSTICS } from './cli.ts'
 import { COMPILER_DIAGNOSTICS } from './compiler.ts'
 
-/**
- * All diagnostics from all packages.
- */
 export const DIAGNOSTICS = {
 	...COMPILER_DIAGNOSTICS,
 	...CLI_DIAGNOSTICS,
 } as const
 
-/**
- * All valid diagnostic codes.
- */
 export type DiagnosticCode = keyof typeof DIAGNOSTICS
 
-/**
- * Get a diagnostic definition by code.
- */
 export function getDiagnostic(code: DiagnosticCode): (typeof DIAGNOSTICS)[typeof code] {
 	return DIAGNOSTICS[code]
 }
 
-/**
- * Check if a code is a valid diagnostic code.
- */
 export function isValidDiagnosticCode(code: string): code is DiagnosticCode {
 	return code in DIAGNOSTICS
 }

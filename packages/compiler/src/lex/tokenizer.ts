@@ -107,7 +107,9 @@ function handleSpaceIndent(
 		return
 	}
 	if (delta !== state.indentUnit) {
-		context.emit('TWLEX002' as DiagnosticCode, lineNumber, 1, {
+		// Point to where the size mismatch starts (after expected indent)
+		const errorColumn = state.indentUnit + 1
+		context.emit('TWLEX002' as DiagnosticCode, lineNumber, errorColumn, {
 			found: delta,
 			unit: state.indentUnit,
 		})
@@ -127,7 +129,9 @@ function handleSpaceDedent(
 	for (let s = 0; s <= state.previousSpaces; s += state.indentUnit) {
 		validLevels.push(s)
 	}
-	context.emit('TWLEX003' as DiagnosticCode, lineNumber, 1, {
+	// Point to where the invalid dedent ends
+	const errorColumn = indentCount + 1
+	context.emit('TWLEX003' as DiagnosticCode, lineNumber, errorColumn, {
 		expected: validLevels[validLevels.length - 1] ?? 0,
 		validLevels: validLevels.join(', '),
 	})
@@ -213,15 +217,18 @@ function validateIndentJump(
 	newLevel: number,
 	previousLevel: number,
 	indentType: IndentType | null,
+	indentUnit: number | null,
 	lineNumber: number,
 	context: CompilationContext
 ): void {
 	if (newLevel <= previousLevel + 1) return
 	const expected = previousLevel + 1
 	const unit = indentType === 'tab' ? 'tab' : 'spaces'
-	context.emit('TWLEX004' as DiagnosticCode, lineNumber, 1, {
+	// Point to the first extra indent character
+	const errorColumn = indentType === 'tab' ? expected + 1 : expected * (indentUnit ?? 1) + 1
+	context.emit('TWLEX004' as DiagnosticCode, lineNumber, errorColumn, {
 		expected,
-		found: newLevel,
+		found: newLevel - previousLevel,
 		unit,
 	})
 }
@@ -280,7 +287,14 @@ function processLine(
 	const content = line.slice(indentCount)
 	const levelChanged = newLevel !== state.previousLevel
 
-	validateIndentJump(newLevel, state.previousLevel, indentType, lineNumber, context)
+	validateIndentJump(
+		newLevel,
+		state.previousLevel,
+		indentType,
+		state.indentUnit,
+		lineNumber,
+		context
+	)
 	emitIndentToken(newLevel, state.previousLevel, lineNumber, context)
 	emitDedentTokens(newLevel, state.previousLevel, lineNumber, context)
 	state.previousLevel = newLevel
