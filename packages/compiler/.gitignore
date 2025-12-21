@@ -1,5 +1,6 @@
 # Ignore every file
 *
+*/
 
 # Allow list for the current folder
 !.gitignore
@@ -9,8 +10,13 @@
 !docs/
 !docs/**
 !src/
-!src/**
+!src/**/
+!src/**/*.ts
+!src/**/*.ohm
 !test/
 !test/**
 !tsconfig.build.json
 !tsconfig.json
+
+# Re-ignore declaration files
+src/**/*.d.ts

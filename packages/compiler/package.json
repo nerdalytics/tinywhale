@@ -2,11 +2,12 @@
 	"author": "",
 	"dependencies": {
 		"binaryen": "125.0.0",
-		"ohm-js": "17.2.1"
+		"ohm-js": "17.3.0"
 	},
 	"description": "TinyWhale compiler library",
 	"devDependencies": {
-		"@types/node": "24.10.1",
+		"@ohm-js/cli": "2.0.1",
+		"@types/node": "25.0.3",
 		"typescript": "5.9.3"
 	},
 	"exports": {
@@ -27,7 +28,7 @@
 	"name": "@tinywhale/compiler",
 	"scripts": {
 		"build": "tsc -p tsconfig.build.json",
-		"clean": "rm -rf dist",
+		"clean": "rm -rf dist src/parse/*.ohm-bundle.*",
 		"test": "node --test test/*.test.ts test/core/*.test.ts test/lex/*.test.ts test/parse/*.test.ts"
 	},
 	"type": "module",

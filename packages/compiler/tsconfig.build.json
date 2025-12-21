@@ -1,6 +1,7 @@
 {
 	"compilerOptions": {
 		"allowImportingTsExtensions": true,
+		"allowJs": true,
 		"declaration": true,
 		"declarationMap": true,
 		"noEmit": false,

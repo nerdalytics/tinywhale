@@ -1,7 +1,7 @@
 # mise configuration for tinywhale monorepo
 [tools]
-node = "24.11.0"
-pnpm = "10.23.0"
+node = "24.12.0"
+pnpm = "10.26.0"
 
 [tasks.install]
 description = "Install dependencies"
@@ -9,11 +9,15 @@ run = "pnpm install"
 
 [tasks.update]
 description = "Update dependencies"
-run = "pnpm up --latest --workspace --interactive --recursive"
+run = "pnpm up --workspace --interactive --recursive --latest"
+
+[tasks.generate-grammar]
+description = "Generate Ohm grammar bundles with TypeScript types"
+run = "cd packages/compiler && npx @ohm-js/cli generateBundles --withTypes --esm 'src/parse/*.ohm'"
 
 [tasks.build]
 description = "Build all packages"
-# depends_post = ["lint", "test"]
+depends = ["generate-grammar"]
 run = "pnpm -r build"
 
 [tasks.test]
@@ -22,7 +26,7 @@ run = "pnpm -r test"
 
 [tasks.check]
 description = "Run biome check (lint & format)"
-run = "pnpm exec biome check --write"
+run = "pnpm exec biome check --write --max-diagnostics 100"
 
 [tasks.typecheck]
 description = "Run TypeScript type checking"

@@ -187,7 +187,7 @@ export class CompilationContext {
 		}
 
 		// Build pointer line
-		const pointer = ' '.repeat(diagnostic.column - 1) + '^'
+		const pointer = `${' '.repeat(diagnostic.column - 1)}^`
 
 		return `${header}\n  ${sourceLine}\n  ${pointer}`
 	}

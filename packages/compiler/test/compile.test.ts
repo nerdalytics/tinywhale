@@ -1,6 +1,6 @@
 import assert from 'node:assert'
 import { describe, it } from 'node:test'
-import { compile, CompileError } from '../src/index.ts'
+import { CompileError, compile } from '../src/index.ts'
 
 describe('compile (unified API)', () => {
 	describe('basic compilation', () => {

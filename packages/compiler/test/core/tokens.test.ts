@@ -86,12 +86,12 @@ describe('core/tokens', () => {
 			}
 
 			assert.strictEqual(collected.length, 3)
-			assert.strictEqual(collected[0]![0], 0)
-			assert.strictEqual(collected[0]![1].kind, TokenKind.Indent)
-			assert.strictEqual(collected[1]![0], 1)
-			assert.strictEqual(collected[1]![1].kind, TokenKind.Panic)
-			assert.strictEqual(collected[2]![0], 2)
-			assert.strictEqual(collected[2]![1].kind, TokenKind.Dedent)
+			assert.strictEqual(collected[0]?.[0], 0)
+			assert.strictEqual(collected[0]?.[1].kind, TokenKind.Indent)
+			assert.strictEqual(collected[1]?.[0], 1)
+			assert.strictEqual(collected[1]?.[1].kind, TokenKind.Panic)
+			assert.strictEqual(collected[2]?.[0], 2)
+			assert.strictEqual(collected[2]?.[1].kind, TokenKind.Dedent)
 		})
 
 		it('should slice tokens by range', () => {
@@ -104,8 +104,8 @@ describe('core/tokens', () => {
 			const slice = store.slice(tokenId(1), tokenId(3))
 
 			assert.strictEqual(slice.length, 2)
-			assert.strictEqual(slice[0]!.kind, TokenKind.Panic)
-			assert.strictEqual(slice[1]!.kind, TokenKind.Dedent)
+			assert.strictEqual(slice[0]?.kind, TokenKind.Panic)
+			assert.strictEqual(slice[1]?.kind, TokenKind.Dedent)
 		})
 	})
 })

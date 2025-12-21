@@ -1,0 +1,25 @@
+TinyWhale {
+  Program (a program) = Line*
+  Line (a line) = IndentedLine | DedentLine | RootLine
+
+  IndentedLine = indentToken Statement?
+  DedentLine = dedentToken+ Statement?
+  RootLine = Statement
+
+  // Statements
+  Statement = PanicStatement
+  PanicStatement = panic
+
+  // Keywords
+  keyword = panic
+  panic = "panic" ~identifierPart
+  identifierPart = alnum | "_"
+
+  // Lexical token rules (marker followed by indent level)
+  indentToken = "⇥" digit+
+  dedentToken = "⇤" digit+
+
+  // Comments treated as whitespace
+  space += comment
+  comment = "#" (~("#" | "\n" | "\r" | dedentToken) any)* ("#" | &"\n" | &"\r" | &dedentToken | end)
+}

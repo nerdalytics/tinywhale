@@ -1,6 +1,6 @@
 import assert from 'node:assert'
 import { describe, it } from 'node:test'
-import { CompilationContext, type Diagnostic, DiagnosticSeverity } from '../../src/core/context.ts'
+import { CompilationContext, DiagnosticSeverity } from '../../src/core/context.ts'
 import { NodeKind } from '../../src/core/nodes.ts'
 import { TokenKind } from '../../src/core/tokens.ts'
 

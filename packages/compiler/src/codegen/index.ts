@@ -1,7 +1,7 @@
 import binaryen from 'binaryen'
 
 import type { CompilationContext } from '../core/context.ts'
-import { NodeKind, type NodeId } from '../core/nodes.ts'
+import { type NodeId, NodeKind } from '../core/nodes.ts'
 
 /**
  * Error thrown when compilation fails.
