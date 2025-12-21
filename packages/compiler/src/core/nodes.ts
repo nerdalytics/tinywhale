@@ -144,7 +144,8 @@ export class NodeStore {
 
 		while (pos >= (start as number)) {
 			const childId = pos as NodeId
-			const child = this.nodes[childId]!
+			const child = this.nodes[childId]
+			if (child === undefined) break
 			yield [childId, child]
 			// Move backwards past this child's subtree to find previous sibling
 			pos -= child.subtreeSize
@@ -159,7 +160,8 @@ export class NodeStore {
 		const node = this.get(id)
 		const start = id - node.subtreeSize + 1
 		for (let i = start; i <= id; i++) {
-			yield [i as NodeId, this.nodes[i]!]
+			const n = this.nodes[i]
+			if (n !== undefined) yield [i as NodeId, n]
 		}
 	}
 
@@ -169,7 +171,8 @@ export class NodeStore {
 	 */
 	*[Symbol.iterator](): Generator<[NodeId, ParseNode]> {
 		for (let i = 0; i < this.nodes.length; i++) {
-			yield [i as NodeId, this.nodes[i]!]
+			const node = this.nodes[i]
+			if (node !== undefined) yield [i as NodeId, node]
 		}
 	}
 }

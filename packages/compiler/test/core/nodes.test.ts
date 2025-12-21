@@ -177,10 +177,10 @@ describe('core/nodes', () => {
 
 			// Should get both RootLine nodes (indices 3 and 1, in reverse order)
 			assert.strictEqual(children.length, 2)
-			assert.strictEqual(children[0]![0], 3) // line2 first (reverse order)
-			assert.strictEqual(children[0]![1].kind, NodeKind.RootLine)
-			assert.strictEqual(children[1]![0], 1) // line1 second
-			assert.strictEqual(children[1]![1].kind, NodeKind.RootLine)
+			assert.strictEqual(children[0]?.[0], 3) // line2 first (reverse order)
+			assert.strictEqual(children[0]?.[1].kind, NodeKind.RootLine)
+			assert.strictEqual(children[1]?.[0], 1) // line1 second
+			assert.strictEqual(children[1]?.[1].kind, NodeKind.RootLine)
 		})
 
 		it('should iterate subtree correctly', () => {

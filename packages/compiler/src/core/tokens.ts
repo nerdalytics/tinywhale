@@ -103,7 +103,8 @@ export class TokenStore {
 	 */
 	*[Symbol.iterator](): Generator<[TokenId, Token]> {
 		for (let i = 0; i < this.tokens.length; i++) {
-			yield [i as TokenId, this.tokens[i]!]
+			const token = this.tokens[i]
+			if (token !== undefined) yield [i as TokenId, token]
 		}
 	}
 

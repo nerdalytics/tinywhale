@@ -1,7 +1,7 @@
 import assert from 'node:assert'
 import { describe, it } from 'node:test'
 import { CompilationContext } from '../../src/core/context.ts'
-import { NodeKind, type NodeId } from '../../src/core/nodes.ts'
+import { type NodeId, NodeKind } from '../../src/core/nodes.ts'
 import { tokenize } from '../../src/lex/tokenizer.ts'
 import { parse } from '../../src/parse/parser.ts'
 
@@ -19,7 +19,7 @@ describe('parse/parser', () => {
 	describe('basic parsing', () => {
 		it('should parse empty input', () => {
 			const ctx = tokenizeAndParse('')
-			const result = parse(ctx)
+			parse(ctx)
 
 			// Note: we called parse twice, but that's ok for this test
 			assert.strictEqual(ctx.hasErrors(), false)
@@ -42,7 +42,8 @@ describe('parse/parser', () => {
 			tokenize(ctx)
 			const result = parse(ctx)
 
-			const rootNode = ctx.nodes.get(result.rootNode!)
+			assert.ok(result.rootNode !== undefined, 'rootNode should be defined')
+			const rootNode = ctx.nodes.get(result.rootNode)
 			assert.strictEqual(rootNode.kind, NodeKind.Program)
 		})
 
@@ -160,7 +161,8 @@ describe('parse/parser', () => {
 			// 2 panics + 2 rootlines + 1 program = 5 nodes
 			assert.strictEqual(ctx.nodes.count(), 5)
 
-			const programNode = ctx.nodes.get(result.rootNode!)
+			assert.ok(result.rootNode !== undefined, 'rootNode should be defined')
+			const programNode = ctx.nodes.get(result.rootNode)
 			assert.strictEqual(programNode.subtreeSize, 5)
 		})
 	})
@@ -180,8 +182,9 @@ describe('parse/parser', () => {
 			tokenize(ctx)
 			const result = parse(ctx)
 
+			assert.ok(result.rootNode !== undefined, 'rootNode should be defined')
 			const children: number[] = []
-			for (const [id, node] of ctx.nodes.iterateChildren(result.rootNode!)) {
+			for (const [_id, node] of ctx.nodes.iterateChildren(result.rootNode)) {
 				children.push(node.kind)
 			}
 

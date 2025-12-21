@@ -1,5 +1,5 @@
 {
-	"$schema": "https://biomejs.dev/schemas/2.3.8/schema.json",
+	"$schema": "https://biomejs.dev/schemas/2.3.10/schema.json",
 	"assist": {
 		"actions": {
 			"source": {
@@ -9,7 +9,13 @@
 		}
 	},
 	"files": {
-		"includes": ["**/*.ts", "**/*.json", "!dist", "!node_modules"]
+		"includes": [
+			"**/*.ts",
+			"**/*.json",
+			"!dist",
+			"!node_modules",
+			"!**/*.ohm-bundle.*"
+		]
 	},
 	"formatter": {
 		"enabled": true,
@@ -44,6 +50,21 @@
 			"recommended": true
 		}
 	},
+	"overrides": [
+		{
+			"includes": ["**/test/**", "**/*.test.ts"],
+			"linter": {
+				"rules": {
+					"complexity": {
+						"noExcessiveCognitiveComplexity": "off"
+					},
+					"style": {
+						"noNonNullAssertion": "off"
+					}
+				}
+			}
+		}
+	],
 	"vcs": {
 		"clientKind": "git",
 		"enabled": true,

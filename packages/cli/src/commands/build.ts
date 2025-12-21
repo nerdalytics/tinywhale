@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { args, BaseCommand, flags } from '@adonisjs/ace'
-import { compile, CompileError, type CompileResult } from '@tinywhale/compiler'
+import { type CompileResult, compile } from '@tinywhale/compiler'
 import {
 	formatCompileError,
 	formatReadError,

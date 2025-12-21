@@ -7,28 +7,32 @@
  * - Unified CompilationContext flowing through all phases
  */
 
+import { CompileError, emit } from './codegen/index.ts'
 import { CompilationContext } from './core/context.ts'
 import { tokenize } from './lex/tokenizer.ts'
 import { parse } from './parse/parser.ts'
-import { CompileError, emit } from './codegen/index.ts'
 
+// Code generation
+export { CompileError, type CompileResult, type EmitOptions, emit } from './codegen/index.ts'
 // Core data structures
 export {
 	CompilationContext,
 	type Diagnostic,
 	DiagnosticSeverity,
 } from './core/context.ts'
-export { NodeKind, type NodeId, NodeStore, nodeId, type ParseNode } from './core/nodes.ts'
-export { TokenKind, type Token, type TokenId, TokenStore, tokenId } from './core/tokens.ts'
-
+export { type NodeId, NodeKind, NodeStore, nodeId, type ParseNode } from './core/nodes.ts'
+export { type Token, type TokenId, TokenKind, TokenStore, tokenId } from './core/tokens.ts'
 // Tokenization (lexical analysis)
-export { tokenize, type TokenizeOptions, type TokenizeResult } from './lex/tokenizer.ts'
-
+export { type TokenizeOptions, type TokenizeResult, tokenize } from './lex/tokenizer.ts'
 // Parsing
-export { matchOnly, parse, type ParseResult } from './parse/parser.ts'
+export { matchOnly, type ParseResult, parse } from './parse/parser.ts'
 
-// Code generation
-export { CompileError, emit, type EmitOptions, type CompileResult } from './codegen/index.ts'
+/**
+ * Get the first error message from context or return a fallback.
+ */
+function getFirstErrorMessage(context: CompilationContext, fallback: string): string {
+	return context.getErrors()[0]?.message ?? fallback
+}
 
 /**
  * Compile TinyWhale source to WebAssembly.
@@ -52,19 +56,15 @@ export function compile(
 	// Phase 1: Tokenization
 	const tokenResult = tokenize(context)
 	if (!tokenResult.succeeded) {
-		const errors = context.getErrors()
-		const message = errors.length > 0 ? errors[0]!.message : 'Tokenization failed'
-		throw new CompileError(message)
+		throw new CompileError(getFirstErrorMessage(context, 'Tokenization failed'))
 	}
 
 	// Phase 2: Parsing
 	const parseResult = parse(context)
 	if (!parseResult.succeeded) {
-		const errors = context.getErrors()
-		const message = errors.length > 0 ? errors[0]!.message : 'Parse failed'
-		throw new CompileError(message)
+		throw new CompileError(getFirstErrorMessage(context, 'Parse failed'))
 	}
 
 	// Phase 3: Emission
-	return emit(context, { optimize: options.optimize })
+	return emit(context, { optimize: options.optimize ?? false })
 }

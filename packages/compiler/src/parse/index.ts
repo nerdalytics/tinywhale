@@ -3,4 +3,4 @@
  * Parses tokens into a flat node array using Ohm.js.
  */
 
-export { matchOnly, parse, type ParseResult } from './parser.ts'
+export { matchOnly, type ParseResult, parse } from './parser.ts'

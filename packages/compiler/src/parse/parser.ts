@@ -3,11 +3,12 @@
  * Keeps Ohm.js for grammar definition while adopting data-oriented output.
  */
 
-import type { Node, Semantics } from 'ohm-js'
-import * as ohm from 'ohm-js'
+import type { Node } from 'ohm-js'
 import type { CompilationContext } from '../core/context.ts'
 import { type NodeId, NodeKind } from '../core/nodes.ts'
-import { TokenKind, type TokenId, tokenId } from '../core/tokens.ts'
+import { type TokenId, TokenKind, tokenId } from '../core/tokens.ts'
+import type { TinyWhaleSemantics } from './tinywhale.ohm-bundle.js'
+import TinyWhaleGrammar from './tinywhale.ohm-bundle.js'
 
 /**
  * Result of parsing.
@@ -18,42 +19,27 @@ export interface ParseResult {
 }
 
 /**
- * TinyWhale Grammar Source
- * Same grammar as before, but semantic actions emit to NodeStore.
+ * Convert a single token to its Ohm string representation.
  */
-const grammarSource = String.raw`
-TinyWhale {
-  Program (a program) = Line*
-  Line (a line) = IndentedLine | DedentLine | RootLine
-
-  IndentedLine = indentToken Statement?
-  DedentLine = dedentToken+ Statement?
-  RootLine = Statement
-
-  // Statements
-  Statement = PanicStatement
-  PanicStatement = panic
-
-  // Keywords
-  keyword = panic
-  panic = "panic" ~identifierPart
-  identifierPart = alnum | "_"
-
-  // Lexical token rules
-  indentToken = position "⇥"
-  dedentToken = position "⇤"
-  position (a position marker) = "⟨" digit+ "," digit+ "⟩"
-
-  // Comments treated as whitespace
-  space += comment
-  comment = "#" (~("#" | "\n" | "\r" | dedentToken) any)* ("#" | &"\n" | &"\r" | &dedentToken | end)
+function tokenToOhmString(token: import('../core/tokens.ts').Token): string | null {
+	switch (token.kind) {
+		case TokenKind.Indent:
+			return `⇥${token.payload}`
+		case TokenKind.Dedent:
+			return `⇤${token.payload}`
+		case TokenKind.Panic:
+			return 'panic'
+		default:
+			return null
+	}
 }
-`
 
 /**
- * The compiled TinyWhale grammar.
+ * Generates newline characters to reach a target line.
  */
-const TinyWhaleGrammar = ohm.grammar(grammarSource)
+function generateNewlines(currentLine: number, targetLine: number): string {
+	return '\n'.repeat(Math.max(0, targetLine - currentLine))
+}
 
 /**
  * Converts TokenStore to the string format Ohm.js expects.
@@ -64,29 +50,11 @@ function tokensToOhmInput(context: CompilationContext): string {
 	let currentLine = 1
 
 	for (const [, token] of context.tokens) {
-		// Add newlines to reach the token's line
-		while (currentLine < token.line) {
-			parts.push('\n')
-			currentLine++
-		}
+		parts.push(generateNewlines(currentLine, token.line))
+		currentLine = token.line
 
-		switch (token.kind) {
-			case TokenKind.Indent:
-				parts.push(`⟨${token.line},${token.payload}⟩⇥`)
-				break
-			case TokenKind.Dedent:
-				parts.push(`⟨${token.line},${token.payload}⟩⇤`)
-				break
-			case TokenKind.Panic:
-				parts.push('panic')
-				break
-			case TokenKind.Newline:
-				// Newlines are implicit in line tracking
-				break
-			case TokenKind.Eof:
-				// EOF doesn't need representation
-				break
-		}
+		const str = tokenToOhmString(token)
+		if (str !== null) parts.push(str)
 	}
 
 	return parts.join('')
@@ -128,13 +96,13 @@ function buildTokenMapping(context: CompilationContext): TokenMapping {
 function createNodeEmittingSemantics(
 	context: CompilationContext,
 	tokenMapping: TokenMapping
-): Semantics {
+): TinyWhaleSemantics {
 	const semantics = TinyWhaleGrammar.createSemantics()
 
 	/**
 	 * Helper to get line number from a node's source position.
 	 */
-	function getLineNumber(node: ohm.Node): number {
+	function getLineNumber(node: Node): number {
 		const interval = node.source
 		const fullSource = interval.sourceString
 		const textBefore = fullSource.substring(0, interval.startIdx)
@@ -148,19 +116,13 @@ function createNodeEmittingSemantics(
 		return tokenMapping.lineToFirstToken.get(lineNumber) ?? tokenId(0)
 	}
 
-	// Extract position from position node (for indent/dedent tokens)
-	semantics.addOperation<{ line: number; level: number }>('toPosition', {
-		indentToken(position: Node, _marker: Node) {
-			return position['toPosition']()
+	// Extract indent level from indent/dedent tokens
+	semantics.addOperation<number>('toLevel', {
+		dedentToken(_marker: Node, levelDigits: Node) {
+			return Number(levelDigits.sourceString)
 		},
-		dedentToken(position: Node, _marker: Node) {
-			return position['toPosition']()
-		},
-		position(_open: Node, lineDigits: Node, _comma: Node, levelDigits: Node, _close: Node) {
-			return {
-				level: Number(levelDigits.sourceString),
-				line: Number(lineDigits.sourceString),
-			}
+		indentToken(_marker: Node, levelDigits: Node) {
+			return Number(levelDigits.sourceString)
 		},
 	})
 
@@ -184,10 +146,8 @@ function createNodeEmittingSemantics(
 	// Emit line nodes to NodeStore, return NodeId
 	// Lines contain their statements as children (in postorder, statement comes first)
 	semantics.addOperation<NodeId | null>('emitLine', {
-		DedentLine(dedentTokens: Node, optionalStatement: Node) {
-			const positions = dedentTokens.children.map((t: Node) => t['toPosition']())
-			const firstPos = positions[0]
-			const lineNumber = firstPos?.line ?? getLineNumber(this)
+		DedentLine(_dedentTokens: Node, optionalStatement: Node) {
+			const lineNumber = getLineNumber(this)
 
 			// Emit statement first (if any) - postorder
 			const stmtNode = optionalStatement.children[0]
@@ -204,8 +164,8 @@ function createNodeEmittingSemantics(
 				tokenId: tid,
 			})
 		},
-		IndentedLine(indentToken: Node, optionalStatement: Node) {
-			const pos = indentToken['toPosition']()
+		IndentedLine(_indentToken: Node, optionalStatement: Node) {
+			const lineNumber = getLineNumber(this)
 
 			// Emit statement first (if any) - postorder
 			const stmtNode = optionalStatement.children[0]
@@ -215,7 +175,7 @@ function createNodeEmittingSemantics(
 				subtreeSize = 2
 			}
 
-			const tid = getTokenIdForLine(pos.line)
+			const tid = getTokenIdForLine(lineNumber)
 			return context.nodes.add({
 				kind: NodeKind.IndentedLine,
 				subtreeSize,
