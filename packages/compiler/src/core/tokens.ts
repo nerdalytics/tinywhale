@@ -33,10 +33,6 @@ export type TokenKind = (typeof TokenKind)[keyof typeof TokenKind]
  */
 export type TokenId = number & { readonly __brand: 'TokenId' }
 
-/**
- * Creates a TokenId from a number.
- * Use sparingly - prefer getting IDs from TokenStore.add().
- */
 export function tokenId(n: number): TokenId {
 	return n as TokenId
 }
@@ -62,19 +58,12 @@ export interface Token {
 export class TokenStore {
 	private readonly tokens: Token[] = []
 
-	/**
-	 * Add a token and return its ID.
-	 */
 	add(token: Token): TokenId {
 		const id = this.tokens.length as TokenId
 		this.tokens.push(token)
 		return id
 	}
 
-	/**
-	 * Get a token by ID.
-	 * Throws if ID is out of bounds.
-	 */
 	get(id: TokenId): Token {
 		const token = this.tokens[id]
 		if (token === undefined) {
@@ -83,24 +72,14 @@ export class TokenStore {
 		return token
 	}
 
-	/**
-	 * Get token count.
-	 */
 	count(): number {
 		return this.tokens.length
 	}
 
-	/**
-	 * Check if a token ID is valid.
-	 */
 	isValid(id: TokenId): boolean {
 		return id >= 0 && id < this.tokens.length
 	}
 
-	/**
-	 * Iterate over all tokens with their IDs.
-	 * Sequential access for cache-friendly traversal.
-	 */
 	*[Symbol.iterator](): Generator<[TokenId, Token]> {
 		for (let i = 0; i < this.tokens.length; i++) {
 			const token = this.tokens[i]
@@ -108,10 +87,6 @@ export class TokenStore {
 		}
 	}
 
-	/**
-	 * Get a slice of tokens by ID range.
-	 * Useful for getting tokens in a specific range.
-	 */
 	slice(start: TokenId, end: TokenId): Token[] {
 		return this.tokens.slice(start, end)
 	}

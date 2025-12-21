@@ -1,6 +1,7 @@
 {
 	"author": "",
 	"dependencies": {
+		"@tinywhale/diagnostics": "workspace:*",
 		"binaryen": "125.0.0",
 		"ohm-js": "17.3.0"
 	},
@@ -29,7 +30,7 @@
 	"scripts": {
 		"build": "tsc -p tsconfig.build.json",
 		"clean": "rm -rf dist src/parse/*.ohm-bundle.*",
-		"test": "node --test test/*.test.ts test/core/*.test.ts test/lex/*.test.ts test/parse/*.test.ts"
+		"test": "node --test test/*.test.ts test/core/*.test.ts test/lex/*.test.ts test/parse/*.test.ts test/check/*.test.ts"
 	},
 	"type": "module",
 	"types": "./dist/index.d.ts",

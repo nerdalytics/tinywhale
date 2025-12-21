@@ -7,14 +7,34 @@
  * - Unified CompilationContext flowing through all phases
  */
 
+import { check } from './check/checker.ts'
 import { CompileError, emit } from './codegen/index.ts'
 import { CompilationContext } from './core/context.ts'
 import { tokenize } from './lex/tokenizer.ts'
 import { parse } from './parse/parser.ts'
 
-// Code generation
-export { CompileError, type CompileResult, type EmitOptions, emit } from './codegen/index.ts'
-// Core data structures
+export {
+	type CheckResult,
+	check,
+	type Inst,
+	type InstId,
+	InstKind,
+	InstStore,
+	instId,
+	type Scope,
+	type ScopeId,
+	ScopeStore,
+	scopeId,
+	type TypeId,
+	typeId,
+} from './check/index.ts'
+export {
+	CompileError,
+	type CompileResult,
+	type CompileWarning,
+	type EmitOptions,
+	emit,
+} from './codegen/index.ts'
 export {
 	CompilationContext,
 	type Diagnostic,
@@ -22,16 +42,18 @@ export {
 } from './core/context.ts'
 export { type NodeId, NodeKind, NodeStore, nodeId, type ParseNode } from './core/nodes.ts'
 export { type Token, type TokenId, TokenKind, TokenStore, tokenId } from './core/tokens.ts'
-// Tokenization (lexical analysis)
 export { type TokenizeOptions, type TokenizeResult, tokenize } from './lex/tokenizer.ts'
-// Parsing
 export { matchOnly, type ParseResult, parse } from './parse/parser.ts'
 
 /**
  * Get the first error message from context or return a fallback.
+ * Includes error code if available.
  */
 function getFirstErrorMessage(context: CompilationContext, fallback: string): string {
-	return context.getErrors()[0]?.message ?? fallback
+	const error = context.getErrors()[0]
+	if (!error) return fallback
+	const code = error.def.code !== 'LEGACY' ? `[${error.def.code}] ` : ''
+	return `${code}${error.message}`
 }
 
 /**
@@ -40,7 +62,8 @@ function getFirstErrorMessage(context: CompilationContext, fallback: string): st
  * This is the main entry point for compilation. It chains all phases:
  * 1. Tokenization (source → tokens)
  * 2. Parsing (tokens → AST nodes)
- * 3. Emission (nodes → WebAssembly)
+ * 3. Checking (semantic analysis, scope validation, reachability)
+ * 4. Emission (nodes → WebAssembly)
  *
  * @param source - TinyWhale source code
  * @param options - Compilation options
@@ -65,6 +88,12 @@ export function compile(
 		throw new CompileError(getFirstErrorMessage(context, 'Parse failed'))
 	}
 
-	// Phase 3: Emission
+	// Phase 3: Checking (semantic analysis)
+	const checkResult = check(context)
+	if (!checkResult.succeeded) {
+		throw new CompileError(getFirstErrorMessage(context, 'Check failed'))
+	}
+
+	// Phase 4: Emission
 	return emit(context, { optimize: options.optimize ?? false })
 }

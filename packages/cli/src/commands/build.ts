@@ -1,10 +1,12 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { args, BaseCommand, flags } from '@adonisjs/ace'
-import { type CompileResult, compile } from '@tinywhale/compiler'
+import { type CompileResult, type CompileWarning, compile } from '@tinywhale/compiler'
 import {
 	formatCompileError,
+	formatInvalidTargetError,
 	formatReadError,
-	getErrorMessage,
+	formatValidationError,
+	formatWriteError,
 	getOutputContent,
 	isValidTarget,
 	type OutputTarget,
@@ -41,11 +43,21 @@ export default class BuildCommand extends BaseCommand {
 		}
 	}
 
+	private displayWarnings(warnings: CompileWarning[]): void {
+		for (const warning of warnings) {
+			const codeDisplay = warning.code !== 'LEGACY' ? `[${warning.code}]` : ''
+			this.logger.warning(
+				`warning${codeDisplay}: ${warning.message}\n  --> ${this.input}:${warning.line}:${warning.column}`
+			)
+		}
+	}
+
 	private compileSource(source: string): CompileResult | null {
 		try {
 			const result = compile(source, { optimize: this.optimize })
+			this.displayWarnings(result.warnings)
 			if (!result.valid) {
-				this.logger.error('Generated WebAssembly module failed validation')
+				this.logger.error(formatValidationError())
 				this.exitCode = 1
 				return null
 			}
@@ -59,7 +71,7 @@ export default class BuildCommand extends BaseCommand {
 
 	private validateTarget(): boolean {
 		if (!isValidTarget(this.target)) {
-			this.logger.error(`Invalid target "${this.target}". Use "wasm" or "wat".`)
+			this.logger.error(formatInvalidTargetError(this.target))
 			this.exitCode = 1
 			return false
 		}
@@ -74,7 +86,7 @@ export default class BuildCommand extends BaseCommand {
 			await writeFile(outputPath, content)
 			return true
 		} catch (error: unknown) {
-			this.logger.error(`Cannot write to ${outputPath}: ${getErrorMessage(error)}`)
+			this.logger.error(formatWriteError(error))
 			return false
 		}
 	}

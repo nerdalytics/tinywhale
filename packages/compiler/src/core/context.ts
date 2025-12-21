@@ -1,30 +1,37 @@
 /**
  * Unified compilation context that flows through all phases.
- * Contains all stores (tokens, nodes) and diagnostic collection.
+ * Contains all stores (tokens, nodes, insts) and diagnostic collection.
  */
 
+import type { InstStore } from '../check/stores.ts'
+import {
+	type DiagnosticArgs,
+	type DiagnosticCode,
+	type DiagnosticDef,
+	DiagnosticSeverity,
+	getDiagnostic,
+	interpolateMessage,
+} from './diagnostics.ts'
 import { type NodeId, NodeStore } from './nodes.ts'
 import { type TokenId, TokenStore } from './tokens.ts'
 
-/**
- * Diagnostic severity levels.
- */
-export const DiagnosticSeverity = {
-	Error: 0,
-	Note: 2,
-	Warning: 1,
-} as const
-
-export type DiagnosticSeverity = (typeof DiagnosticSeverity)[keyof typeof DiagnosticSeverity]
+// Re-export for backwards compatibility
+export { DiagnosticSeverity } from './diagnostics.ts'
 
 /**
  * A diagnostic message with location information.
  */
 export interface Diagnostic {
-	readonly severity: DiagnosticSeverity
+	/** The diagnostic definition from the catalog */
+	readonly def: DiagnosticDef
+	/** Interpolated message with arguments applied */
 	readonly message: string
+	/** Line number (1-indexed) */
 	readonly line: number
+	/** Column number (1-indexed) */
 	readonly column: number
+	/** Template arguments used for message interpolation */
+	readonly args?: DiagnosticArgs
 	/** Token associated with this diagnostic (if available) */
 	readonly tokenId?: TokenId
 	/** Node associated with this diagnostic (if available) */
@@ -53,6 +60,9 @@ export class CompilationContext {
 	/** Parse node storage (populated by parser) */
 	readonly nodes: NodeStore
 
+	/** Instruction storage (populated by checker) */
+	insts: InstStore | null = null
+
 	/** Collected diagnostics */
 	private readonly diagnostics: Diagnostic[] = []
 
@@ -66,135 +76,278 @@ export class CompilationContext {
 		this.nodes = new NodeStore()
 	}
 
-	/**
-	 * Add a diagnostic.
-	 */
-	addDiagnostic(diagnostic: Diagnostic): void {
-		this.diagnostics.push(diagnostic)
-		if (diagnostic.severity === DiagnosticSeverity.Error) {
-			this.errorCount++
-		}
-	}
+	// ===========================================================================
+	// NEW API: Emit diagnostics with codes
+	// ===========================================================================
 
 	/**
-	 * Add an error at a specific location.
+	 * Emit a diagnostic by code at a specific location.
 	 */
-	addError(line: number, column: number, message: string): void {
-		this.addDiagnostic({
+	emit(code: DiagnosticCode, line: number, column: number, args?: DiagnosticArgs): void {
+		const def = getDiagnostic(code)
+		const message = interpolateMessage(def.message, args)
+		this.addDiagnosticInternal({
 			column,
+			def,
 			line,
 			message,
-			severity: DiagnosticSeverity.Error,
+			...(args ? { args } : {}),
 		})
 	}
 
 	/**
-	 * Add an error at a token's location.
+	 * Emit a diagnostic by code at a token's location.
 	 */
-	errorAtToken(tokenId: TokenId, message: string): void {
+	emitAtToken(code: DiagnosticCode, tokenId: TokenId, args?: DiagnosticArgs): void {
 		const token = this.tokens.get(tokenId)
-		this.addDiagnostic({
+		const def = getDiagnostic(code)
+		const message = interpolateMessage(def.message, args)
+		this.addDiagnosticInternal({
 			column: token.column,
+			def,
 			line: token.line,
 			message,
+			tokenId,
+			...(args ? { args } : {}),
+		})
+	}
+
+	/**
+	 * Emit a diagnostic by code at a node's location.
+	 */
+	emitAtNode(code: DiagnosticCode, nodeId: NodeId, args?: DiagnosticArgs): void {
+		const node = this.nodes.get(nodeId)
+		const token = this.tokens.get(node.tokenId)
+		const def = getDiagnostic(code)
+		const message = interpolateMessage(def.message, args)
+		this.addDiagnosticInternal({
+			column: token.column,
+			def,
+			line: token.line,
+			message,
+			nodeId,
+			tokenId: node.tokenId,
+			...(args ? { args } : {}),
+		})
+	}
+
+	// ===========================================================================
+	// LEGACY API: Kept for backwards compatibility (will be removed)
+	// ===========================================================================
+
+	/** @deprecated */
+	addDiagnostic(
+		diagnostic: Omit<Diagnostic, 'def' | 'args'> & { severity: DiagnosticSeverity }
+	): void {
+		// Create a synthetic def for legacy calls
+		const syntheticDef: DiagnosticDef = {
+			code: 'LEGACY',
+			description: '',
+			message: diagnostic.message,
+			severity: diagnostic.severity,
+		}
+		this.addDiagnosticInternal({
+			column: diagnostic.column,
+			def: syntheticDef,
+			line: diagnostic.line,
+			message: diagnostic.message,
+			...(diagnostic.nodeId !== undefined ? { nodeId: diagnostic.nodeId } : {}),
+			...(diagnostic.tokenId !== undefined ? { tokenId: diagnostic.tokenId } : {}),
+		})
+	}
+
+	/** @deprecated */
+	addError(line: number, column: number, message: string): void {
+		const syntheticDef: DiagnosticDef = {
+			code: 'LEGACY',
+			description: '',
+			message,
 			severity: DiagnosticSeverity.Error,
+		}
+		this.addDiagnosticInternal({
+			column,
+			def: syntheticDef,
+			line,
+			message,
+		})
+	}
+
+	/** @deprecated */
+	errorAtToken(tokenId: TokenId, message: string): void {
+		const token = this.tokens.get(tokenId)
+		const syntheticDef: DiagnosticDef = {
+			code: 'LEGACY',
+			description: '',
+			message,
+			severity: DiagnosticSeverity.Error,
+		}
+		this.addDiagnosticInternal({
+			column: token.column,
+			def: syntheticDef,
+			line: token.line,
+			message,
 			tokenId,
 		})
 	}
 
-	/**
-	 * Add an error at a node's location.
-	 */
+	/** @deprecated */
 	errorAtNode(nodeId: NodeId, message: string): void {
 		const node = this.nodes.get(nodeId)
 		const token = this.tokens.get(node.tokenId)
-		this.addDiagnostic({
+		const syntheticDef: DiagnosticDef = {
+			code: 'LEGACY',
+			description: '',
+			message,
+			severity: DiagnosticSeverity.Error,
+		}
+		this.addDiagnosticInternal({
 			column: token.column,
+			def: syntheticDef,
 			line: token.line,
 			message,
 			nodeId,
-			severity: DiagnosticSeverity.Error,
 			tokenId: node.tokenId,
 		})
 	}
 
-	/**
-	 * Add a warning at a specific location.
-	 */
+	/** @deprecated */
 	addWarning(line: number, column: number, message: string): void {
-		this.addDiagnostic({
-			column,
-			line,
+		const syntheticDef: DiagnosticDef = {
+			code: 'LEGACY',
+			description: '',
 			message,
 			severity: DiagnosticSeverity.Warning,
+		}
+		this.addDiagnosticInternal({
+			column,
+			def: syntheticDef,
+			line,
+			message,
 		})
 	}
 
-	/**
-	 * Check if any errors have been reported.
-	 */
+	/** @deprecated */
+	warningAtNode(nodeId: NodeId, message: string): void {
+		const node = this.nodes.get(nodeId)
+		const token = this.tokens.get(node.tokenId)
+		const syntheticDef: DiagnosticDef = {
+			code: 'LEGACY',
+			description: '',
+			message,
+			severity: DiagnosticSeverity.Warning,
+		}
+		this.addDiagnosticInternal({
+			column: token.column,
+			def: syntheticDef,
+			line: token.line,
+			message,
+			nodeId,
+			tokenId: node.tokenId,
+		})
+	}
+
+	// ===========================================================================
+	// INTERNAL
+	// ===========================================================================
+
+	private addDiagnosticInternal(diagnostic: Diagnostic): void {
+		this.diagnostics.push(diagnostic)
+		if (diagnostic.def.severity === DiagnosticSeverity.Error) {
+			this.errorCount++
+		}
+	}
+
+	// ===========================================================================
+	// QUERY METHODS
+	// ===========================================================================
+
 	hasErrors(): boolean {
 		return this.errorCount > 0
 	}
 
-	/**
-	 * Get the number of errors.
-	 */
 	getErrorCount(): number {
 		return this.errorCount
 	}
 
-	/**
-	 * Get all collected diagnostics.
-	 */
 	getDiagnostics(): readonly Diagnostic[] {
 		return this.diagnostics
 	}
 
-	/**
-	 * Get only error diagnostics.
-	 */
 	getErrors(): Diagnostic[] {
-		return this.diagnostics.filter((d) => d.severity === DiagnosticSeverity.Error)
+		return this.diagnostics.filter((d) => d.def.severity === DiagnosticSeverity.Error)
 	}
 
-	/**
-	 * Get a source line by line number (1-indexed).
-	 * Useful for error context display.
-	 */
 	getSourceLine(line: number): string | undefined {
 		const lines = this.source.split('\n')
 		return lines[line - 1]
 	}
 
-	/**
-	 * Format a diagnostic for display.
-	 */
-	formatDiagnostic(diagnostic: Diagnostic): string {
-		const severityLabel =
-			diagnostic.severity === DiagnosticSeverity.Error
-				? 'error'
-				: diagnostic.severity === DiagnosticSeverity.Warning
-					? 'warning'
-					: 'note'
+	// ===========================================================================
+	// FORMATTING
+	// ===========================================================================
 
-		const location = `${this.filename}:${diagnostic.line}:${diagnostic.column}`
-		const header = `${location}: ${severityLabel}: ${diagnostic.message}`
-
-		const sourceLine = this.getSourceLine(diagnostic.line)
-		if (sourceLine === undefined) {
-			return header
+	private getSeverityLabel(severity: DiagnosticSeverity): string {
+		const labels: Record<DiagnosticSeverity, string> = {
+			[DiagnosticSeverity.Error]: 'error',
+			[DiagnosticSeverity.Warning]: 'warning',
+			[DiagnosticSeverity.Note]: 'note',
 		}
+		return labels[severity]
+	}
 
-		// Build pointer line
+	private buildSourceContext(
+		diagnostic: Diagnostic,
+		sourceLine: string
+	): { emptyPrefix: string; lines: string[] } {
+		const lineNumWidth = String(diagnostic.line).length
+		const pad = ' '.repeat(lineNumWidth)
+		const linePrefix = ` ${diagnostic.line} | `
+		const emptyPrefix = ` ${pad} | `
 		const pointer = `${' '.repeat(diagnostic.column - 1)}^`
 
-		return `${header}\n  ${sourceLine}\n  ${pointer}`
+		return {
+			emptyPrefix,
+			lines: [emptyPrefix, `${linePrefix}${sourceLine}`, `${emptyPrefix}${pointer}`],
+		}
 	}
 
 	/**
-	 * Format all diagnostics for display.
+	 * Format a diagnostic for display (Rust-style output).
+	 *
+	 * Example:
+	 * ```
+	 * error[TWCHECK001]: unexpected indentation
+	 *   --> examples/test.tw:4:2
+	 *    |
+	 *  4 |     panic
+	 *    |     ^^^^^
+	 *    |
+	 *    = help: remove the indentation or define a function/struct to create a scope
+	 * ```
 	 */
+	formatDiagnostic(diagnostic: Diagnostic): string {
+		const { def } = diagnostic
+		const severityLabel = this.getSeverityLabel(def.severity)
+		const codeDisplay = def.code !== 'LEGACY' ? `[${def.code}]` : ''
+		const header = `${severityLabel}${codeDisplay}: ${diagnostic.message}`
+		const location = `  --> ${this.filename}:${diagnostic.line}:${diagnostic.column}`
+
+		const sourceLine = this.getSourceLine(diagnostic.line)
+		if (sourceLine === undefined) {
+			return `${header}\n${location}`
+		}
+
+		const { emptyPrefix, lines: contextLines } = this.buildSourceContext(diagnostic, sourceLine)
+		const lines = [header, location, ...contextLines]
+
+		if (def.suggestion) {
+			const suggestion = interpolateMessage(def.suggestion, diagnostic.args)
+			lines.push(emptyPrefix, `   = help: ${suggestion}`)
+		}
+
+		return lines.join('\n')
+	}
+
 	formatAllDiagnostics(): string {
 		return this.diagnostics.map((d) => this.formatDiagnostic(d)).join('\n\n')
 	}

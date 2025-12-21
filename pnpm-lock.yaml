@@ -26,6 +26,9 @@ importers:
       '@tinywhale/compiler':
         specifier: workspace:*
         version: link:../compiler
+      '@tinywhale/diagnostics':
+        specifier: workspace:*
+        version: link:../diagnostics
     devDependencies:
       '@types/node':
         specifier: 25.0.3
@@ -36,6 +39,9 @@ importers:
 
   packages/compiler:
     dependencies:
+      '@tinywhale/diagnostics':
+        specifier: workspace:*
+        version: link:../diagnostics
       binaryen:
         specifier: 125.0.0
         version: 125.0.0
@@ -52,6 +58,8 @@ importers:
       typescript:
         specifier: 5.9.3
         version: 5.9.3
+
+  packages/diagnostics: {}
 
   packages/lsp:
     dependencies:

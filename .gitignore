@@ -11,6 +11,8 @@
 !.github/
 !.npmrc
 !biome.json
+!examples/
+!examples/**
 !LICENSE
 !mise.toml
 !package-lock.json

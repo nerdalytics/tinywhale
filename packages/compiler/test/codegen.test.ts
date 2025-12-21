@@ -6,9 +6,6 @@ import { CompilationContext } from '../src/core/context.ts'
 import { tokenize } from '../src/lex/tokenizer.ts'
 import { parse } from '../src/parse/parser.ts'
 
-/**
- * Helper to compile a TinyWhale source string.
- */
 function compileSource(source: string, optimize = false): CompileResult {
 	const ctx = new CompilationContext(source)
 	tokenize(ctx)

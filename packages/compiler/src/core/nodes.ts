@@ -39,10 +39,6 @@ export type NodeKind = (typeof NodeKind)[keyof typeof NodeKind]
  */
 export type NodeId = number & { readonly __brand: 'NodeId' }
 
-/**
- * Creates a NodeId from a number.
- * Use sparingly - prefer getting IDs from NodeStore.add().
- */
 export function nodeId(n: number): NodeId {
 	return n as NodeId
 }
@@ -80,19 +76,12 @@ export interface ParseNode {
 export class NodeStore {
 	private readonly nodes: ParseNode[] = []
 
-	/**
-	 * Add a node and return its ID.
-	 */
 	add(node: ParseNode): NodeId {
 		const id = this.nodes.length as NodeId
 		this.nodes.push(node)
 		return id
 	}
 
-	/**
-	 * Get a node by ID.
-	 * Throws if ID is out of bounds.
-	 */
 	get(id: NodeId): ParseNode {
 		const node = this.nodes[id]
 		if (node === undefined) {
@@ -101,16 +90,10 @@ export class NodeStore {
 		return node
 	}
 
-	/**
-	 * Get node count.
-	 */
 	count(): number {
 		return this.nodes.length
 	}
 
-	/**
-	 * Check if a node ID is valid.
-	 */
 	isValid(id: NodeId): boolean {
 		return id >= 0 && id < this.nodes.length
 	}
@@ -165,10 +148,6 @@ export class NodeStore {
 		}
 	}
 
-	/**
-	 * Iterate over all nodes with their IDs.
-	 * Sequential access for cache-friendly traversal.
-	 */
 	*[Symbol.iterator](): Generator<[NodeId, ParseNode]> {
 		for (let i = 0; i < this.nodes.length; i++) {
 			const node = this.nodes[i]

@@ -1,0 +1,3 @@
+# This is a line comment
+panic  # Inline comment
+# Comments are stripped before parsing

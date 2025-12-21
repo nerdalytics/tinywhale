@@ -5,9 +5,6 @@ import { type NodeId, NodeKind } from '../../src/core/nodes.ts'
 import { tokenize } from '../../src/lex/tokenizer.ts'
 import { parse } from '../../src/parse/parser.ts'
 
-/**
- * Helper to tokenize and parse in one step.
- */
 function tokenizeAndParse(source: string): CompilationContext {
 	const ctx = new CompilationContext(source)
 	tokenize(ctx)

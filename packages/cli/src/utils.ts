@@ -1,5 +1,14 @@
 import { basename, join } from 'node:path'
 import { CompileError, type CompileResult } from '@tinywhale/compiler'
+import {
+	interpolateMessage,
+	TWCLI001,
+	TWCLI002,
+	TWCLI003,
+	TWCLI004,
+	TWCLI005,
+	TWCLI006,
+} from '@tinywhale/diagnostics'
 
 export type OutputTarget = 'wasm' | 'wat'
 
@@ -13,16 +22,33 @@ export function getErrorMessage(error: unknown): string {
 
 export function formatReadError(filePath: string, error: unknown): string {
 	if (isNodeError(error) && error.code === 'ENOENT') {
-		return `File not found: ${filePath}`
+		const message = interpolateMessage(TWCLI001.message, { path: filePath })
+		return `[${TWCLI001.code}] ${message}`
 	}
-	return `Cannot read file: ${getErrorMessage(error)}`
+	const message = interpolateMessage(TWCLI002.message, { reason: getErrorMessage(error) })
+	return `[${TWCLI002.code}] ${message}`
+}
+
+export function formatWriteError(error: unknown): string {
+	const message = interpolateMessage(TWCLI003.message, { reason: getErrorMessage(error) })
+	return `[${TWCLI003.code}] ${message}`
+}
+
+export function formatInvalidTargetError(target: string): string {
+	const message = interpolateMessage(TWCLI004.message, { target })
+	return `[${TWCLI004.code}] ${message}`
+}
+
+export function formatValidationError(): string {
+	return `[${TWCLI005.code}] ${TWCLI005.message}`
 }
 
 export function formatCompileError(error: unknown): string {
 	if (error instanceof CompileError) {
 		return error.message
 	}
-	return `Compilation failed: ${getErrorMessage(error)}`
+	const message = interpolateMessage(TWCLI006.message, { reason: getErrorMessage(error) })
+	return `[${TWCLI006.code}] ${message}`
 }
 
 export function isValidTarget(value: string): value is OutputTarget {
