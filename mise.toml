@@ -13,6 +13,7 @@ run = "pnpm up --workspace --interactive --recursive --latest"
 
 [tasks.generate-grammar]
 description = "Generate Ohm grammar bundles with TypeScript types"
+depends = ["clean"]
 run = "cd packages/compiler && npx @ohm-js/cli generateBundles --withTypes --esm 'src/parse/*.ohm'"
 
 [tasks.build]
@@ -22,6 +23,7 @@ run = "pnpm -r build"
 
 [tasks.test]
 description = "Run tests for all packages"
+depends = ["build"]
 run = "pnpm -r test"
 
 [tasks.check]
@@ -39,5 +41,15 @@ run = "pnpm -r clean"
 [tasks.cli]
 description = "Run the TinyWhale CLI build command"
 depends = ["clean", "build"]
-usage = 'arg "<file>" help="TinyWhale source file to compile"'
-run = "node packages/cli/dist/cli.js build ${usage_file?}"
+usage = '''
+arg "<file>" help="TinyWhale source file to compile"
+flag "-o --output <dir>" help="Output directory"
+flag "-t --target <format>" help="Output format: wasm or wat"
+flag "--optimize" help="Run optimization passes"
+'''
+run = """
+node packages/cli/dist/cli.js build ${usage_file?} \
+  ${usage_output:+--output "$usage_output"} \
+  ${usage_target:+--target "$usage_target"} \
+  ${usage_optimize:+--optimize}
+"""

@@ -1,0 +1,4 @@
+# Indentation requires scope-creating constructs (functions, etc.)
+# This is invalid because no such constructs exist yet
+panic
+	panic

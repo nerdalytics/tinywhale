@@ -35,7 +35,8 @@ describe('compile (unified API)', () => {
 				() => compile(''),
 				(err: Error) => {
 					assert.ok(err instanceof CompileError)
-					assert.ok(err.message.includes('Empty program'))
+					assert.ok(err.message.includes('TWGEN001'))
+					assert.ok(err.message.includes('empty program'))
 					return true
 				}
 			)
@@ -46,7 +47,8 @@ describe('compile (unified API)', () => {
 				() => compile('# just a comment\n'),
 				(err: Error) => {
 					assert.ok(err instanceof CompileError)
-					assert.ok(err.message.includes('Empty program'))
+					assert.ok(err.message.includes('TWGEN001'))
+					assert.ok(err.message.includes('empty program'))
 					return true
 				}
 			)

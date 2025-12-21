@@ -1,0 +1,3 @@
+# TinyWhale: Hello World
+# The simplest valid program - panics immediately
+panic

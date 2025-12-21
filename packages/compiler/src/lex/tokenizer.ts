@@ -1,38 +1,17 @@
-/**
- * Tokenizer that emits to TokenStore.
- * Ports preprocessor logic to data-oriented design.
- */
-
 import type { CompilationContext } from '../core/context.ts'
+import type { DiagnosticCode } from '../core/diagnostics.ts'
 import { TokenKind } from '../core/tokens.ts'
 
-/**
- * Indentation type detected in a line.
- */
 type IndentType = 'tab' | 'space'
 
-/**
- * Result of tokenization.
- */
 export interface TokenizeResult {
 	succeeded: boolean
 }
 
-/**
- * Options for tokenization.
- */
 export interface TokenizeOptions {
-	/**
-	 * Indentation mode:
-	 * - 'detect': First indentation character sets file-wide type (default)
-	 * - 'directive': Respects "use spaces" directive, defaults to tabs
-	 */
 	mode?: 'detect' | 'directive'
 }
 
-/**
- * Internal tokenizer state.
- */
 interface TokenizerState {
 	mode: 'detect' | 'directive'
 	lineNumber: number
@@ -49,23 +28,14 @@ interface TokenizerState {
 	}>
 }
 
-/**
- * UTF-8 Byte Order Mark (BOM) character.
- */
 const UTF8_BOM = '\uFEFF'
 
-/**
- * Classifies a whitespace character.
- */
 function classifyWhitespace(char: string): IndentType | null {
 	if (char === '\t') return 'tab'
 	if (char === ' ') return 'space'
 	return null
 }
 
-/**
- * Finds the first non-whitespace position in a line.
- */
 function findWhitespaceEnd(line: string): number {
 	let pos = 0
 	while (pos < line.length && classifyWhitespace(line.charAt(pos)) !== null) {
@@ -74,10 +44,6 @@ function findWhitespaceEnd(line: string): number {
 	return pos
 }
 
-/**
- * Detects if whitespace contains mixed tabs/spaces.
- * Returns the 1-indexed column of the first mixed character, or null.
- */
 function detectMixedIndent(
 	line: string,
 	end: number
@@ -93,9 +59,6 @@ function detectMixedIndent(
 	return { mixedAt: null, type: firstType }
 }
 
-/**
- * Counts leading whitespace and detects mixed indentation.
- */
 function countLeadingWhitespace(line: string): {
 	count: number
 	type: IndentType | null
@@ -106,9 +69,6 @@ function countLeadingWhitespace(line: string): {
 	return { count, mixedAt, type }
 }
 
-/**
- * Analyzes leading whitespace of a line.
- */
 function analyzeLineIndent(
 	line: string,
 	lineNumber: number,
@@ -120,19 +80,14 @@ function analyzeLineIndent(
 
 	const result = countLeadingWhitespace(line)
 	if (result.mixedAt !== null) {
-		context.addError(
-			lineNumber,
-			result.mixedAt,
-			`Mixed indentation: expected ${result.type}, found ${result.type === 'tab' ? 'space' : 'tab'}`
-		)
+		const expected = result.type as string
+		const found = result.type === 'tab' ? 'space' : 'tab'
+		context.emit('TWLEX001' as DiagnosticCode, lineNumber, result.mixedAt, { expected, found })
 	}
 
 	return { count: result.count, type: result.type }
 }
 
-/**
- * Parses "use spaces" directive from a line.
- */
 function parseDirective(line: string): IndentType | null {
 	const trimmed = line.trim()
 	if (trimmed === '"use spaces"' || trimmed === "'use spaces'") {
@@ -141,9 +96,6 @@ function parseDirective(line: string): IndentType | null {
 	return null
 }
 
-/**
- * Validates and updates indent unit on indent.
- */
 function handleSpaceIndent(
 	delta: number,
 	lineNumber: number,
@@ -155,17 +107,15 @@ function handleSpaceIndent(
 		return
 	}
 	if (delta !== state.indentUnit) {
-		context.addError(
-			lineNumber,
-			1,
-			`File uses ${state.indentUnit}-space indentation. Add ${state.indentUnit} spaces, not ${delta}.`
-		)
+		// Point to where the size mismatch starts (after expected indent)
+		const errorColumn = state.indentUnit + 1
+		context.emit('TWLEX002' as DiagnosticCode, lineNumber, errorColumn, {
+			found: delta,
+			unit: state.indentUnit,
+		})
 	}
 }
 
-/**
- * Validates alignment on dedent.
- */
 function handleSpaceDedent(
 	indentCount: number,
 	lineNumber: number,
@@ -179,12 +129,14 @@ function handleSpaceDedent(
 	for (let s = 0; s <= state.previousSpaces; s += state.indentUnit) {
 		validLevels.push(s)
 	}
-	context.addError(lineNumber, 1, `Unindent to ${validLevels.join(', ')} spaces.`)
+	// Point to where the invalid dedent ends
+	const errorColumn = indentCount + 1
+	context.emit('TWLEX003' as DiagnosticCode, lineNumber, errorColumn, {
+		expected: validLevels[validLevels.length - 1] ?? 0,
+		validLevels: validLevels.join(', '),
+	})
 }
 
-/**
- * Calculates indent level for space-based indentation.
- */
 function calculateSpaceIndentLevel(
 	indentCount: number,
 	lineNumber: number,
@@ -203,9 +155,6 @@ function calculateSpaceIndentLevel(
 	return state.indentUnit ? Math.floor(indentCount / state.indentUnit) : 0
 }
 
-/**
- * Calculates indent level from whitespace count.
- */
 function calculateIndentLevel(
 	indentCount: number,
 	indentType: IndentType | null,
@@ -225,9 +174,6 @@ function calculateIndentLevel(
 	return calculateSpaceIndentLevel(indentCount, lineNumber, state, context)
 }
 
-/**
- * Skips leading whitespace in content.
- */
 function skipWhitespace(content: string): number {
 	let pos = 0
 	while (pos < content.length && (content[pos] === ' ' || content[pos] === '\t')) {
@@ -236,9 +182,6 @@ function skipWhitespace(content: string): number {
 	return pos
 }
 
-/**
- * Checks if panic keyword at position is a complete keyword (not part of identifier).
- */
 function isPanicKeywordComplete(content: string, pos: number): boolean {
 	const afterPanic = pos + 5
 	if (afterPanic >= content.length) return true
@@ -246,36 +189,23 @@ function isPanicKeywordComplete(content: string, pos: number): boolean {
 	return charAfter === undefined || !/[a-zA-Z0-9_]/.test(charAfter)
 }
 
-/**
- * Checks if line content contains the panic keyword.
- * Returns column position (1-indexed) if found, or 0 if not.
- */
 function findPanicKeyword(content: string): number {
 	const pos = skipWhitespace(content)
 
-	// Check for comment
 	if (content[pos] === '#') return 0
 
-	// Check for panic keyword
 	if (content.startsWith('panic', pos) && isPanicKeywordComplete(content, pos)) {
-		return pos + 1 // 1-indexed column
+		return pos + 1
 	}
 
 	return 0
 }
 
-/**
- * Checks if a segment at given index is non-comment content.
- * Segments at even indices (0, 2, 4...) are content.
- */
+/** Segments at even indices (0, 2, 4...) are content, odd indices are comments. */
 function isContentSegment(index: number): boolean {
 	return index % 2 === 0
 }
 
-/**
- * Strips a comment section from content.
- * Comments are # ... # or # ... EOL
- */
 function stripComments(content: string): string {
 	return content
 		.split('#')
@@ -283,25 +213,26 @@ function stripComments(content: string): string {
 		.join('')
 }
 
-/**
- * Validates that indent doesn't jump more than one level.
- */
 function validateIndentJump(
 	newLevel: number,
 	previousLevel: number,
 	indentType: IndentType | null,
+	indentUnit: number | null,
 	lineNumber: number,
 	context: CompilationContext
 ): void {
 	if (newLevel <= previousLevel + 1) return
 	const expected = previousLevel + 1
 	const unit = indentType === 'tab' ? 'tab' : 'spaces'
-	context.addError(lineNumber, 1, `Use ${expected} ${unit}, not ${newLevel}.`)
+	// Point to the first extra indent character
+	const errorColumn = indentType === 'tab' ? expected + 1 : expected * (indentUnit ?? 1) + 1
+	context.emit('TWLEX004' as DiagnosticCode, lineNumber, errorColumn, {
+		expected,
+		found: newLevel - previousLevel,
+		unit,
+	})
 }
 
-/**
- * Emits INDENT token if level increased.
- */
 function emitIndentToken(
 	newLevel: number,
 	previousLevel: number,
@@ -312,9 +243,6 @@ function emitIndentToken(
 	context.tokens.add({ column: 1, kind: TokenKind.Indent, line: lineNumber, payload: newLevel })
 }
 
-/**
- * Emits DEDENT tokens for each level decreased.
- */
 function emitDedentTokens(
 	newLevel: number,
 	previousLevel: number,
@@ -326,9 +254,6 @@ function emitDedentTokens(
 	}
 }
 
-/**
- * Emits panic token if keyword found.
- */
 function emitPanicToken(
 	content: string,
 	indentCount: number,
@@ -346,16 +271,10 @@ function emitPanicToken(
 	})
 }
 
-/**
- * Determines if newline token should be emitted.
- */
 function shouldEmitNewline(content: string, levelChanged: boolean): boolean {
 	return content.trim().length > 0 || levelChanged
 }
 
-/**
- * Processes a single line, emitting tokens to the context.
- */
 function processLine(
 	line: string,
 	lineNumber: number,
@@ -368,7 +287,14 @@ function processLine(
 	const content = line.slice(indentCount)
 	const levelChanged = newLevel !== state.previousLevel
 
-	validateIndentJump(newLevel, state.previousLevel, indentType, lineNumber, context)
+	validateIndentJump(
+		newLevel,
+		state.previousLevel,
+		indentType,
+		state.indentUnit,
+		lineNumber,
+		context
+	)
 	emitIndentToken(newLevel, state.previousLevel, lineNumber, context)
 	emitDedentTokens(newLevel, state.previousLevel, lineNumber, context)
 	state.previousLevel = newLevel
@@ -385,9 +311,6 @@ function processLine(
 	}
 }
 
-/**
- * Validates indentation type consistency.
- */
 function validateIndentType(
 	indentType: IndentType | null,
 	lineNumber: number,
@@ -399,17 +322,13 @@ function validateIndentType(
 	if (state.expectedIndentType === null) {
 		state.expectedIndentType = indentType
 	} else if (indentType !== state.expectedIndentType) {
-		context.addError(
-			lineNumber,
-			1,
-			`Expected ${state.expectedIndentType} indentation, found ${indentType}`
-		)
+		context.emit('TWLEX005' as DiagnosticCode, lineNumber, 1, {
+			expected: state.expectedIndentType,
+			found: indentType,
+		})
 	}
 }
 
-/**
- * Flushes buffered lines (used in directive mode).
- */
 function flushBufferedLines(state: TokenizerState, context: CompilationContext): void {
 	for (const buffered of state.bufferedLines) {
 		validateIndentType(buffered.indentType, buffered.lineNumber, state, context)
@@ -425,9 +344,6 @@ function flushBufferedLines(state: TokenizerState, context: CompilationContext):
 	state.bufferedLines = []
 }
 
-/**
- * Generates EOF dedent tokens.
- */
 function generateEofDedents(state: TokenizerState, context: CompilationContext): void {
 	const lastLine = state.lineNumber
 	for (let i = state.previousLevel; i > 0; i--) {
@@ -440,16 +356,10 @@ function generateEofDedents(state: TokenizerState, context: CompilationContext):
 	}
 }
 
-/**
- * Strips UTF-8 BOM from source if present.
- */
 function stripBom(source: string): string {
 	return source.startsWith(UTF8_BOM) ? source.slice(1) : source
 }
 
-/**
- * Creates initial tokenizer state.
- */
 function createTokenizerState(mode: 'detect' | 'directive'): TokenizerState {
 	return {
 		bufferedLines: [],
@@ -463,10 +373,6 @@ function createTokenizerState(mode: 'detect' | 'directive'): TokenizerState {
 	}
 }
 
-/**
- * Handles a directive line (e.g., "use spaces").
- * Returns true if directive was found and processed.
- */
 function handleDirectiveLine(
 	line: string,
 	state: TokenizerState,
@@ -483,9 +389,6 @@ function handleDirectiveLine(
 	return true
 }
 
-/**
- * Buffers a line for later processing (directive mode).
- */
 function bufferLine(
 	line: string,
 	indentCount: number,
@@ -495,16 +398,10 @@ function bufferLine(
 	state.bufferedLines.push({ indentCount, indentType, line, lineNumber: state.lineNumber })
 }
 
-/**
- * Determines if a line should be buffered.
- */
 function shouldBufferLine(state: TokenizerState): boolean {
 	return state.mode === 'directive' && !state.directiveFound
 }
 
-/**
- * Processes a single source line during tokenization.
- */
 function processSourceLine(line: string, state: TokenizerState, context: CompilationContext): void {
 	if (handleDirectiveLine(line, state, context)) return
 
@@ -523,9 +420,6 @@ function processSourceLine(line: string, state: TokenizerState, context: Compila
 	processLine(line, state.lineNumber, indentCount, indentType, state, context)
 }
 
-/**
- * Finalizes tokenization by flushing buffers and adding EOF.
- */
 function finishTokenization(state: TokenizerState, context: CompilationContext): void {
 	if (state.bufferedLines.length > 0) {
 		flushBufferedLines(state, context)
@@ -536,10 +430,7 @@ function finishTokenization(state: TokenizerState, context: CompilationContext):
 
 /**
  * Tokenizes source code, populating context.tokens.
- *
  * Converts indentation to INDENT/DEDENT tokens and identifies keywords.
- * This replaces the streaming preprocessor with a synchronous approach
- * since source is already loaded into CompilationContext.
  */
 export function tokenize(
 	context: CompilationContext,

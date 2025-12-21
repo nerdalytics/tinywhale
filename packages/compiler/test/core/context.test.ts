@@ -48,7 +48,7 @@ describe('core/context', () => {
 
 				const diags = ctx.getDiagnostics()
 				assert.strictEqual(diags.length, 1)
-				assert.strictEqual(diags[0]!.severity, DiagnosticSeverity.Error)
+				assert.strictEqual(diags[0]!.def.severity, DiagnosticSeverity.Error)
 				assert.strictEqual(diags[0]!.message, 'unexpected token')
 				assert.strictEqual(diags[0]!.line, 1)
 				assert.strictEqual(diags[0]!.column, 5)
@@ -74,7 +74,7 @@ describe('core/context', () => {
 
 				const diags = ctx.getDiagnostics()
 				assert.strictEqual(diags.length, 1)
-				assert.strictEqual(diags[0]!.severity, DiagnosticSeverity.Warning)
+				assert.strictEqual(diags[0]!.def.severity, DiagnosticSeverity.Warning)
 			})
 		})
 

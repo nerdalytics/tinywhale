@@ -1,0 +1,4 @@
+# Demonstrates unreachable code detection
+panic
+panic  # warning: unreachable code
+panic  # warning: unreachable code

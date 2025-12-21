@@ -11,6 +11,8 @@
 !.github/
 !.npmrc
 !biome.json
+!examples/
+!examples/**
 !LICENSE
 !mise.toml
 !package-lock.json
@@ -21,3 +23,6 @@
 !pnpm-workspace.yaml
 !README.md
 !tsconfig.json
+
+# Disallow dist folders everywhere
+**/dist/**

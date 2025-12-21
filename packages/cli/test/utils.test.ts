@@ -46,24 +46,24 @@ describe('getErrorMessage', () => {
 })
 
 describe('formatReadError', () => {
-	it('should format ENOENT as "File not found"', () => {
+	it('should format ENOENT with TWCLI001 code', () => {
 		const error = new Error('no such file') as NodeJS.ErrnoException
 		error.code = 'ENOENT'
 		const result = formatReadError('/path/to/file.tw', error)
-		assert.strictEqual(result, 'File not found: /path/to/file.tw')
+		assert.strictEqual(result, '[TWCLI001] file not found: /path/to/file.tw')
 	})
 
-	it('should format other errors with generic message', () => {
+	it('should format other errors with TWCLI002 code', () => {
 		const error = new Error('permission denied') as NodeJS.ErrnoException
 		error.code = 'EACCES'
 		const result = formatReadError('/path/to/file.tw', error)
-		assert.strictEqual(result, 'Cannot read file: permission denied')
+		assert.strictEqual(result, '[TWCLI002] cannot read file: permission denied')
 	})
 
-	it('should handle plain Error', () => {
+	it('should handle plain Error with TWCLI002 code', () => {
 		const error = new Error('unknown error')
 		const result = formatReadError('/path/to/file.tw', error)
-		assert.strictEqual(result, 'Cannot read file: unknown error')
+		assert.strictEqual(result, '[TWCLI002] cannot read file: unknown error')
 	})
 })
 
@@ -74,15 +74,15 @@ describe('formatCompileError', () => {
 		assert.strictEqual(result, 'Empty program')
 	})
 
-	it('should wrap other errors with "Compilation failed"', () => {
+	it('should wrap other errors with TWCLI006 code', () => {
 		const error = new Error('something went wrong')
 		const result = formatCompileError(error)
-		assert.strictEqual(result, 'Compilation failed: something went wrong')
+		assert.strictEqual(result, '[TWCLI006] compilation failed: something went wrong')
 	})
 
-	it('should handle non-Error values', () => {
+	it('should handle non-Error values with TWCLI006 code', () => {
 		const result = formatCompileError('string error')
-		assert.strictEqual(result, 'Compilation failed: string error')
+		assert.strictEqual(result, '[TWCLI006] compilation failed: string error')
 	})
 })
 
@@ -149,6 +149,7 @@ describe('getOutputContent', () => {
 		binary: new Uint8Array([0, 1, 2, 3]),
 		text: '(module)',
 		valid: true,
+		warnings: [],
 	}
 
 	it('should return binary for wasm target', () => {

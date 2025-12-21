@@ -3,14 +3,20 @@
  * Carbon-style data-oriented design with dense arrays and integer IDs.
  */
 
-// Compilation context and diagnostics
 export {
 	CompilationContext,
 	type Diagnostic,
-	DiagnosticSeverity,
 } from './context.ts'
-
-// Node types and storage
+export {
+	DIAGNOSTICS,
+	type DiagnosticArgs,
+	type DiagnosticCode,
+	type DiagnosticDef,
+	DiagnosticSeverity,
+	getDiagnostic,
+	interpolateMessage,
+	isValidDiagnosticCode,
+} from './diagnostics.ts'
 export {
 	type NodeId,
 	type NodeIdRange,
@@ -19,5 +25,4 @@ export {
 	nodeId,
 	type ParseNode,
 } from './nodes.ts'
-// Token types and storage
 export { type Token, type TokenId, TokenKind, TokenStore, tokenId } from './tokens.ts'

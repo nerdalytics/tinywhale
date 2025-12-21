@@ -1,11 +1,9 @@
 import binaryen from 'binaryen'
 
-import type { CompilationContext } from '../core/context.ts'
+import { type CompilationContext, DiagnosticSeverity } from '../core/context.ts'
+import type { DiagnosticCode } from '../core/diagnostics.ts'
 import { type NodeId, NodeKind } from '../core/nodes.ts'
 
-/**
- * Error thrown when compilation fails.
- */
 export class CompileError extends Error {
 	constructor(message: string) {
 		super(message)
@@ -13,30 +11,24 @@ export class CompileError extends Error {
 	}
 }
 
-/**
- * Options for the emit function.
- */
 export interface EmitOptions {
-	/** Run Binaryen optimization passes (default: false) */
 	optimize?: boolean
 }
 
-/**
- * Result of compiling a TinyWhale program to WebAssembly.
- */
-export interface CompileResult {
-	/** The compiled WebAssembly binary */
-	binary: Uint8Array
-	/** The WebAssembly text format (WAT) representation */
-	text: string
-	/** Whether the module passed validation */
-	valid: boolean
+export interface CompileWarning {
+	code: string
+	message: string
+	line: number
+	column: number
 }
 
-/**
- * Collects Binaryen expressions from the NodeStore.
- * Iterates all nodes looking for statement kinds.
- */
+export interface CompileResult {
+	binary: Uint8Array
+	text: string
+	valid: boolean
+	warnings: CompileWarning[]
+}
+
 function collectExpressions(
 	mod: binaryen.Module,
 	context: CompilationContext
@@ -50,12 +42,10 @@ function collectExpressions(
 			case NodeKind.PanicStatement:
 				expressions.push(mod.unreachable())
 				break
-			// Line and Program nodes don't emit expressions themselves
 			case NodeKind.IndentedLine:
 			case NodeKind.DedentLine:
 			case NodeKind.RootLine:
 			case NodeKind.Program:
-				// These are structural nodes, skip them
 				break
 		}
 	}
@@ -63,9 +53,6 @@ function collectExpressions(
 	return expressions
 }
 
-/**
- * Creates a function body from collected expressions.
- */
 function createFunctionBody(
 	mod: binaryen.Module,
 	expressions: binaryen.ExpressionRef[]
@@ -75,9 +62,6 @@ function createFunctionBody(
 		: mod.block(null, expressions)
 }
 
-/**
- * Sets up the _start function with export and module start.
- */
 function setupStartFunction(mod: binaryen.Module, body: binaryen.ExpressionRef): void {
 	mod.addFunction('_start', binaryen.none, binaryen.none, [], body)
 	mod.addFunctionExport('_start', '_start')
@@ -87,15 +71,24 @@ function setupStartFunction(mod: binaryen.Module, body: binaryen.ExpressionRef):
 	}
 }
 
-/**
- * Emits the final compilation result.
- */
-function emitResult(mod: binaryen.Module): CompileResult {
+function emitResult(mod: binaryen.Module, warnings: CompileWarning[]): CompileResult {
 	const valid = mod.validate() === 1
 	const binary = mod.emitBinary()
 	const text = mod.emitText()
 	mod.dispose()
-	return { binary, text, valid }
+	return { binary, text, valid, warnings }
+}
+
+function extractWarnings(context: CompilationContext): CompileWarning[] {
+	return context
+		.getDiagnostics()
+		.filter((d) => d.def.severity === DiagnosticSeverity.Warning)
+		.map((d) => ({
+			code: d.def.code,
+			column: d.column,
+			line: d.line,
+			message: d.message,
+		}))
 }
 
 /**
@@ -112,7 +105,8 @@ export function emit(context: CompilationContext, options: EmitOptions = {}): Co
 
 	if (expressions.length === 0) {
 		mod.dispose()
-		throw new CompileError('Empty program: at least one statement is required')
+		context.emit('TWGEN001' as DiagnosticCode, 1, 1, {})
+		throw new CompileError('empty program')
 	}
 
 	const body = createFunctionBody(mod, expressions)
@@ -122,5 +116,6 @@ export function emit(context: CompilationContext, options: EmitOptions = {}): Co
 		mod.optimize()
 	}
 
-	return emitResult(mod)
+	const warnings = extractWarnings(context)
+	return emitResult(mod, warnings)
 }

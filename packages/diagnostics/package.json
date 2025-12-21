@@ -1,0 +1,27 @@
+{
+	"author": "",
+	"description": "Shared diagnostic types and definitions for TinyWhale",
+	"exports": {
+		".": {
+			"default": "./dist/index.js",
+			"types": "./dist/index.d.ts"
+		}
+	},
+	"files": [
+		"dist"
+	],
+	"keywords": [
+		"diagnostics",
+		"tinywhale"
+	],
+	"license": "MIT",
+	"main": "./dist/index.js",
+	"name": "@tinywhale/diagnostics",
+	"scripts": {
+		"build": "tsc -p tsconfig.build.json",
+		"clean": "rm -rf dist"
+	},
+	"type": "module",
+	"types": "./dist/index.d.ts",
+	"version": "0.0.0"
+}

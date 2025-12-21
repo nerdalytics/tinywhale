@@ -5,7 +5,8 @@
 	},
 	"dependencies": {
 		"@adonisjs/ace": "13.4.0",
-		"@tinywhale/compiler": "workspace:*"
+		"@tinywhale/compiler": "workspace:*",
+		"@tinywhale/diagnostics": "workspace:*"
 	},
 	"description": "TinyWhale command-line interface",
 	"devDependencies": {

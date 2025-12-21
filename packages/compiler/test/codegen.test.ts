@@ -6,9 +6,6 @@ import { CompilationContext } from '../src/core/context.ts'
 import { tokenize } from '../src/lex/tokenizer.ts'
 import { parse } from '../src/parse/parser.ts'
 
-/**
- * Helper to compile a TinyWhale source string.
- */
 function compileSource(source: string, optimize = false): CompileResult {
 	const ctx = new CompilationContext(source)
 	tokenize(ctx)
@@ -54,7 +51,7 @@ describe('codegen', () => {
 				() => emit(ctx),
 				(err: Error) => {
 					assert.ok(err instanceof CompileError)
-					assert.ok(err.message.includes('Empty program'))
+					assert.ok(err.message.includes('empty program'))
 					return true
 				}
 			)
@@ -69,7 +66,7 @@ describe('codegen', () => {
 				() => emit(ctx),
 				(err: Error) => {
 					assert.ok(err instanceof CompileError)
-					assert.ok(err.message.includes('Empty program'))
+					assert.ok(err.message.includes('empty program'))
 					return true
 				}
 			)
