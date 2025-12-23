@@ -20,6 +20,7 @@ export interface CompileWarning {
 	message: string
 	line: number
 	column: number
+	formattedMessage: string
 }
 
 export interface CompileResult {
@@ -216,6 +217,7 @@ function extractWarnings(context: CompilationContext): CompileWarning[] {
 		.map((d) => ({
 			code: d.def.code,
 			column: d.column,
+			formattedMessage: context.formatDiagnostic(d),
 			line: d.line,
 			message: d.message,
 		}))

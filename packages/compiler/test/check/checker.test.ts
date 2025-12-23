@@ -75,13 +75,13 @@ describe('check/checker', () => {
 			assert.ok(warnings[0]?.message.includes('unreachable'))
 		})
 
-		it('should warn for all code after panic', () => {
+		it('should group consecutive unreachable code into one warning', () => {
 			const ctx = prepareContext('panic\npanic\npanic\n')
 			const result = check(ctx)
 
 			assert.strictEqual(result.succeeded, true)
 			const warnings = getWarnings(ctx)
-			assert.strictEqual(warnings.length, 2)
+			assert.strictEqual(warnings.length, 1) // Grouped into single warning
 		})
 
 		it('should report correct line for unreachable code', () => {
@@ -92,13 +92,16 @@ describe('check/checker', () => {
 			assert.strictEqual(warnings[0]?.line, 2)
 		})
 
-		it('should report correct line for multiple unreachable', () => {
+		it('should include line range in grouped unreachable warning', () => {
 			const ctx = prepareContext('panic\npanic\npanic\n')
 			check(ctx)
 
 			const warnings = getWarnings(ctx)
-			assert.strictEqual(warnings[0]?.line, 2)
-			assert.strictEqual(warnings[1]?.line, 3)
+			assert.strictEqual(warnings.length, 1)
+			assert.strictEqual(warnings[0]?.line, 2) // First unreachable line
+			// Check that the formatted message includes the range
+			const formatted = ctx.formatDiagnostic(warnings[0]!)
+			assert.ok(formatted.includes('Lines 2-3'))
 		})
 	})
 

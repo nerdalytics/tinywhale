@@ -45,10 +45,7 @@ export default class BuildCommand extends BaseCommand {
 
 	private displayWarnings(warnings: CompileWarning[]): void {
 		for (const warning of warnings) {
-			const codeDisplay = warning.code !== 'LEGACY' ? `[${warning.code}]` : ''
-			this.logger.warning(
-				`warning${codeDisplay}: ${warning.message}\n  --> ${this.input}:${warning.line}:${warning.column}`
-			)
+			this.logger.warning(warning.formattedMessage)
 		}
 	}
 
