@@ -63,6 +63,14 @@ function isStatementNode(kind: NodeKind): boolean {
 }
 
 /**
+ * Checks if a node kind represents an expression.
+ * Expression kinds are in range 100-149.
+ */
+function isExpressionNode(kind: NodeKind): boolean {
+	return kind >= 100 && kind < 150
+}
+
+/**
  * Get the statement child from a line node.
  * Returns null if the line has no statement.
  */
@@ -232,17 +240,28 @@ function processVariableBinding(
 	context: CompilationContext
 ): void {
 	// In postorder, children are at [bindingId-3, bindingId-2, bindingId-1]
+	// Contract: VariableBinding = Identifier TypeAnnotation "=" Expression
 	const identId = nodeId((bindingId as number) - 3)
 	const typeAnnotationId = nodeId((bindingId as number) - 2)
 	const exprId = nodeId((bindingId as number) - 1)
 
 	// 1. Get identifier name
 	const identNode = context.nodes.get(identId)
+	console.assert(
+		identNode.kind === NodeKind.Identifier,
+		'VariableBinding: expected Identifier at offset -3, found %d',
+		identNode.kind
+	)
 	const identToken = context.tokens.get(identNode.tokenId)
 	const nameId = identToken.payload as StringId
 
 	// 2. Resolve declared type from TypeAnnotation
 	const typeAnnotationNode = context.nodes.get(typeAnnotationId)
+	console.assert(
+		typeAnnotationNode.kind === NodeKind.TypeAnnotation,
+		'VariableBinding: expected TypeAnnotation at offset -2, found %d',
+		typeAnnotationNode.kind
+	)
 	const typeToken = context.tokens.get(typeAnnotationNode.tokenId)
 	const typeInfo = getTypeNameFromToken(typeToken.kind)
 
@@ -256,6 +275,12 @@ function processVariableBinding(
 	const declaredType = typeInfo.typeId
 
 	// 3. Check expression with expected type
+	const exprNode = context.nodes.get(exprId)
+	console.assert(
+		isExpressionNode(exprNode.kind),
+		'VariableBinding: expected expression at offset -1, found %d',
+		exprNode.kind
+	)
 	const exprResult = checkExpression(exprId, declaredType, state, context)
 	if (exprResult.typeId === BuiltinTypeId.Invalid) {
 		return // Error already reported
