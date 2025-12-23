@@ -24,6 +24,18 @@ import {
 } from './types.ts'
 
 /**
+ * Tracks a range of unreachable statements.
+ */
+interface UnreachableRange {
+	/** First unreachable statement node */
+	firstNodeId: NodeId
+	/** First line of unreachable code */
+	startLine: number
+	/** Last line of unreachable code */
+	endLine: number
+}
+
+/**
  * Internal state during checking.
  */
 interface CheckerState {
@@ -37,6 +49,8 @@ interface CheckerState {
 	readonly types: TypeStore
 	/** Current scope */
 	currentScope: Scope
+	/** Tracking for grouped unreachable warnings */
+	unreachableRange: UnreachableRange | null
 }
 
 /**
@@ -337,6 +351,55 @@ function isIndentedOrDedentedLine(kind: NodeKind): boolean {
 }
 
 /**
+ * Emit the grouped unreachable warning if there's an active range.
+ */
+function flushUnreachableWarning(state: CheckerState, context: CompilationContext): void {
+	const range = state.unreachableRange
+	if (!range) return
+
+	const { endLine, firstNodeId, startLine } = range
+
+	if (startLine === endLine) {
+		// Single line - use default suggestion
+		context.emitAtNode('TWCHECK050' as DiagnosticCode, firstNodeId)
+	} else {
+		// Multiple lines - use custom suggestion with range
+		const suggestion = `Lines ${startLine}-${endLine} are unreachable. You can safely remove this code, or move it before the exit point.`
+		context.emitAtNodeWithSuggestion('TWCHECK050' as DiagnosticCode, firstNodeId, suggestion)
+	}
+
+	state.unreachableRange = null
+}
+
+/**
+ * Get the line number for a node.
+ */
+function getNodeLine(nodeId: NodeId, context: CompilationContext): number {
+	const node = context.nodes.get(nodeId)
+	const token = context.tokens.get(node.tokenId)
+	return token.line
+}
+
+/**
+ * Track an unreachable statement for grouped warning.
+ */
+function trackUnreachable(stmtId: NodeId, state: CheckerState, context: CompilationContext): void {
+	const line = getNodeLine(stmtId, context)
+
+	if (!state.unreachableRange) {
+		// Start new range
+		state.unreachableRange = {
+			endLine: line,
+			firstNodeId: stmtId,
+			startLine: line,
+		}
+	} else {
+		// Extend existing range
+		state.unreachableRange.endLine = line
+	}
+}
+
+/**
  * Process the statement within a RootLine.
  */
 function processRootLineStatement(
@@ -348,7 +411,7 @@ function processRootLineStatement(
 	if (!stmt) return
 
 	if (!state.currentScope.reachable) {
-		context.emitAtNode('TWCHECK050' as DiagnosticCode, stmt.id)
+		trackUnreachable(stmt.id, state, context)
 	}
 
 	emitStatement(stmt.id, stmt.kind, state, context)
@@ -422,6 +485,7 @@ export function check(context: CompilationContext): CheckResult {
 		scopes,
 		symbols,
 		types,
+		unreachableRange: null,
 	}
 
 	// Find Program node (last node in postorder storage)
@@ -449,6 +513,9 @@ export function check(context: CompilationContext): CheckResult {
 	for (const [lineId, line] of lines) {
 		processLine(lineId, line, state, context)
 	}
+
+	// Flush any remaining unreachable warning
+	flushUnreachableWarning(state, context)
 
 	// Attach stores to context
 	context.insts = insts

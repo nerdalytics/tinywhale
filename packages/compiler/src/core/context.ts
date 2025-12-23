@@ -36,6 +36,8 @@ export interface Diagnostic {
 	readonly tokenId?: TokenId
 	/** Node associated with this diagnostic (if available) */
 	readonly nodeId?: NodeId
+	/** Override the default suggestion text */
+	readonly suggestionOverride?: string
 }
 
 /**
@@ -180,6 +182,31 @@ export class CompilationContext {
 			line: token.line,
 			message,
 			nodeId,
+			tokenId: node.tokenId,
+			...(args ? { args } : {}),
+		})
+	}
+
+	/**
+	 * Emit a diagnostic at a node's location with a custom suggestion override.
+	 */
+	emitAtNodeWithSuggestion(
+		code: DiagnosticCode,
+		nodeId: NodeId,
+		suggestionOverride: string,
+		args?: DiagnosticArgs
+	): void {
+		const node = this.nodes.get(nodeId)
+		const token = this.tokens.get(node.tokenId)
+		const def = getDiagnostic(code)
+		const message = interpolateMessage(def.message, args)
+		this.addDiagnosticInternal({
+			column: token.column,
+			def,
+			line: token.line,
+			message,
+			nodeId,
+			suggestionOverride,
 			tokenId: node.tokenId,
 			...(args ? { args } : {}),
 		})
@@ -394,8 +421,9 @@ export class CompilationContext {
 		const { emptyPrefix, lines: contextLines } = this.buildSourceContext(diagnostic, sourceLine)
 		const lines = [header, location, ...contextLines]
 
-		if (def.suggestion) {
-			const suggestion = interpolateMessage(def.suggestion, diagnostic.args)
+		const suggestionText = diagnostic.suggestionOverride ?? def.suggestion
+		if (suggestionText) {
+			const suggestion = interpolateMessage(suggestionText, diagnostic.args)
 			lines.push(emptyPrefix, `   = help: ${suggestion}`)
 		}
 
