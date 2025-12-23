@@ -103,6 +103,36 @@ describe('check/variable bindings', () => {
 		})
 	})
 
+	describe('float bindings', () => {
+		it('should compile x:f32 = 0 successfully', () => {
+			const ctx = compileAndCheck('x:f32 = 0\n')
+			assert.strictEqual(ctx.hasErrors(), false)
+			assert.ok(ctx.symbols)
+			const symbol = ctx.symbols.get(0 as import('../../src/check/types.ts').SymbolId)
+			assert.strictEqual(symbol.typeId, 3) // BuiltinTypeId.F32
+		})
+
+		it('should compile x:f64 = 0 successfully', () => {
+			const ctx = compileAndCheck('x:f64 = 0\n')
+			assert.strictEqual(ctx.hasErrors(), false)
+			assert.ok(ctx.symbols)
+			const symbol = ctx.symbols.get(0 as import('../../src/check/types.ts').SymbolId)
+			assert.strictEqual(symbol.typeId, 4) // BuiltinTypeId.F64
+		})
+
+		it('should error on f32/f64 type mismatch', () => {
+			const ctx = compileAndCheck('x:f32 = 0\ny:f64 = x\n')
+			assert.strictEqual(ctx.hasErrors(), true)
+			const errors = ctx.getErrors()
+			assert.ok(errors.some((e) => e.message.includes('type mismatch')))
+		})
+
+		it('should allow same float type assignment', () => {
+			const ctx = compileAndCheck('x:f32 = 0\ny:f32 = x\n')
+			assert.strictEqual(ctx.hasErrors(), false)
+		})
+	})
+
 	describe('shadowing', () => {
 		it('should allow rebinding same name with same type', () => {
 			const ctx = compileAndCheck('x:i32 = 0\nx:i32 = 1\n')
