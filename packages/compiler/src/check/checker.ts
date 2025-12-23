@@ -224,7 +224,8 @@ function checkExpression(
 		case NodeKind.Identifier:
 			return checkVarRef(exprId, expectedType, state, context)
 		default:
-			// Unknown expression kind
+			// Should be unreachable - all expression kinds should be handled
+			console.assert(false, 'checkExpression: unhandled expression kind %d', node.kind)
 			return { instId: -1 as InstId, typeId: BuiltinTypeId.Invalid }
 	}
 }
