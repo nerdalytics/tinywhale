@@ -15,7 +15,6 @@ import {
 import { type NodeId, NodeStore } from './nodes.ts'
 import { type TokenId, TokenStore } from './tokens.ts'
 
-// Re-export for backwards compatibility
 export { DiagnosticSeverity } from './diagnostics.ts'
 
 /**
@@ -213,121 +212,6 @@ export class CompilationContext {
 	}
 
 	// ===========================================================================
-	// LEGACY API: Kept for backwards compatibility (will be removed)
-	// ===========================================================================
-
-	/** @deprecated */
-	addDiagnostic(
-		diagnostic: Omit<Diagnostic, 'def' | 'args'> & { severity: DiagnosticSeverity }
-	): void {
-		// Create a synthetic def for legacy calls
-		const syntheticDef: DiagnosticDef = {
-			code: 'LEGACY',
-			description: '',
-			message: diagnostic.message,
-			severity: diagnostic.severity,
-		}
-		this.addDiagnosticInternal({
-			column: diagnostic.column,
-			def: syntheticDef,
-			line: diagnostic.line,
-			message: diagnostic.message,
-			...(diagnostic.nodeId !== undefined ? { nodeId: diagnostic.nodeId } : {}),
-			...(diagnostic.tokenId !== undefined ? { tokenId: diagnostic.tokenId } : {}),
-		})
-	}
-
-	/** @deprecated */
-	addError(line: number, column: number, message: string): void {
-		const syntheticDef: DiagnosticDef = {
-			code: 'LEGACY',
-			description: '',
-			message,
-			severity: DiagnosticSeverity.Error,
-		}
-		this.addDiagnosticInternal({
-			column,
-			def: syntheticDef,
-			line,
-			message,
-		})
-	}
-
-	/** @deprecated */
-	errorAtToken(tokenId: TokenId, message: string): void {
-		const token = this.tokens.get(tokenId)
-		const syntheticDef: DiagnosticDef = {
-			code: 'LEGACY',
-			description: '',
-			message,
-			severity: DiagnosticSeverity.Error,
-		}
-		this.addDiagnosticInternal({
-			column: token.column,
-			def: syntheticDef,
-			line: token.line,
-			message,
-			tokenId,
-		})
-	}
-
-	/** @deprecated */
-	errorAtNode(nodeId: NodeId, message: string): void {
-		const node = this.nodes.get(nodeId)
-		const token = this.tokens.get(node.tokenId)
-		const syntheticDef: DiagnosticDef = {
-			code: 'LEGACY',
-			description: '',
-			message,
-			severity: DiagnosticSeverity.Error,
-		}
-		this.addDiagnosticInternal({
-			column: token.column,
-			def: syntheticDef,
-			line: token.line,
-			message,
-			nodeId,
-			tokenId: node.tokenId,
-		})
-	}
-
-	/** @deprecated */
-	addWarning(line: number, column: number, message: string): void {
-		const syntheticDef: DiagnosticDef = {
-			code: 'LEGACY',
-			description: '',
-			message,
-			severity: DiagnosticSeverity.Warning,
-		}
-		this.addDiagnosticInternal({
-			column,
-			def: syntheticDef,
-			line,
-			message,
-		})
-	}
-
-	/** @deprecated */
-	warningAtNode(nodeId: NodeId, message: string): void {
-		const node = this.nodes.get(nodeId)
-		const token = this.tokens.get(node.tokenId)
-		const syntheticDef: DiagnosticDef = {
-			code: 'LEGACY',
-			description: '',
-			message,
-			severity: DiagnosticSeverity.Warning,
-		}
-		this.addDiagnosticInternal({
-			column: token.column,
-			def: syntheticDef,
-			line: token.line,
-			message,
-			nodeId,
-			tokenId: node.tokenId,
-		})
-	}
-
-	// ===========================================================================
 	// INTERNAL
 	// ===========================================================================
 
@@ -358,6 +242,7 @@ export class CompilationContext {
 		return this.diagnostics.filter((d) => d.def.severity === DiagnosticSeverity.Error)
 	}
 
+	/** Line number is 1-indexed, matching diagnostic.line */
 	getSourceLine(line: number): string | undefined {
 		const lines = this.source.split('\n')
 		return lines[line - 1]
@@ -409,7 +294,7 @@ export class CompilationContext {
 	formatDiagnostic(diagnostic: Diagnostic): string {
 		const { def } = diagnostic
 		const severityLabel = this.getSeverityLabel(def.severity)
-		const codeDisplay = def.code !== 'LEGACY' ? `[${def.code}]` : ''
+		const codeDisplay = `[${def.code}]`
 		const header = `${severityLabel}${codeDisplay}: ${diagnostic.message}`
 		const location = `  --> ${this.filename}:${diagnostic.line}:${diagnostic.column}`
 

@@ -45,10 +45,12 @@ export const DIAGNOSTICS = {
 
 export type DiagnosticCode = keyof typeof DIAGNOSTICS
 
+/** Retrieves diagnostic definition by code. Returns undefined for invalid codes. */
 export function getDiagnostic(code: DiagnosticCode): (typeof DIAGNOSTICS)[typeof code] {
 	return DIAGNOSTICS[code]
 }
 
+/** Type guard for validating diagnostic codes at runtime. */
 export function isValidDiagnosticCode(code: string): code is DiagnosticCode {
 	return code in DIAGNOSTICS
 }

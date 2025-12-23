@@ -1,6 +1,7 @@
 import assert from 'node:assert'
 import { describe, it } from 'node:test'
 import { CompilationContext, DiagnosticSeverity } from '../../src/core/context.ts'
+import type { DiagnosticCode } from '../../src/core/diagnostics.ts'
 import { NodeKind } from '../../src/core/nodes.ts'
 import { TokenKind } from '../../src/core/tokens.ts'
 
@@ -38,10 +39,10 @@ describe('core/context', () => {
 			assert.deepStrictEqual(ctx.getDiagnostics(), [])
 		})
 
-		describe('addError', () => {
+		describe('emit', () => {
 			it('should add error diagnostic', () => {
 				const ctx = new CompilationContext('panic')
-				ctx.addError(1, 5, 'unexpected token')
+				ctx.emit('TWLEX001' as DiagnosticCode, 1, 5)
 
 				assert.strictEqual(ctx.hasErrors(), true)
 				assert.strictEqual(ctx.getErrorCount(), 1)
@@ -49,25 +50,22 @@ describe('core/context', () => {
 				const diags = ctx.getDiagnostics()
 				assert.strictEqual(diags.length, 1)
 				assert.strictEqual(diags[0]!.def.severity, DiagnosticSeverity.Error)
-				assert.strictEqual(diags[0]!.message, 'unexpected token')
 				assert.strictEqual(diags[0]!.line, 1)
 				assert.strictEqual(diags[0]!.column, 5)
 			})
 
 			it('should accumulate multiple errors', () => {
 				const ctx = new CompilationContext('panic\npanic')
-				ctx.addError(1, 1, 'first error')
-				ctx.addError(2, 1, 'second error')
+				ctx.emit('TWLEX001' as DiagnosticCode, 1, 1)
+				ctx.emit('TWLEX001' as DiagnosticCode, 2, 1)
 
 				assert.strictEqual(ctx.getErrorCount(), 2)
 				assert.strictEqual(ctx.getDiagnostics().length, 2)
 			})
-		})
 
-		describe('addWarning', () => {
 			it('should add warning diagnostic', () => {
 				const ctx = new CompilationContext('panic')
-				ctx.addWarning(1, 1, 'unused variable')
+				ctx.emit('TWCHECK050' as DiagnosticCode, 1, 1)
 
 				assert.strictEqual(ctx.hasErrors(), false)
 				assert.strictEqual(ctx.getErrorCount(), 0)
@@ -78,7 +76,7 @@ describe('core/context', () => {
 			})
 		})
 
-		describe('errorAtToken', () => {
+		describe('emitAtToken', () => {
 			it('should add error at token location', () => {
 				const ctx = new CompilationContext('  panic')
 				const tokenId = ctx.tokens.add({
@@ -88,7 +86,7 @@ describe('core/context', () => {
 					payload: 0,
 				})
 
-				ctx.errorAtToken(tokenId, 'invalid statement')
+				ctx.emitAtToken('TWLEX001' as DiagnosticCode, tokenId)
 
 				const diags = ctx.getDiagnostics()
 				assert.strictEqual(diags.length, 1)
@@ -98,7 +96,7 @@ describe('core/context', () => {
 			})
 		})
 
-		describe('errorAtNode', () => {
+		describe('emitAtNode', () => {
 			it('should add error at node location', () => {
 				const ctx = new CompilationContext('panic')
 
@@ -115,7 +113,7 @@ describe('core/context', () => {
 					tokenId,
 				})
 
-				ctx.errorAtNode(nodeId, 'semantic error')
+				ctx.emitAtNode('TWCHECK001' as DiagnosticCode, nodeId)
 
 				const diags = ctx.getDiagnostics()
 				assert.strictEqual(diags.length, 1)
@@ -129,14 +127,14 @@ describe('core/context', () => {
 		describe('getErrors', () => {
 			it('should return only errors', () => {
 				const ctx = new CompilationContext('panic')
-				ctx.addError(1, 1, 'error 1')
-				ctx.addWarning(1, 5, 'warning 1')
-				ctx.addError(2, 1, 'error 2')
+				ctx.emit('TWLEX001' as DiagnosticCode, 1, 1)
+				ctx.emit('TWCHECK050' as DiagnosticCode, 1, 5)
+				ctx.emit('TWLEX002' as DiagnosticCode, 2, 1)
 
 				const errors = ctx.getErrors()
 				assert.strictEqual(errors.length, 2)
-				assert.strictEqual(errors[0]!.message, 'error 1')
-				assert.strictEqual(errors[1]!.message, 'error 2')
+				assert.strictEqual(errors[0]!.def.code, 'TWLEX001')
+				assert.strictEqual(errors[1]!.def.code, 'TWLEX002')
 			})
 		})
 
@@ -158,31 +156,31 @@ describe('core/context', () => {
 		describe('formatDiagnostic', () => {
 			it('should format error with source context', () => {
 				const ctx = new CompilationContext('panic')
-				ctx.addError(1, 1, 'unexpected keyword')
+				ctx.emit('TWLEX001' as DiagnosticCode, 1, 1)
 
 				const formatted = ctx.formatDiagnostic(ctx.getDiagnostics()[0]!)
 
 				assert.ok(formatted.includes('<input>:1:1'))
 				assert.ok(formatted.includes('error'))
-				assert.ok(formatted.includes('unexpected keyword'))
+				assert.ok(formatted.includes('[TWLEX001]'))
 				assert.ok(formatted.includes('panic'))
 				assert.ok(formatted.includes('^'))
 			})
 
 			it('should format warning correctly', () => {
 				const ctx = new CompilationContext('panic', 'test.tw')
-				ctx.addWarning(1, 3, 'unused')
+				ctx.emit('TWCHECK050' as DiagnosticCode, 1, 3)
 
 				const formatted = ctx.formatDiagnostic(ctx.getDiagnostics()[0]!)
 
 				assert.ok(formatted.includes('test.tw:1:3'))
 				assert.ok(formatted.includes('warning'))
-				assert.ok(formatted.includes('unused'))
+				assert.ok(formatted.includes('[TWCHECK050]'))
 			})
 
 			it('should handle missing source line', () => {
 				const ctx = new CompilationContext('')
-				ctx.addError(5, 1, 'error')
+				ctx.emit('TWLEX001' as DiagnosticCode, 5, 1)
 
 				const formatted = ctx.formatDiagnostic(ctx.getDiagnostics()[0]!)
 
@@ -195,13 +193,13 @@ describe('core/context', () => {
 		describe('formatAllDiagnostics', () => {
 			it('should format multiple diagnostics', () => {
 				const ctx = new CompilationContext('line1\nline2')
-				ctx.addError(1, 1, 'first error')
-				ctx.addError(2, 1, 'second error')
+				ctx.emit('TWLEX001' as DiagnosticCode, 1, 1)
+				ctx.emit('TWLEX002' as DiagnosticCode, 2, 1)
 
 				const formatted = ctx.formatAllDiagnostics()
 
-				assert.ok(formatted.includes('first error'))
-				assert.ok(formatted.includes('second error'))
+				assert.ok(formatted.includes('[TWLEX001]'))
+				assert.ok(formatted.includes('[TWLEX002]'))
 				assert.ok(formatted.includes('line1'))
 				assert.ok(formatted.includes('line2'))
 			})

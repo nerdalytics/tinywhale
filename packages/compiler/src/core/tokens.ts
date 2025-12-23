@@ -3,10 +3,7 @@
  * Carbon-style data-oriented design for cache efficiency.
  */
 
-/**
- * Token kinds - small integer discriminant.
- * Grouped by category for clarity.
- */
+/** Token kinds - small integer discriminant. */
 export const TokenKind = {
 	Colon: 3,
 	Dedent: 1,
@@ -33,10 +30,6 @@ export const TokenKind = {
 
 export type TokenKind = (typeof TokenKind)[keyof typeof TokenKind]
 
-/**
- * Branded type for token IDs.
- * Provides type safety while remaining a plain number at runtime.
- */
 export type TokenId = number & { readonly __brand: 'TokenId' }
 
 export function tokenId(n: number): TokenId {
@@ -93,6 +86,7 @@ export class TokenStore {
 		}
 	}
 
+	/** Returns tokens in range [start, end). */
 	slice(start: TokenId, end: TokenId): Token[] {
 		return this.tokens.slice(start, end)
 	}
