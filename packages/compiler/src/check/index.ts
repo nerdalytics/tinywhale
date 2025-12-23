@@ -6,7 +6,7 @@
  */
 
 export { check } from './checker.ts'
-export { InstStore, ScopeStore } from './stores.ts'
+export { InstStore, ScopeStore, TypeStore } from './stores.ts'
 export {
 	BuiltinTypeId,
 	type CheckResult,
@@ -18,5 +18,7 @@ export {
 	type ScopeId,
 	scopeId,
 	type TypeId,
+	type TypeInfo,
+	TypeKind,
 	typeId,
 } from './types.ts'

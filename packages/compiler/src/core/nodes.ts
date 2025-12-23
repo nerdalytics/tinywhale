@@ -12,23 +12,23 @@ import type { TokenId } from './tokens.ts'
  */
 export const NodeKind = {
 	DedentLine: 1,
+
+	// Expressions (100-149)
+	Identifier: 100,
 	// Line types (0-9)
 	IndentedLine: 0,
+	IntLiteral: 101,
 
 	// Statements (10-99)
 	PanicStatement: 10,
 
-	// Future: Expressions (100-149)
-	// IntegerLiteral: 100,
-	// BinaryExpr: 101,
-
-	// Future: Declarations (150-199)
-	// FunctionDecl: 150,
-	// VariableDecl: 151,
-
 	// Program root (255)
 	Program: 255,
 	RootLine: 2,
+
+	// Type annotations (150-199)
+	TypeAnnotation: 150,
+	VariableBinding: 11,
 } as const
 
 export type NodeKind = (typeof NodeKind)[keyof typeof NodeKind]

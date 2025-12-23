@@ -1,0 +1,5 @@
+# Variable shadowing - each binding creates a fresh local
+x:i32 = 1
+x:i32 = 2      # shadows previous x
+y:i32 = x      # y gets value 2
+panic

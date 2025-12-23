@@ -8,13 +8,14 @@ This is a monorepo managed with [pnpm](https://pnpm.io/) workspaces:
 
 - **`packages/compiler`** - The TinyWhale compiler library
 - **`packages/cli`** - Command-line interface for TinyWhale
+- **`packages/diagnostics`** - Shared diagnostic types and definitions
 - **`packages/lsp`** - Language Server Protocol implementation
 
 ## Prerequisites
 
 - [mise](https://mise.jdx.dev/) - Development tool version manager and task runner
-- Node.js 24.11.0 (automatically installed via mise)
-- pnpm 10.23.0 (automatically installed via mise)
+- Node.js 24.12.0 (automatically installed via mise)
+- pnpm 10.26.0 (automatically installed via mise)
 
 ## Getting Started
 
@@ -31,20 +32,20 @@ This is a monorepo managed with [pnpm](https://pnpm.io/) workspaces:
 
 ## Available Tasks
 
-All tasks are defined in `.mise.toml` and run via mise:
+All tasks are defined in `mise.toml` and run via mise:
 
 - `mise run install` - Install dependencies
 - `mise run build` - Build all packages
-- `mise run test` - Run tests for all packages
-- `mise run lint` - Lint all packages
+- `mise run test` - Run tests
+- `mise run check` - Lint and format (Biome, with auto-fix)
+- `mise run typecheck` - TypeScript type checking
 - `mise run clean` - Clean build artifacts
-- `mise run dev` - Run development mode
-
-You can also use `pnpm start <task>` which will execute `mise run <task>`.
+- `mise run generate-grammar` - Regenerate Ohm grammar bundles
+- `mise run cli <file>` - Run the TinyWhale CLI
 
 ## Development
 
-The project uses mise as the task runner. All tasks are defined in `.mise.toml`, and the root `package.json` contains only one script that delegates to mise.
+The project uses mise as the task runner. All tasks are defined in `mise.toml`.
 
 ## License
 

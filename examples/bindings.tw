@@ -1,0 +1,4 @@
+# Variable bindings with type annotations
+x:i32 = 42
+y:i64 = 100
+panic

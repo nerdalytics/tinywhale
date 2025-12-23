@@ -1,0 +1,4 @@
+# Error: type mismatch between i64 and i32
+x:i64 = 100
+y:i32 = x
+panic

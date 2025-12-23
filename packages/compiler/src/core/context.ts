@@ -3,7 +3,7 @@
  * Contains all stores (tokens, nodes, insts) and diagnostic collection.
  */
 
-import type { InstStore } from '../check/stores.ts'
+import type { InstStore, SymbolStore, TypeStore } from '../check/stores.ts'
 import {
 	type DiagnosticArgs,
 	type DiagnosticCode,
@@ -39,6 +39,50 @@ export interface Diagnostic {
 }
 
 /**
+ * Branded type for string IDs.
+ * Used for identifier names interned in StringStore.
+ */
+export type StringId = number & { readonly __brand: 'StringId' }
+
+export function stringId(n: number): StringId {
+	return n as StringId
+}
+
+/**
+ * Dense array storage for interned strings.
+ * Used for identifier names - same string always returns same ID.
+ */
+export class StringStore {
+	private readonly strings: string[] = []
+	private readonly stringToId: Map<string, StringId> = new Map()
+
+	/** Intern a string, returning its ID. Same string always returns same ID. */
+	intern(s: string): StringId {
+		const existing = this.stringToId.get(s)
+		if (existing !== undefined) return existing
+
+		const id = stringId(this.strings.length)
+		this.strings.push(s)
+		this.stringToId.set(s, id)
+		return id
+	}
+
+	get(id: StringId): string {
+		const s = this.strings[id]
+		if (s === undefined) throw new Error(`Invalid StringId: ${id}`)
+		return s
+	}
+
+	count(): number {
+		return this.strings.length
+	}
+
+	isValid(id: StringId): boolean {
+		return id >= 0 && id < this.strings.length
+	}
+}
+
+/**
  * The unified compilation context.
  * Passed through all compilation phases.
  *
@@ -54,6 +98,9 @@ export class CompilationContext {
 	/** Source filename for error messages */
 	readonly filename: string
 
+	/** Interned strings for identifier names (populated by tokenizer) */
+	readonly strings: StringStore
+
 	/** Token storage (populated by tokenizer) */
 	readonly tokens: TokenStore
 
@@ -62,6 +109,12 @@ export class CompilationContext {
 
 	/** Instruction storage (populated by checker) */
 	insts: InstStore | null = null
+
+	/** Symbol storage for variable bindings (populated by checker) */
+	symbols: SymbolStore | null = null
+
+	/** Type storage (populated by checker) */
+	types: TypeStore | null = null
 
 	/** Collected diagnostics */
 	private readonly diagnostics: Diagnostic[] = []
@@ -72,6 +125,7 @@ export class CompilationContext {
 	constructor(source: string, filename = '<input>') {
 		this.source = source
 		this.filename = filename
+		this.strings = new StringStore()
 		this.tokens = new TokenStore()
 		this.nodes = new NodeStore()
 	}
