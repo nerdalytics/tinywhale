@@ -1,6 +1,7 @@
 import assert from 'node:assert'
 import { describe, it } from 'node:test'
 
+import { check } from '../src/check/checker.ts'
 import { CompileError, type CompileResult, emit } from '../src/codegen/index.ts'
 import { CompilationContext } from '../src/core/context.ts'
 import { tokenize } from '../src/lex/tokenizer.ts'
@@ -10,6 +11,7 @@ function compileSource(source: string, optimize = false): CompileResult {
 	const ctx = new CompilationContext(source)
 	tokenize(ctx)
 	parse(ctx)
+	check(ctx)
 	return emit(ctx, { optimize })
 }
 
@@ -46,6 +48,7 @@ describe('codegen', () => {
 			const ctx = new CompilationContext('\n')
 			tokenize(ctx)
 			parse(ctx)
+			check(ctx)
 
 			assert.throws(
 				() => emit(ctx),
@@ -61,6 +64,7 @@ describe('codegen', () => {
 			const ctx = new CompilationContext('# just a comment\n')
 			tokenize(ctx)
 			parse(ctx)
+			check(ctx)
 
 			assert.throws(
 				() => emit(ctx),

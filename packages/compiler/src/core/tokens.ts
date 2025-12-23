@@ -8,17 +8,23 @@
  * Grouped by category for clarity.
  */
 export const TokenKind = {
+	Colon: 3,
 	Dedent: 1,
-
-	// Future: Identifiers and literals (100-199)
-	// Identifier: 100,
-	// IntLiteral: 101,
-	// StringLiteral: 102,
+	// StringLiteral: 102, // Future
 
 	// Special (255)
 	Eof: 255,
+	Equals: 4,
+	F32: 13,
+	F64: 14,
+	I32: 11,
+	I64: 12,
+
+	// Identifiers and literals (100-199)
+	Identifier: 100,
 	// Structural tokens (0-9)
 	Indent: 0,
+	IntLiteral: 101,
 	Newline: 2,
 
 	// Keywords (10-99)

@@ -23,28 +23,93 @@ export function scopeId(n: number): ScopeId {
 	return n as ScopeId
 }
 
+export type SymbolId = number & { readonly __brand: 'SymbolId' }
+
+export function symbolId(n: number): SymbolId {
+	return n as SymbolId
+}
+
 /**
  * Instruction kinds.
  * These represent semantic operations in the IR.
  */
 export const InstKind = {
+	// Variables (20-29)
+	/** Variable binding: arg0 = SymbolId, arg1 = initializer InstId */
+	Bind: 20,
+	// Future: Return: 1, Branch: 2, etc.
+
+	// Constants (10-19)
+	/** Integer constant: arg0 = low 32 bits, arg1 = high 32 bits (for i64) */
+	IntConst: 10,
 	// Terminators (0-9)
 	/** panic - unconditional trap, terminates control flow */
 	Unreachable: 0,
-	// Future: Return: 1, Branch: 2, etc.
+	/** Variable reference: arg0 = SymbolId */
+	VarRef: 21,
 } as const
 
 export type InstKind = (typeof InstKind)[keyof typeof InstKind]
 
 /**
- * Built-in type IDs.
+ * Type kinds for the type system.
+ *
+ * TinyWhale uses nominal types:
+ * - Primitives (i32, i64, f32, f64) are first-class types
+ * - All `type X = T` declarations create distinct (incompatible) types
+ * - No aliases exist - every type declaration is nominal
+ */
+export const TypeKind = {
+	// User-defined types (5+) - NOMINAL
+	/** Distinct type - every `type` declaration creates one of these */
+	Distinct: 5,
+	/** 32-bit IEEE 754 float */
+	F32: 3,
+	/** 64-bit IEEE 754 float */
+	F64: 4,
+	// WASM core value types (1-4)
+	/** 32-bit signed integer */
+	I32: 1,
+	/** 64-bit signed integer */
+	I64: 2,
+	/** No value (for instructions that don't produce a result) */
+	None: 0,
+} as const
+
+export type TypeKind = (typeof TypeKind)[keyof typeof TypeKind]
+
+/**
+ * Built-in type IDs - fixed indices for primitive types.
+ * These are pre-populated in TypeStore at construction.
  */
 export const BuiltinTypeId = {
-	/** Error sentinel - indicates type error */
-	Error: typeId(1),
-	/** void/unit type - no value */
+	/** 32-bit IEEE 754 float */
+	F32: typeId(3),
+	/** 64-bit IEEE 754 float */
+	F64: typeId(4),
+	/** 32-bit signed integer */
+	I32: typeId(1),
+	/** 64-bit signed integer */
+	I64: typeId(2),
+	/** Invalid sentinel - indicates type-checking error (not a valid TypeId) */
+	Invalid: typeId(-1),
+	/** No value (for instructions that don't produce a result, like panic) */
 	None: typeId(0),
 } as const
+
+/**
+ * Information about a type stored in TypeStore.
+ */
+export interface TypeInfo {
+	/** The kind of type */
+	readonly kind: TypeKind
+	/** Human-readable name for diagnostics */
+	readonly name: string
+	/** For Distinct: the underlying type; for primitives: self */
+	readonly underlying: TypeId
+	/** Parse node that declared this type (null for builtins) */
+	readonly parseNodeId: NodeId | null
+}
 
 /**
  * A semantic instruction - 16 bytes (4 x 32-bit slots).
@@ -76,6 +141,21 @@ export interface Scope {
 	readonly parentId: ScopeId | null
 	/** Whether this scope is currently reachable */
 	reachable: boolean
+}
+
+/**
+ * A symbol entry in the symbol table.
+ * Represents a variable binding with its type and location.
+ */
+export interface SymbolEntry {
+	/** Interned name of the symbol */
+	readonly nameId: import('../core/context.ts').StringId
+	/** Type of this symbol */
+	readonly typeId: TypeId
+	/** WASM local index (fresh for each binding, supports shadowing) */
+	readonly localIndex: number
+	/** Parse node of the declaration (for diagnostics) */
+	readonly parseNodeId: NodeId
 }
 
 /**

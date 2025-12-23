@@ -174,43 +174,36 @@ function calculateIndentLevel(
 	return calculateSpaceIndentLevel(indentCount, lineNumber, state, context)
 }
 
-function skipWhitespace(content: string): number {
-	let pos = 0
+/**
+ * Keyword map: string -> TokenKind
+ * Type keywords are reserved and cannot be used as identifiers.
+ */
+const KEYWORDS: Record<string, (typeof TokenKind)[keyof typeof TokenKind]> = {
+	f32: TokenKind.F32,
+	f64: TokenKind.F64,
+	i32: TokenKind.I32,
+	i64: TokenKind.I64,
+	panic: TokenKind.Panic,
+}
+
+function isIdentifierStart(char: string): boolean {
+	return /[a-zA-Z_]/.test(char)
+}
+
+function isIdentifierPart(char: string): boolean {
+	return /[a-zA-Z0-9_]/.test(char)
+}
+
+function isDigit(char: string): boolean {
+	return /[0-9]/.test(char)
+}
+
+function skipWhitespace(content: string, start: number): number {
+	let pos = start
 	while (pos < content.length && (content[pos] === ' ' || content[pos] === '\t')) {
 		pos++
 	}
 	return pos
-}
-
-function isPanicKeywordComplete(content: string, pos: number): boolean {
-	const afterPanic = pos + 5
-	if (afterPanic >= content.length) return true
-	const charAfter = content[afterPanic]
-	return charAfter === undefined || !/[a-zA-Z0-9_]/.test(charAfter)
-}
-
-function findPanicKeyword(content: string): number {
-	const pos = skipWhitespace(content)
-
-	if (content[pos] === '#') return 0
-
-	if (content.startsWith('panic', pos) && isPanicKeywordComplete(content, pos)) {
-		return pos + 1
-	}
-
-	return 0
-}
-
-/** Segments at even indices (0, 2, 4...) are content, odd indices are comments. */
-function isContentSegment(index: number): boolean {
-	return index % 2 === 0
-}
-
-function stripComments(content: string): string {
-	return content
-		.split('#')
-		.filter((_, i) => isContentSegment(i))
-		.join('')
 }
 
 function validateIndentJump(
@@ -254,21 +247,145 @@ function emitDedentTokens(
 	}
 }
 
-function emitPanicToken(
+/**
+ * Tokenize identifier or keyword at position.
+ * Returns the end position after the identifier.
+ */
+function tokenizeIdentifierOrKeyword(
+	content: string,
+	startPos: number,
+	indentCount: number,
+	lineNumber: number,
+	context: CompilationContext
+): number {
+	let pos = startPos
+	while (pos < content.length && isIdentifierPart(content[pos] as string)) {
+		pos++
+	}
+	const text = content.slice(startPos, pos)
+	const column = indentCount + startPos + 1
+
+	const keywordKind = KEYWORDS[text]
+	if (keywordKind !== undefined) {
+		context.tokens.add({
+			column,
+			kind: keywordKind,
+			line: lineNumber,
+			payload: 0,
+		})
+	} else {
+		const stringId = context.strings.intern(text)
+		context.tokens.add({
+			column,
+			kind: TokenKind.Identifier,
+			line: lineNumber,
+			payload: stringId,
+		})
+	}
+	return pos
+}
+
+/**
+ * Tokenize integer literal at position.
+ * Returns the end position after the literal.
+ */
+function tokenizeIntLiteral(
+	content: string,
+	startPos: number,
+	indentCount: number,
+	lineNumber: number,
+	context: CompilationContext
+): number {
+	let pos = startPos
+	while (pos < content.length && isDigit(content[pos] as string)) {
+		pos++
+	}
+	const text = content.slice(startPos, pos)
+	const value = Number.parseInt(text, 10)
+	const column = indentCount + startPos + 1
+
+	context.tokens.add({
+		column,
+		kind: TokenKind.IntLiteral,
+		line: lineNumber,
+		payload: value,
+	})
+	return pos
+}
+
+function tokenizeOperator(
+	char: string,
+	pos: number,
+	indentCount: number,
+	lineNumber: number,
+	context: CompilationContext
+): number | null {
+	if (char === ':') {
+		context.tokens.add({
+			column: indentCount + pos + 1,
+			kind: TokenKind.Colon,
+			line: lineNumber,
+			payload: 0,
+		})
+		return pos + 1
+	}
+	if (char === '=') {
+		context.tokens.add({
+			column: indentCount + pos + 1,
+			kind: TokenKind.Equals,
+			line: lineNumber,
+			payload: 0,
+		})
+		return pos + 1
+	}
+	return null
+}
+
+interface TokenizeState {
+	content: string
+	indentCount: number
+	lineNumber: number
+	context: CompilationContext
+}
+
+function isWhitespace(char: string): boolean {
+	return char === ' ' || char === '\t'
+}
+
+function handleKnownToken(char: string, pos: number, state: TokenizeState): number | null {
+	const { content, context, indentCount, lineNumber } = state
+	if (isIdentifierStart(char)) {
+		return tokenizeIdentifierOrKeyword(content, pos, indentCount, lineNumber, context)
+	}
+	if (isDigit(char)) {
+		return tokenizeIntLiteral(content, pos, indentCount, lineNumber, context)
+	}
+	return tokenizeOperator(char, pos, indentCount, lineNumber, context)
+}
+
+function tokenizeSingleToken(char: string, pos: number, state: TokenizeState): number | 'break' {
+	if (isWhitespace(char)) return skipWhitespace(state.content, pos)
+	if (char === '#') return 'break'
+	return handleKnownToken(char, pos, state) ?? pos + 1
+}
+
+/**
+ * Tokenize all tokens from line content (after indent).
+ */
+function tokenizeContent(
 	content: string,
 	indentCount: number,
 	lineNumber: number,
 	context: CompilationContext
 ): void {
-	const strippedContent = stripComments(content)
-	const panicCol = findPanicKeyword(strippedContent)
-	if (panicCol === 0) return
-	context.tokens.add({
-		column: indentCount + panicCol,
-		kind: TokenKind.Panic,
-		line: lineNumber,
-		payload: 0,
-	})
+	const state: TokenizeState = { content, context, indentCount, lineNumber }
+	let pos = 0
+
+	while (pos < content.length) {
+		const result = tokenizeSingleToken(content[pos] as string, pos, state)
+		if (result === 'break') break
+		pos = result
+	}
 }
 
 function shouldEmitNewline(content: string, levelChanged: boolean): boolean {
@@ -299,7 +416,7 @@ function processLine(
 	emitDedentTokens(newLevel, state.previousLevel, lineNumber, context)
 	state.previousLevel = newLevel
 
-	emitPanicToken(content, indentCount, lineNumber, context)
+	tokenizeContent(content, indentCount, lineNumber, context)
 
 	if (shouldEmitNewline(content, levelChanged)) {
 		context.tokens.add({

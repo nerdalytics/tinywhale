@@ -14,6 +14,7 @@ import { tokenize } from './lex/tokenizer.ts'
 import { parse } from './parse/parser.ts'
 
 export {
+	BuiltinTypeId,
 	type CheckResult,
 	check,
 	type Inst,
@@ -26,6 +27,9 @@ export {
 	ScopeStore,
 	scopeId,
 	type TypeId,
+	type TypeInfo,
+	TypeKind,
+	TypeStore,
 	typeId,
 } from './check/index.ts'
 export {

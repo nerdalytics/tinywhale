@@ -83,6 +83,38 @@ export const TWCHECK001: DiagnosticDef = {
 		'Remove the indentation, or wrap this code in a function when that feature is available.',
 }
 
+export const TWCHECK010: DiagnosticDef = {
+	code: 'TWCHECK010',
+	description: 'The type name is not recognized.',
+	message: 'unknown type `{found}`',
+	severity: DiagnosticSeverity.Error,
+	suggestion: 'Valid types are: i32, i64, f32, f64',
+}
+
+export const TWCHECK012: DiagnosticDef = {
+	code: 'TWCHECK012',
+	description: 'The expression type does not match the declared type.',
+	message: 'type mismatch: expected `{expected}`, found `{found}`',
+	severity: DiagnosticSeverity.Error,
+	suggestion: 'Change the expression to produce a value of type `{expected}`.',
+}
+
+export const TWCHECK013: DiagnosticDef = {
+	code: 'TWCHECK013',
+	description: 'This variable has not been declared.',
+	message: 'undefined variable `{name}`',
+	severity: DiagnosticSeverity.Error,
+	suggestion: 'Declare the variable before using it.',
+}
+
+export const TWCHECK014: DiagnosticDef = {
+	code: 'TWCHECK014',
+	description: 'The integer literal value is too large for the declared type.',
+	message: 'integer literal `{value}` exceeds `{type}` bounds',
+	severity: DiagnosticSeverity.Error,
+	suggestion: 'Use a smaller value or a larger type.',
+}
+
 // =============================================================================
 // CHECKER WARNINGS (TWCHECK050-099)
 // =============================================================================
@@ -114,6 +146,10 @@ export const TWGEN001: DiagnosticDef = {
 
 export const COMPILER_DIAGNOSTICS = {
 	TWCHECK001,
+	TWCHECK010,
+	TWCHECK012,
+	TWCHECK013,
+	TWCHECK014,
 	TWCHECK050,
 	TWGEN001,
 	TWLEX001,

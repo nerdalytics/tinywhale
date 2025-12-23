@@ -7,13 +7,32 @@ TinyWhale {
   RootLine = Statement
 
   // Statements
-  Statement = PanicStatement
+  Statement = VariableBinding | PanicStatement
   PanicStatement = panic
 
+  // Variable binding: x:i32 = expr (with optional spaces)
+  VariableBinding = identifier TypeAnnotation equals Expression
+  TypeAnnotation = colon TypeName
+  TypeName = typeKeyword
+
+  // Expressions
+  Expression = identifier | intLiteral
+
   // Keywords
-  keyword = panic
+  keyword = panic | typeKeyword
+  typeKeyword = i32 | i64 | f32 | f64
   panic = "panic" ~identifierPart
+  i32 = "i32" ~identifierPart
+  i64 = "i64" ~identifierPart
+  f32 = "f32" ~identifierPart
+  f64 = "f64" ~identifierPart
   identifierPart = alnum | "_"
+
+  // Identifiers and literals (from tokenizer)
+  identifier = ~keyword letter (alnum | "_")*
+  intLiteral = digit+
+  colon = ":"
+  equals = "="
 
   // Lexical token rules (marker followed by indent level)
   indentToken = "⇥" digit+

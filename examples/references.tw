@@ -1,0 +1,5 @@
+# Variables can reference previously defined variables
+a:i32 = 10
+b:i32 = a      # b gets value of a
+c:i32 = b      # c gets value of b
+panic

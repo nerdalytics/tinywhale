@@ -1,8 +1,8 @@
 import binaryen from 'binaryen'
 
+import { BuiltinTypeId, type Inst, InstKind, type TypeId } from '../check/types.ts'
 import { type CompilationContext, DiagnosticSeverity } from '../core/context.ts'
 import type { DiagnosticCode } from '../core/diagnostics.ts'
-import { type NodeId, NodeKind } from '../core/nodes.ts'
 
 export class CompileError extends Error {
 	constructor(message: string) {
@@ -29,25 +29,151 @@ export interface CompileResult {
 	warnings: CompileWarning[]
 }
 
+/**
+ * Convert a TypeId to a binaryen type.
+ */
+function toBinaryenType(typeId: TypeId, context: CompilationContext): binaryen.Type {
+	// Unwrap distinct types to get the underlying WASM primitive
+	const wasmTypeId = context.types?.toWasmType(typeId) ?? typeId
+
+	switch (wasmTypeId) {
+		case BuiltinTypeId.I32:
+			return binaryen.i32
+		case BuiltinTypeId.I64:
+			return binaryen.i64
+		case BuiltinTypeId.F32:
+			return binaryen.f32
+		case BuiltinTypeId.F64:
+			return binaryen.f64
+		default:
+			return binaryen.none
+	}
+}
+
+/**
+ * Build the locals array for the function.
+ * Each symbol becomes a WASM local at its localIndex.
+ */
+function buildLocals(context: CompilationContext): binaryen.Type[] {
+	if (!context.symbols) return []
+
+	const locals: binaryen.Type[] = []
+	for (const [, symbol] of context.symbols) {
+		const binaryenType = toBinaryenType(symbol.typeId, context)
+		// Ensure array is large enough
+		while (locals.length <= symbol.localIndex) {
+			locals.push(binaryen.none)
+		}
+		locals[symbol.localIndex] = binaryenType
+	}
+	return locals
+}
+
+function emitIntConst(
+	mod: binaryen.Module,
+	inst: Inst,
+	context: CompilationContext
+): binaryen.ExpressionRef {
+	const binaryenType = toBinaryenType(inst.typeId, context)
+	if (binaryenType === binaryen.i64) {
+		return mod.i64.const(inst.arg0, inst.arg1)
+	}
+	return mod.i32.const(inst.arg0)
+}
+
+function emitVarRef(
+	mod: binaryen.Module,
+	inst: Inst,
+	context: CompilationContext
+): binaryen.ExpressionRef | null {
+	const symId = inst.arg0
+	const symbol = context.symbols?.get(symId as import('../check/types.ts').SymbolId)
+	if (!symbol) return null
+	const binaryenType = toBinaryenType(symbol.typeId, context)
+	return mod.local.get(symbol.localIndex, binaryenType)
+}
+
+function emitBind(
+	mod: binaryen.Module,
+	inst: Inst,
+	valueMap: Map<number, binaryen.ExpressionRef>,
+	context: CompilationContext
+): binaryen.ExpressionRef | null {
+	const symId = inst.arg0
+	const initInstId = inst.arg1
+	const symbol = context.symbols?.get(symId as import('../check/types.ts').SymbolId)
+	if (!symbol) return null
+
+	const initExpr = valueMap.get(initInstId)
+	if (initExpr === undefined) return null
+
+	return mod.local.set(symbol.localIndex, initExpr)
+}
+
+/**
+ * Emit an instruction and return its expression (if it produces a value).
+ */
+function emitInstruction(
+	mod: binaryen.Module,
+	inst: Inst,
+	valueMap: Map<number, binaryen.ExpressionRef>,
+	context: CompilationContext
+): binaryen.ExpressionRef | null {
+	switch (inst.kind) {
+		case InstKind.Unreachable:
+			return mod.unreachable()
+		case InstKind.IntConst:
+			return emitIntConst(mod, inst, context)
+		case InstKind.VarRef:
+			return emitVarRef(mod, inst, context)
+		case InstKind.Bind:
+			return emitBind(mod, inst, valueMap, context)
+		default:
+			return null
+	}
+}
+
+function isValueProducer(kind: import('../check/types.ts').InstKind): boolean {
+	return kind === InstKind.IntConst || kind === InstKind.VarRef
+}
+
+function isStatement(kind: import('../check/types.ts').InstKind): boolean {
+	return kind === InstKind.Unreachable || kind === InstKind.Bind
+}
+
+function processInstruction(
+	instId: number,
+	inst: Inst,
+	mod: binaryen.Module,
+	valueMap: Map<number, binaryen.ExpressionRef>,
+	expressions: binaryen.ExpressionRef[],
+	context: CompilationContext
+): void {
+	const expr = emitInstruction(mod, inst, valueMap, context)
+	if (expr === null) return
+
+	if (isValueProducer(inst.kind)) {
+		valueMap.set(instId, expr)
+	}
+	if (isStatement(inst.kind)) {
+		expressions.push(expr)
+	}
+}
+
+/**
+ * Collect expressions from semantic instructions.
+ */
 function collectExpressions(
 	mod: binaryen.Module,
 	context: CompilationContext
 ): binaryen.ExpressionRef[] {
 	const expressions: binaryen.ExpressionRef[] = []
+	const valueMap = new Map<number, binaryen.ExpressionRef>()
 
-	for (let i = 0; i < context.nodes.count(); i++) {
-		const node = context.nodes.get(i as NodeId)
+	if (!context.insts) return expressions
 
-		switch (node.kind) {
-			case NodeKind.PanicStatement:
-				expressions.push(mod.unreachable())
-				break
-			case NodeKind.IndentedLine:
-			case NodeKind.DedentLine:
-			case NodeKind.RootLine:
-			case NodeKind.Program:
-				break
-		}
+	for (const [instId, inst] of context.insts) {
+		processInstruction(instId as number, inst, mod, valueMap, expressions, context)
 	}
 
 	return expressions
@@ -62,8 +188,12 @@ function createFunctionBody(
 		: mod.block(null, expressions)
 }
 
-function setupStartFunction(mod: binaryen.Module, body: binaryen.ExpressionRef): void {
-	mod.addFunction('_start', binaryen.none, binaryen.none, [], body)
+function setupStartFunction(
+	mod: binaryen.Module,
+	body: binaryen.ExpressionRef,
+	locals: binaryen.Type[]
+): void {
+	mod.addFunction('_start', binaryen.none, binaryen.none, locals, body)
 	mod.addFunctionExport('_start', '_start')
 	const startFunc = mod.getFunction('_start')
 	if (startFunc !== undefined) {
@@ -101,6 +231,7 @@ function extractWarnings(context: CompilationContext): CompileWarning[] {
  */
 export function emit(context: CompilationContext, options: EmitOptions = {}): CompileResult {
 	const mod = new binaryen.Module()
+	const locals = buildLocals(context)
 	const expressions = collectExpressions(mod, context)
 
 	if (expressions.length === 0) {
@@ -110,7 +241,7 @@ export function emit(context: CompilationContext, options: EmitOptions = {}): Co
 	}
 
 	const body = createFunctionBody(mod, expressions)
-	setupStartFunction(mod, body)
+	setupStartFunction(mod, body, locals)
 
 	if (options.optimize) {
 		mod.optimize()
