@@ -6,6 +6,97 @@ This document describes the implementation strategy for pattern matching in Tiny
 
 Pattern matching serves as TinyWhale's sole binding mechanism. There is no assignment operator—only pattern matching against values. All bindings are immutable, and shadowing is automatic (the language's single implicit behavior).
 
+---
+
+## Comparison with Elixir's Pattern Matching
+
+Elixir's compiler distinguishes **three semantic cases** for identifiers in patterns. TinyWhale deliberately simplifies this to **two cases**, which has significant implications for both the compiler and user mental model.
+
+### Elixir's Three Cases
+
+| Case | Syntax | Meaning | Compiler Action |
+|------|--------|---------|-----------------|
+| **Fresh Binding** | `x` | Create new binding | Allocate slot, emit store |
+| **Pin Match** | `^x` | Assert equality with existing value | Load value, emit equality test |
+| **Wildcard** | `_` | Ignore value | No code emitted |
+
+```elixir
+x = 1
+case value do
+  ^x -> "matches if value == 1"   # Pin: equality test
+  y  -> "always matches, y = value" # Binding: fresh variable
+  _  -> "always matches, discards"  # Wildcard: ignore
+end
+```
+
+The pin operator `^` changes an identifier from "binding" to "matching" semantics. This creates context-dependent meaning for identifiers.
+
+### TinyWhale's Two Cases
+
+| Case | Syntax | Meaning | Compiler Action |
+|------|--------|---------|-----------------|
+| **Fresh Binding** | `x` | Create new binding | Allocate slot, emit store |
+| **Wildcard** | `_` | Ignore value | No code emitted |
+
+**No pin operator exists.** Identifiers in patterns always create fresh bindings:
+
+```tinywhale
+x = 1
+match value {
+    x -> process(x)  # x is ALWAYS fresh, shadows outer x
+}
+
+# To match against existing value, use a guard:
+match value {
+    v if v == x -> handleEqual()
+    v -> handleDifferent(v)
+}
+```
+
+### Why TinyWhale Rejects the Pin Operator
+
+1. **Eliminates ambiguity**: In Elixir, `x` and `^x` look similar but have opposite meanings. Forgetting the `^` when you mean to match is a common bug.
+
+2. **Simpler mental model**: "Every identifier in a pattern is a fresh binding" is a single rule with no exceptions.
+
+3. **Compiler simplicity**: No need to track pin state or distinguish binding vs. matching for identifiers.
+
+4. **Explicit over implicit**: Equality checks via guards are verbose but unambiguous. The code says exactly what it means.
+
+### Tradeoff Analysis
+
+| Aspect | Elixir | TinyWhale |
+|--------|--------|-----------|
+| Conciseness | `{^id, data}` | `{i, data} if i == id` |
+| Clarity | Requires knowing `^` | Self-evident |
+| Compiler complexity | Three cases | Two cases |
+| Error potential | Forget `^` → silent bug | Guards required → explicit |
+
+### Refutability Comparison
+
+Both languages distinguish irrefutable and refutable patterns:
+
+| Pattern Type | Elixir Sources | TinyWhale Sources |
+|--------------|----------------|-------------------|
+| **Irrefutable** | `x`, `_`, matching tuple shapes | `x`, `_`, matching tuple shapes |
+| **Refutable** | Literals, `^x` pin, variant tags, guards | Literals, variant tags, guards |
+
+TinyWhale has fewer refutability sources because pin matching doesn't exist.
+
+### Context-Dependent Failure Behavior
+
+**Elixir** varies failure behavior by context:
+- Bare `=` match: raises `MatchError`
+- `case`/`cond`: tries next clause
+- `with`: short-circuits to `else`
+
+**TinyWhale** is stricter:
+- Binding context: pattern must be irrefutable (compile-time check)
+- `match` context: must be exhaustive (compile-time check)
+- No runtime `MatchError`—all failures caught at compile time
+
+---
+
 ## Current Architecture Overview
 
 ### Compiler Pipeline
