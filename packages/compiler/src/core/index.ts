@@ -8,7 +8,7 @@ export {
 	type Diagnostic,
 } from './context.ts'
 export {
-	DIAGNOSTICS,
+	COMPILER_DIAGNOSTICS,
 	type DiagnosticArgs,
 	type DiagnosticCode,
 	type DiagnosticDef,

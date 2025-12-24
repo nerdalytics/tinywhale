@@ -6,10 +6,7 @@
 
 import type { TokenId } from './tokens.ts'
 
-/**
- * Node kinds - one per grammar production.
- * Grouped by category for clarity.
- */
+/** Node kinds - one per grammar production. */
 export const NodeKind = {
 	DedentLine: 1,
 

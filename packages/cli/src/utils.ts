@@ -20,6 +20,7 @@ export function getErrorMessage(error: unknown): string {
 	return error instanceof Error ? error.message : String(error)
 }
 
+/** Special-cases ENOENT for clearer "file not found" UX vs generic I/O errors. */
 export function formatReadError(filePath: string, error: unknown): string {
 	if (isNodeError(error) && error.code === 'ENOENT') {
 		const message = interpolateMessage(TWCLI001.message, { path: filePath })
@@ -43,6 +44,7 @@ export function formatValidationError(): string {
 	return `[${TWCLI005.code}] ${TWCLI005.message}`
 }
 
+/** Preserves CompileError message (contains formatted diagnostics), wraps other errors. */
 export function formatCompileError(error: unknown): string {
 	if (error instanceof CompileError) {
 		return error.message

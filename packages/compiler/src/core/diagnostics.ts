@@ -2,8 +2,8 @@
  * Re-export diagnostic types and compiler definitions from shared package.
  */
 
-// Types and utilities
-// Compiler diagnostics
+import { COMPILER_DIAGNOSTICS } from '@tinywhale/diagnostics'
+
 export {
 	COMPILER_DIAGNOSTICS,
 	type CompilerDiagnosticCode,
@@ -21,14 +21,6 @@ export {
 	TWLEX005,
 	TWPARSE001,
 } from '@tinywhale/diagnostics'
-
-// Re-export combined catalog for backwards compatibility
-import { COMPILER_DIAGNOSTICS } from '@tinywhale/diagnostics'
-
-/**
- * @deprecated Use COMPILER_DIAGNOSTICS or import directly from @tinywhale/diagnostics
- */
-export const DIAGNOSTICS = COMPILER_DIAGNOSTICS
 
 /**
  * All valid diagnostic codes for the compiler.
