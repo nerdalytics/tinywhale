@@ -33,11 +33,16 @@ function tokenToOhmString(
 		case TokenKind.Identifier:
 			return context.strings.get(token.payload as import('../core/context.ts').StringId)
 		case TokenKind.IntLiteral:
-			return String(token.payload)
+			// Now stored as StringId
+			return context.strings.get(token.payload as import('../core/context.ts').StringId)
+		case TokenKind.FloatLiteral:
+			return context.strings.get(token.payload as import('../core/context.ts').StringId)
 		case TokenKind.Colon:
 			return ':'
 		case TokenKind.Equals:
 			return '='
+		case TokenKind.Minus:
+			return '-'
 		default:
 			return null
 	}
@@ -152,6 +157,21 @@ function createNodeEmittingSemantics(
 		Expression(expr: Node): NodeId {
 			return expr['emitExpression']()
 		},
+		floatLiteral(
+			_intPart: Node,
+			_dot: Node,
+			_fracPart: Node,
+			_expE: Node,
+			_expSign: Node,
+			_expDigits: Node
+		): NodeId {
+			const tid = getTokenIdForOhmNode(this)
+			return context.nodes.add({
+				kind: NodeKind.FloatLiteral,
+				subtreeSize: 1,
+				tokenId: tid,
+			})
+		},
 		identifier(_firstChar: Node, _restChars: Node): NodeId {
 			const tid = getTokenIdForOhmNode(this)
 			return context.nodes.add({
@@ -165,6 +185,19 @@ function createNodeEmittingSemantics(
 			return context.nodes.add({
 				kind: NodeKind.IntLiteral,
 				subtreeSize: 1,
+				tokenId: tid,
+			})
+		},
+		PrimaryExpr(expr: Node): NodeId {
+			return expr['emitExpression']()
+		},
+		UnaryExpr(_minus: Node, expr: Node): NodeId {
+			// Emit child first (postorder)
+			expr['emitExpression']()
+			const tid = getTokenIdForOhmNode(this)
+			return context.nodes.add({
+				kind: NodeKind.UnaryExpr,
+				subtreeSize: 2, // self + 1 child
 				tokenId: tid,
 			})
 		},

@@ -1,7 +1,7 @@
 import binaryen from 'binaryen'
 
 import { BuiltinTypeId, type Inst, InstKind, type TypeId } from '../check/types.ts'
-import { type CompilationContext, DiagnosticSeverity } from '../core/context.ts'
+import { type CompilationContext, DiagnosticSeverity, type FloatId } from '../core/context.ts'
 import type { DiagnosticCode } from '../core/diagnostics.ts'
 
 export class CompileError extends Error {
@@ -61,7 +61,6 @@ function buildLocals(context: CompilationContext): binaryen.Type[] {
 	const locals: binaryen.Type[] = []
 	for (const [, symbol] of context.symbols) {
 		const binaryenType = toBinaryenType(symbol.typeId, context)
-		// Ensure array is large enough
 		while (locals.length <= symbol.localIndex) {
 			locals.push(binaryen.none)
 		}
@@ -80,6 +79,25 @@ function emitIntConst(
 		return mod.i64.const(inst.arg0, inst.arg1)
 	}
 	return mod.i32.const(inst.arg0)
+}
+
+/**
+ * Emit a float constant instruction.
+ * arg0 contains the FloatId referencing the float value in FloatStore.
+ */
+function emitFloatConst(
+	mod: binaryen.Module,
+	inst: Inst,
+	context: CompilationContext
+): binaryen.ExpressionRef {
+	const floatId = inst.arg0 as FloatId
+	const value = context.floats.get(floatId)
+	const binaryenType = toBinaryenType(inst.typeId, context)
+
+	if (binaryenType === binaryen.f64) {
+		return mod.f64.const(value)
+	}
+	return mod.f32.const(value)
 }
 
 function emitVarRef(
@@ -125,6 +143,8 @@ function emitInstruction(
 			return mod.unreachable()
 		case InstKind.IntConst:
 			return emitIntConst(mod, inst, context)
+		case InstKind.FloatConst:
+			return emitFloatConst(mod, inst, context)
 		case InstKind.VarRef:
 			return emitVarRef(mod, inst, context)
 		case InstKind.Bind:
@@ -135,7 +155,7 @@ function emitInstruction(
 }
 
 function isValueProducer(kind: import('../check/types.ts').InstKind): boolean {
-	return kind === InstKind.IntConst || kind === InstKind.VarRef
+	return kind === InstKind.IntConst || kind === InstKind.FloatConst || kind === InstKind.VarRef
 }
 
 function isStatement(kind: import('../check/types.ts').InstKind): boolean {
@@ -226,10 +246,7 @@ function extractWarnings(context: CompilationContext): CompileWarning[] {
 /**
  * Emit WebAssembly from a compiled program.
  *
- * @param context - Compilation context with populated nodes
- * @param options - Emission options
- * @returns The compilation result containing binary, text, and validation status
- * @throws {CompileError} If the program is empty or contains unknown statement types
+ * @throws {CompileError} If the program is empty
  */
 export function emit(context: CompilationContext, options: EmitOptions = {}): CompileResult {
 	const mod = new binaryen.Module()

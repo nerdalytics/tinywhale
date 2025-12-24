@@ -45,6 +45,7 @@ export interface Diagnostic {
  */
 export type StringId = number & { readonly __brand: 'StringId' }
 
+/** Create a StringId from a number. */
 export function stringId(n: number): StringId {
 	return n as StringId
 }
@@ -84,6 +85,46 @@ export class StringStore {
 }
 
 /**
+ * Branded type for float IDs.
+ * Used for float literals stored in FloatStore.
+ */
+export type FloatId = number & { readonly __brand: 'FloatId' }
+
+/** Create a FloatId from a number. */
+export function floatId(n: number): FloatId {
+	return n as FloatId
+}
+
+/**
+ * Dense array storage for float values.
+ * Used for float literals - stores the parsed float value.
+ */
+export class FloatStore {
+	private readonly floats: number[] = []
+
+	/** Add a float value, returning its ID. */
+	add(value: number): FloatId {
+		const id = floatId(this.floats.length)
+		this.floats.push(value)
+		return id
+	}
+
+	get(id: FloatId): number {
+		const value = this.floats[id]
+		if (value === undefined) throw new Error(`Invalid FloatId: ${id}`)
+		return value
+	}
+
+	count(): number {
+		return this.floats.length
+	}
+
+	isValid(id: FloatId): boolean {
+		return id >= 0 && id < this.floats.length
+	}
+}
+
+/**
  * The unified compilation context.
  * Passed through all compilation phases.
  *
@@ -108,6 +149,9 @@ export class CompilationContext {
 	/** Parse node storage (populated by parser) */
 	readonly nodes: NodeStore
 
+	/** Float literal storage (populated by checker) */
+	readonly floats: FloatStore
+
 	/** Instruction storage (populated by checker) */
 	insts: InstStore | null = null
 
@@ -129,10 +173,11 @@ export class CompilationContext {
 		this.strings = new StringStore()
 		this.tokens = new TokenStore()
 		this.nodes = new NodeStore()
+		this.floats = new FloatStore()
 	}
 
 	// ===========================================================================
-	// NEW API: Emit diagnostics with codes
+	// EMIT DIAGNOSTICS
 	// ===========================================================================
 
 	/**

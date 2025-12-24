@@ -7,13 +7,13 @@
 export const TokenKind = {
 	Colon: 3,
 	Dedent: 1,
-	// StringLiteral: 102, // Future
 
 	// Special (255)
 	Eof: 255,
 	Equals: 4,
 	F32: 13,
 	F64: 14,
+	FloatLiteral: 102,
 	I32: 11,
 	I64: 12,
 
@@ -22,6 +22,7 @@ export const TokenKind = {
 	// Structural tokens (0-9)
 	Indent: 0,
 	IntLiteral: 101,
+	Minus: 5,
 	Newline: 2,
 
 	// Keywords (10-99)

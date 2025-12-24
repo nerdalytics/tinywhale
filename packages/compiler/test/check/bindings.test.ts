@@ -133,6 +133,137 @@ describe('check/variable bindings', () => {
 		})
 	})
 
+	describe('float literals', () => {
+		it('should compile f32 float literal', () => {
+			const ctx = compileAndCheck('x:f32 = 0.1\n')
+			assert.strictEqual(ctx.hasErrors(), false)
+			assert.ok(ctx.insts)
+			let hasFloatConst = false
+			for (const [, inst] of ctx.insts) {
+				if (inst.kind === InstKind.FloatConst) {
+					hasFloatConst = true
+				}
+			}
+			assert.ok(hasFloatConst)
+		})
+
+		it('should compile f64 float literal', () => {
+			const ctx = compileAndCheck('x:f64 = 3.14159\n')
+			assert.strictEqual(ctx.hasErrors(), false)
+		})
+
+		it('should compile negative float literal', () => {
+			const ctx = compileAndCheck('x:f64 = -0.5\n')
+			assert.strictEqual(ctx.hasErrors(), false)
+		})
+
+		it('should compile float literal with exponent', () => {
+			const ctx = compileAndCheck('x:f64 = 1.5e10\n')
+			assert.strictEqual(ctx.hasErrors(), false)
+		})
+
+		it('should compile float literal with negative exponent', () => {
+			const ctx = compileAndCheck('x:f32 = 1.5e-10\n')
+			assert.strictEqual(ctx.hasErrors(), false)
+		})
+
+		it('should error when assigning float literal to integer type', () => {
+			const ctx = compileAndCheck('x:i32 = 0.5\n')
+			assert.strictEqual(ctx.hasErrors(), true)
+			const errors = ctx.getErrors()
+			assert.ok(errors.some((e) => e.message.includes('type mismatch')))
+		})
+
+		it('should generate valid WAT for float literals', () => {
+			const result = compile('x:f32 = 0.1\ny:f64 = -0.2\npanic\n')
+			assert.strictEqual(result.valid, true)
+			assert.ok(result.text.includes('f32.const'))
+			assert.ok(result.text.includes('f64.const'))
+		})
+	})
+
+	describe('negative integer literals', () => {
+		it('should compile negative i32 literal', () => {
+			const ctx = compileAndCheck('x:i32 = -42\n')
+			assert.strictEqual(ctx.hasErrors(), false)
+		})
+
+		it('should compile negative i64 literal', () => {
+			const ctx = compileAndCheck('x:i64 = -1000000\n')
+			assert.strictEqual(ctx.hasErrors(), false)
+		})
+
+		it('should compile i32 min value', () => {
+			const ctx = compileAndCheck('x:i32 = -2147483648\n')
+			assert.strictEqual(ctx.hasErrors(), false)
+		})
+
+		it('should compile i32 max value', () => {
+			const ctx = compileAndCheck('x:i32 = 2147483647\n')
+			assert.strictEqual(ctx.hasErrors(), false)
+		})
+
+		it('should error on i32 positive overflow', () => {
+			const ctx = compileAndCheck('x:i32 = 2147483648\n')
+			assert.strictEqual(ctx.hasErrors(), true)
+			const errors = ctx.getErrors()
+			assert.ok(errors.some((e) => e.message.includes('exceeds')))
+		})
+
+		it('should error on i32 negative overflow', () => {
+			const ctx = compileAndCheck('x:i32 = -2147483649\n')
+			assert.strictEqual(ctx.hasErrors(), true)
+			const errors = ctx.getErrors()
+			assert.ok(errors.some((e) => e.message.includes('exceeds')))
+		})
+
+		it('should generate valid WAT for negative integer', () => {
+			const result = compile('x:i32 = -42\npanic\n')
+			assert.strictEqual(result.valid, true)
+			assert.ok(result.text.includes('i32.const'))
+		})
+	})
+
+	describe('i64 edge cases', () => {
+		it('should compile i64 max value', () => {
+			const ctx = compileAndCheck('x:i64 = 9223372036854775807\n')
+			assert.strictEqual(ctx.hasErrors(), false)
+		})
+
+		it('should compile i64 min value', () => {
+			const ctx = compileAndCheck('x:i64 = -9223372036854775808\n')
+			assert.strictEqual(ctx.hasErrors(), false)
+		})
+
+		it('should error on i64 positive overflow', () => {
+			const ctx = compileAndCheck('x:i64 = 9223372036854775808\n')
+			assert.strictEqual(ctx.hasErrors(), true)
+			const errors = ctx.getErrors()
+			assert.ok(errors.some((e) => e.message.includes('exceeds')))
+		})
+
+		it('should error on i64 negative overflow', () => {
+			const ctx = compileAndCheck('x:i64 = -9223372036854775809\n')
+			assert.strictEqual(ctx.hasErrors(), true)
+			const errors = ctx.getErrors()
+			assert.ok(errors.some((e) => e.message.includes('exceeds')))
+		})
+
+		it('should correctly split large i64 into low/high parts', () => {
+			// Test with a value that requires high bits: 2^32 + 1 = 4294967297
+			const result = compile('x:i64 = 4294967297\npanic\n')
+			assert.strictEqual(result.valid, true)
+			// WAT should show i64.const with the correct value
+			assert.ok(result.text.includes('i64.const'))
+		})
+
+		it('should correctly handle negative i64 with high bits', () => {
+			// Test with -1 which in 64-bit is all 1s (low=-1, high=-1)
+			const result = compile('x:i64 = -1\npanic\n')
+			assert.strictEqual(result.valid, true)
+		})
+	})
+
 	describe('shadowing', () => {
 		it('should allow rebinding same name with same type', () => {
 			const ctx = compileAndCheck('x:i32 = 0\nx:i32 = 1\n')
