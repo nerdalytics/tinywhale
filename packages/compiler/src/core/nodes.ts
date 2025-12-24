@@ -9,6 +9,7 @@ import type { TokenId } from './tokens.ts'
 /** Node kinds - one per grammar production. */
 export const NodeKind = {
 	DedentLine: 1,
+	FloatLiteral: 103,
 
 	// Expressions (100-149)
 	Identifier: 100,
@@ -25,6 +26,7 @@ export const NodeKind = {
 
 	// Type annotations (150-199)
 	TypeAnnotation: 150,
+	UnaryExpr: 102,
 	VariableBinding: 11,
 } as const
 

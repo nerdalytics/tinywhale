@@ -285,30 +285,72 @@ function tokenizeIdentifierOrKeyword(
 	return pos
 }
 
+/** Consume digits and return new position */
+function consumeDigits(content: string, pos: number): number {
+	while (pos < content.length && isDigit(content[pos] as string)) {
+		pos++
+	}
+	return pos
+}
+
+/** Check if position has a decimal point followed by digit */
+function hasDecimalPoint(content: string, pos: number): boolean {
+	return (
+		pos < content.length &&
+		content[pos] === '.' &&
+		pos + 1 < content.length &&
+		isDigit(content[pos + 1] as string)
+	)
+}
+
+/** Check if character is an exponent marker */
+function isExponentMarker(char: string): boolean {
+	return char === 'e' || char === 'E'
+}
+
+/** Check if character is a sign */
+function isSign(char: string): boolean {
+	return char === '+' || char === '-'
+}
+
+/** Parse optional exponent part (e.g., e-10, E+5), return new position */
+function consumeExponent(content: string, pos: number): number {
+	if (pos >= content.length || !isExponentMarker(content[pos] as string)) return pos
+	pos++
+	if (pos < content.length && isSign(content[pos] as string)) pos++
+	return consumeDigits(content, pos)
+}
+
 /**
- * Tokenize integer literal at position.
+ * Tokenize numeric literal (integer or float) at position.
  * Returns the end position after the literal.
+ *
+ * Integer: digit+
+ * Float: digit+ "." digit+ (("e" | "E") ("+" | "-")? digit+)?
  */
-function tokenizeIntLiteral(
+function tokenizeNumericLiteral(
 	content: string,
 	startPos: number,
 	indentCount: number,
 	lineNumber: number,
 	context: CompilationContext
 ): number {
-	let pos = startPos
-	while (pos < content.length && isDigit(content[pos] as string)) {
-		pos++
+	let pos = consumeDigits(content, startPos)
+	const isFloat = hasDecimalPoint(content, pos)
+
+	if (isFloat) {
+		pos = consumeDigits(content, pos + 1) // skip '.' and consume fraction
+		pos = consumeExponent(content, pos)
 	}
+
 	const text = content.slice(startPos, pos)
-	const value = Number.parseInt(text, 10)
-	const column = indentCount + startPos + 1
+	const stringId = context.strings.intern(text)
 
 	context.tokens.add({
-		column,
-		kind: TokenKind.IntLiteral,
+		column: indentCount + startPos + 1,
+		kind: isFloat ? TokenKind.FloatLiteral : TokenKind.IntLiteral,
 		line: lineNumber,
-		payload: value,
+		payload: stringId,
 	})
 	return pos
 }
@@ -338,6 +380,15 @@ function tokenizeOperator(
 		})
 		return pos + 1
 	}
+	if (char === '-') {
+		context.tokens.add({
+			column: indentCount + pos + 1,
+			kind: TokenKind.Minus,
+			line: lineNumber,
+			payload: 0,
+		})
+		return pos + 1
+	}
 	return null
 }
 
@@ -358,7 +409,7 @@ function handleKnownToken(char: string, pos: number, state: TokenizeState): numb
 		return tokenizeIdentifierOrKeyword(content, pos, indentCount, lineNumber, context)
 	}
 	if (isDigit(char)) {
-		return tokenizeIntLiteral(content, pos, indentCount, lineNumber, context)
+		return tokenizeNumericLiteral(content, pos, indentCount, lineNumber, context)
 	}
 	return tokenizeOperator(char, pos, indentCount, lineNumber, context)
 }

@@ -120,62 +120,176 @@ function getTypeNameFromToken(tokenKind: TokenKind): { name: string; typeId: Typ
 
 /**
  * Integer bounds for type checking literals.
+ * All bounds use BigInt for consistent precision.
  */
 const INT_BOUNDS = {
-	i32: { max: 2147483647, min: -2147483648 },
+	i32: { max: BigInt(2147483647), min: BigInt(-2147483648) },
 	i64: { max: BigInt('9223372036854775807'), min: BigInt('-9223372036854775808') },
 }
 
 /**
- * Check if a value fits in the given type bounds.
+ * Check if a BigInt value fits in the given integer type bounds.
  */
-function valueFitsInType(value: number, typeId: TypeId): boolean {
+function valueFitsInType(value: bigint, typeId: TypeId): boolean {
 	if (typeId === BuiltinTypeId.I32) {
 		return value >= INT_BOUNDS.i32.min && value <= INT_BOUNDS.i32.max
 	}
 	if (typeId === BuiltinTypeId.I64) {
-		// For now, JavaScript number precision limits i64 checking
-		// Values beyond safe integer range would need BigInt parsing
-		return true // Simplified: assume fits for now
+		return value >= INT_BOUNDS.i64.min && value <= INT_BOUNDS.i64.max
 	}
-	// Floats: any number is valid
-	return true
+	return false
 }
 
 /**
- * Check an integer literal expression.
- * The literal takes the expected type from the binding context.
+ * Split a BigInt value into low and high 32-bit parts for codegen.
+ * Uses two's complement representation for negative values.
  */
-function checkIntLiteral(
+function splitBigIntTo32BitParts(value: bigint, typeId: TypeId): { low: number; high: number } {
+	if (typeId === BuiltinTypeId.I32) {
+		// For i32, the value fits in low 32 bits
+		return { high: 0, low: Number(BigInt.asIntN(32, value)) }
+	}
+	const low = Number(BigInt.asIntN(32, value))
+	const high = Number(BigInt.asIntN(32, value >> 32n))
+	return { high, low }
+}
+
+/** Check if value is valid for f32 (doesn't overflow to infinity) */
+function isValidF32(value: number): boolean {
+	const f32Value = Math.fround(value)
+	return Number.isFinite(f32Value) || !Number.isFinite(value)
+}
+
+/** Check if expected type is a float type */
+function isFloatType(typeId: TypeId): boolean {
+	return typeId === BuiltinTypeId.F32 || typeId === BuiltinTypeId.F64
+}
+
+/** Apply negation to a value */
+function applyNegation(value: number, negate: boolean): number {
+	return negate ? -value : value
+}
+
+/** Format display value for error messages */
+function formatDisplayValue(literalText: string, negate: boolean): string {
+	return negate ? `-${literalText}` : literalText
+}
+
+/** Emit a FloatConst instruction and return ExprResult */
+function emitFloatConstInst(
 	nodeId: NodeId,
-	expectedType: TypeId,
+	typeId: TypeId,
+	value: number,
 	state: CheckerState,
 	context: CompilationContext
 ): ExprResult {
-	const node = context.nodes.get(nodeId)
-	const token = context.tokens.get(node.tokenId)
-	const value = token.payload // IntLiteral payload is the parsed value
-
-	// Check bounds
-	if (!valueFitsInType(value, expectedType)) {
-		const typeName = state.types.typeName(expectedType)
-		context.emitAtNode('TWCHECK014' as DiagnosticCode, nodeId, {
-			type: typeName,
-			value: String(value),
-		})
-		return { instId: -1 as InstId, typeId: BuiltinTypeId.Invalid }
-	}
-
-	// Emit IntConst instruction with the expected type
+	const floatId = context.floats.add(value)
 	const instId = state.insts.add({
-		arg0: value, // low 32 bits
-		arg1: 0, // high 32 bits (for i64 - simplified)
+		arg0: floatId as number,
+		arg1: 0,
+		kind: InstKind.FloatConst,
+		parseNodeId: nodeId,
+		typeId,
+	})
+	return { instId, typeId }
+}
+
+/** Emit f32 overflow error */
+function emitF32OverflowError(
+	nodeId: NodeId,
+	displayValue: string,
+	context: CompilationContext
+): ExprResult {
+	context.emitAtNode('TWCHECK017' as DiagnosticCode, nodeId, {
+		type: 'f32',
+		value: displayValue,
+	})
+	return { instId: -1 as InstId, typeId: BuiltinTypeId.Invalid }
+}
+
+/** Handle integer literal being assigned to a float type (implicit conversion) */
+function checkIntLiteralAsFloat(
+	nodeId: NodeId,
+	expectedType: TypeId,
+	literalText: string,
+	negate: boolean,
+	state: CheckerState,
+	context: CompilationContext
+): ExprResult {
+	const value = applyNegation(Number.parseFloat(literalText), negate)
+	if (expectedType === BuiltinTypeId.F32 && !isValidF32(value)) {
+		return emitF32OverflowError(nodeId, formatDisplayValue(literalText, negate), context)
+	}
+	return emitFloatConstInst(nodeId, expectedType, value, state, context)
+}
+
+/** Emit an IntConst instruction and return ExprResult */
+function emitIntConstInst(
+	nodeId: NodeId,
+	expectedType: TypeId,
+	value: bigint,
+	state: CheckerState
+): ExprResult {
+	const { high, low } = splitBigIntTo32BitParts(value, expectedType)
+	const instId = state.insts.add({
+		arg0: low,
+		arg1: high,
 		kind: InstKind.IntConst,
 		parseNodeId: nodeId,
 		typeId: expectedType,
 	})
-
 	return { instId, typeId: expectedType }
+}
+
+/** Emit integer bounds overflow error */
+function emitIntBoundsError(
+	nodeId: NodeId,
+	typeName: string,
+	displayValue: string,
+	context: CompilationContext
+): ExprResult {
+	context.emitAtNode('TWCHECK014' as DiagnosticCode, nodeId, {
+		type: typeName,
+		value: displayValue,
+	})
+	return { instId: -1 as InstId, typeId: BuiltinTypeId.Invalid }
+}
+
+/** Check an integer literal expression for integer types */
+function checkIntLiteralAsInt(
+	nodeId: NodeId,
+	expectedType: TypeId,
+	literalText: string,
+	negate: boolean,
+	state: CheckerState,
+	context: CompilationContext
+): ExprResult {
+	let value = BigInt(literalText)
+	if (negate) value = -value
+
+	if (!valueFitsInType(value, expectedType)) {
+		const typeName = state.types.typeName(expectedType)
+		return emitIntBoundsError(nodeId, typeName, formatDisplayValue(literalText, negate), context)
+	}
+	return emitIntConstInst(nodeId, expectedType, value, state)
+}
+
+/** Check an integer literal expression. */
+function checkIntLiteral(
+	nodeId: NodeId,
+	expectedType: TypeId,
+	state: CheckerState,
+	context: CompilationContext,
+	negate = false
+): ExprResult {
+	const node = context.nodes.get(nodeId)
+	const token = context.tokens.get(node.tokenId)
+	const literalText = context.strings.get(token.payload as StringId)
+
+	if (isFloatType(expectedType)) {
+		return checkIntLiteralAsFloat(nodeId, expectedType, literalText, negate, state, context)
+	}
+	return checkIntLiteralAsInt(nodeId, expectedType, literalText, negate, state, context)
 }
 
 /**
@@ -191,8 +305,6 @@ function checkVarRef(
 	const token = context.tokens.get(node.tokenId)
 	const nameId = token.payload as StringId
 	const name = context.strings.get(nameId)
-
-	// Look up in symbol table
 	const symId = state.symbols.lookupByName(nameId)
 	if (symId === undefined) {
 		context.emitAtNode('TWCHECK013' as DiagnosticCode, nodeId, { name })
@@ -201,7 +313,6 @@ function checkVarRef(
 
 	const symbol = state.symbols.get(symId)
 
-	// Type check: symbol's type must match expected type
 	if (!state.types.areEqual(symbol.typeId, expectedType)) {
 		const expected = state.types.typeName(expectedType)
 		const found = state.types.typeName(symbol.typeId)
@@ -209,7 +320,6 @@ function checkVarRef(
 		return { instId: -1 as InstId, typeId: BuiltinTypeId.Invalid }
 	}
 
-	// Emit VarRef instruction
 	const instId = state.insts.add({
 		arg0: symId as number,
 		arg1: 0,
@@ -219,6 +329,75 @@ function checkVarRef(
 	})
 
 	return { instId, typeId: symbol.typeId }
+}
+
+/** Emit float type mismatch error */
+function emitFloatTypeMismatchError(
+	nodeId: NodeId,
+	expected: string,
+	context: CompilationContext
+): ExprResult {
+	context.emitAtNode('TWCHECK016' as DiagnosticCode, nodeId, {
+		expected,
+		found: 'float literal',
+	})
+	return { instId: -1 as InstId, typeId: BuiltinTypeId.Invalid }
+}
+
+/** Check a float literal expression. */
+function checkFloatLiteral(
+	nodeId: NodeId,
+	expectedType: TypeId,
+	state: CheckerState,
+	context: CompilationContext,
+	negate = false
+): ExprResult {
+	const node = context.nodes.get(nodeId)
+	const token = context.tokens.get(node.tokenId)
+	const literalText = context.strings.get(token.payload as StringId)
+	const value = applyNegation(Number.parseFloat(literalText), negate)
+
+	if (!isFloatType(expectedType)) {
+		return emitFloatTypeMismatchError(nodeId, state.types.typeName(expectedType), context)
+	}
+	if (expectedType === BuiltinTypeId.F32 && !isValidF32(value)) {
+		return emitF32OverflowError(nodeId, formatDisplayValue(literalText, negate), context)
+	}
+	return emitFloatConstInst(nodeId, expectedType, value, state, context)
+}
+
+/**
+ * Check a unary expression (currently only unary minus).
+ * In postorder, the child is at exprNodeId - 1.
+ *
+ * @param exprNodeId - The UnaryExpr node ID
+ * @param expectedType - The expected type
+ * @param state - Checker state
+ * @param context - Compilation context
+ */
+function checkUnaryExpr(
+	exprNodeId: NodeId,
+	expectedType: TypeId,
+	state: CheckerState,
+	context: CompilationContext
+): ExprResult {
+	// In postorder storage, the child expression is immediately before the UnaryExpr
+	const childId = nodeId((exprNodeId as number) - 1)
+	const child = context.nodes.get(childId)
+
+	// Handle literal negation specially (compile-time constant folding)
+	if (child.kind === NodeKind.IntLiteral) {
+		return checkIntLiteral(childId, expectedType, state, context, true)
+	}
+
+	if (child.kind === NodeKind.FloatLiteral) {
+		return checkFloatLiteral(childId, expectedType, state, context, true)
+	}
+
+	// For non-literal negation (e.g., -x where x is a variable), emit error
+	// TODO: Support runtime negation in the future
+	context.emitAtNode('TWCHECK015' as DiagnosticCode, exprNodeId, {})
+	return { instId: -1 as InstId, typeId: BuiltinTypeId.Invalid }
 }
 
 /**
@@ -235,6 +414,10 @@ function checkExpression(
 	switch (node.kind) {
 		case NodeKind.IntLiteral:
 			return checkIntLiteral(exprId, expectedType, state, context)
+		case NodeKind.FloatLiteral:
+			return checkFloatLiteral(exprId, expectedType, state, context)
+		case NodeKind.UnaryExpr:
+			return checkUnaryExpr(exprId, expectedType, state, context)
 		case NodeKind.Identifier:
 			return checkVarRef(exprId, expectedType, state, context)
 		default:
@@ -247,36 +430,49 @@ function checkExpression(
 /**
  * Process a VariableBinding statement.
  * Syntax: identifier TypeAnnotation = Expression
- * In postorder: [Identifier, TypeAnnotation, Expression, VariableBinding]
+ * In postorder: [Identifier, TypeAnnotation, Expression..., VariableBinding]
+ *
+ * Note: Expression may have subtreeSize > 1 (e.g., UnaryExpr has subtreeSize=2).
+ * We must use subtreeSize to correctly navigate the postorder storage.
  */
 function processVariableBinding(
 	bindingId: NodeId,
 	state: CheckerState,
 	context: CompilationContext
 ): void {
-	// In postorder, children are at [bindingId-3, bindingId-2, bindingId-1]
-	// Contract: VariableBinding = Identifier TypeAnnotation "=" Expression
-	const identId = nodeId((bindingId as number) - 3)
-	const typeAnnotationId = nodeId((bindingId as number) - 2)
+	// In postorder, expression root is immediately before VariableBinding
+	// Then we work backwards using subtreeSize to find TypeAnnotation and Identifier
 	const exprId = nodeId((bindingId as number) - 1)
+	const exprNode = context.nodes.get(exprId)
+	console.assert(
+		isExpressionNode(exprNode.kind),
+		'VariableBinding: expected expression at offset -1, found %d',
+		exprNode.kind
+	)
 
-	// 1. Get identifier name
+	// TypeAnnotation is before the expression's entire subtree
+	const typeAnnotationId = nodeId((exprId as number) - exprNode.subtreeSize)
+	const typeAnnotationNode = context.nodes.get(typeAnnotationId)
+	console.assert(
+		typeAnnotationNode.kind === NodeKind.TypeAnnotation,
+		'VariableBinding: expected TypeAnnotation, found %d',
+		typeAnnotationNode.kind
+	)
+
+	// Identifier is before the TypeAnnotation's subtree (subtreeSize=1)
+	const identId = nodeId((typeAnnotationId as number) - typeAnnotationNode.subtreeSize)
 	const identNode = context.nodes.get(identId)
 	console.assert(
 		identNode.kind === NodeKind.Identifier,
-		'VariableBinding: expected Identifier at offset -3, found %d',
+		'VariableBinding: expected Identifier, found %d',
 		identNode.kind
 	)
+
+	// 1. Get identifier name
 	const identToken = context.tokens.get(identNode.tokenId)
 	const nameId = identToken.payload as StringId
 
 	// 2. Resolve declared type from TypeAnnotation
-	const typeAnnotationNode = context.nodes.get(typeAnnotationId)
-	console.assert(
-		typeAnnotationNode.kind === NodeKind.TypeAnnotation,
-		'VariableBinding: expected TypeAnnotation at offset -2, found %d',
-		typeAnnotationNode.kind
-	)
 	const typeToken = context.tokens.get(typeAnnotationNode.tokenId)
 	const typeInfo = getTypeNameFromToken(typeToken.kind)
 
@@ -290,12 +486,6 @@ function processVariableBinding(
 	const declaredType = typeInfo.typeId
 
 	// 3. Check expression with expected type
-	const exprNode = context.nodes.get(exprId)
-	console.assert(
-		isExpressionNode(exprNode.kind),
-		'VariableBinding: expected expression at offset -1, found %d',
-		exprNode.kind
-	)
 	const exprResult = checkExpression(exprId, declaredType, state, context)
 	if (exprResult.typeId === BuiltinTypeId.Invalid) {
 		return // Error already reported
@@ -387,14 +577,12 @@ function trackUnreachable(stmtId: NodeId, state: CheckerState, context: Compilat
 	const line = getNodeLine(stmtId, context)
 
 	if (!state.unreachableRange) {
-		// Start new range
 		state.unreachableRange = {
 			endLine: line,
 			firstNodeId: stmtId,
 			startLine: line,
 		}
 	} else {
-		// Extend existing range
 		state.unreachableRange.endLine = line
 	}
 }
@@ -474,8 +662,6 @@ export function check(context: CompilationContext): CheckResult {
 	const scopes = new ScopeStore()
 	const symbols = new SymbolStore()
 	const types = new TypeStore()
-
-	// Create main scope
 	const mainScopeId = scopes.createMainScope()
 	const mainScope = scopes.get(mainScopeId)
 
@@ -514,10 +700,7 @@ export function check(context: CompilationContext): CheckResult {
 		processLine(lineId, line, state, context)
 	}
 
-	// Flush any remaining unreachable warning
 	flushUnreachableWarning(state, context)
-
-	// Attach stores to context
 	context.insts = insts
 	context.symbols = symbols
 	context.types = types

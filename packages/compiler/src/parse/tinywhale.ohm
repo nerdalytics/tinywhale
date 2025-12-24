@@ -16,7 +16,9 @@ TinyWhale {
   TypeName = typeKeyword
 
   // Expressions
-  Expression = identifier | intLiteral
+  Expression = UnaryExpr | identifier | floatLiteral | intLiteral
+  UnaryExpr = minus PrimaryExpr
+  PrimaryExpr = identifier | floatLiteral | intLiteral
 
   // Keywords
   keyword = panic | typeKeyword
@@ -31,8 +33,10 @@ TinyWhale {
   // Identifiers and literals (from tokenizer)
   identifier = ~keyword letter (alnum | "_")*
   intLiteral = digit+
+  floatLiteral = digit+ "." digit+ (("e" | "E") ("+" | "-")? digit+)?
   colon = ":"
   equals = "="
+  minus = "-"
 
   // Lexical token rules (marker followed by indent level)
   indentToken = "⇥" digit+

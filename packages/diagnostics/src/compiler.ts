@@ -115,6 +115,31 @@ export const TWCHECK014: DiagnosticDef = {
 	suggestion: 'Use a smaller value or a larger type.',
 }
 
+export const TWCHECK015: DiagnosticDef = {
+	code: 'TWCHECK015',
+	description:
+		'Negating a variable or expression is not yet supported. Only literal values can be negated.',
+	message: 'non-literal negation not yet supported',
+	severity: DiagnosticSeverity.Error,
+	suggestion: 'Use a negated literal value directly, like `-42`.',
+}
+
+export const TWCHECK016: DiagnosticDef = {
+	code: 'TWCHECK016',
+	description: 'A float literal cannot be assigned to an integer type.',
+	message: 'type mismatch: expected `{expected}`, found `{found}`',
+	severity: DiagnosticSeverity.Error,
+	suggestion: 'Use an integer literal, or change the type annotation to f32 or f64.',
+}
+
+export const TWCHECK017: DiagnosticDef = {
+	code: 'TWCHECK017',
+	description: 'The float literal value is too large for the declared type.',
+	message: 'float literal `{value}` exceeds `{type}` bounds',
+	severity: DiagnosticSeverity.Error,
+	suggestion: 'Use a smaller value or change the type to f64.',
+}
+
 // =============================================================================
 // CHECKER WARNINGS (TWCHECK050-099)
 // =============================================================================
@@ -150,6 +175,9 @@ export const COMPILER_DIAGNOSTICS = {
 	TWCHECK012,
 	TWCHECK013,
 	TWCHECK014,
+	TWCHECK015,
+	TWCHECK016,
+	TWCHECK017,
 	TWCHECK050,
 	TWGEN001,
 	TWLEX001,
