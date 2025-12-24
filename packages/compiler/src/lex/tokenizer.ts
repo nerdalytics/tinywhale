@@ -325,8 +325,11 @@ function consumeExponent(content: string, pos: number): number {
  * Tokenize numeric literal (integer or float) at position.
  * Returns the end position after the literal.
  *
- * Integer: digit+
+ * Integer: digit+ (("e" | "E") ("+" | "-")? digit+)?
  * Float: digit+ "." digit+ (("e" | "E") ("+" | "-")? digit+)?
+ *
+ * Note: Only the decimal point determines float vs integer.
+ * Scientific notation is allowed for both: 1e10 is integer, 1.0e10 is float.
  */
 function tokenizeNumericLiteral(
 	content: string,
@@ -336,19 +339,21 @@ function tokenizeNumericLiteral(
 	context: CompilationContext
 ): number {
 	let pos = consumeDigits(content, startPos)
-	const isFloat = hasDecimalPoint(content, pos)
+	const hasDecimal = hasDecimalPoint(content, pos)
 
-	if (isFloat) {
+	if (hasDecimal) {
 		pos = consumeDigits(content, pos + 1) // skip '.' and consume fraction
-		pos = consumeExponent(content, pos)
 	}
+
+	// Exponent can appear with or without decimal
+	pos = consumeExponent(content, pos)
 
 	const text = content.slice(startPos, pos)
 	const stringId = context.strings.intern(text)
 
 	context.tokens.add({
 		column: indentCount + startPos + 1,
-		kind: isFloat ? TokenKind.FloatLiteral : TokenKind.IntLiteral,
+		kind: hasDecimal ? TokenKind.FloatLiteral : TokenKind.IntLiteral,
 		line: lineNumber,
 		payload: stringId,
 	})

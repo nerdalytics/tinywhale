@@ -104,31 +104,38 @@ describe('check/variable bindings', () => {
 	})
 
 	describe('float bindings', () => {
-		it('should compile x:f32 = 0 successfully', () => {
-			const ctx = compileAndCheck('x:f32 = 0\n')
+		it('should compile x:f32 = 0.0 successfully', () => {
+			const ctx = compileAndCheck('x:f32 = 0.0\n')
 			assert.strictEqual(ctx.hasErrors(), false)
 			assert.ok(ctx.symbols)
 			const symbol = ctx.symbols.get(0 as import('../../src/check/types.ts').SymbolId)
 			assert.strictEqual(symbol.typeId, 3) // BuiltinTypeId.F32
 		})
 
-		it('should compile x:f64 = 0 successfully', () => {
-			const ctx = compileAndCheck('x:f64 = 0\n')
+		it('should compile x:f64 = 0.0 successfully', () => {
+			const ctx = compileAndCheck('x:f64 = 0.0\n')
 			assert.strictEqual(ctx.hasErrors(), false)
 			assert.ok(ctx.symbols)
 			const symbol = ctx.symbols.get(0 as import('../../src/check/types.ts').SymbolId)
 			assert.strictEqual(symbol.typeId, 4) // BuiltinTypeId.F64
 		})
 
+		it('should error on integer literal assigned to float type', () => {
+			const ctx = compileAndCheck('x:f32 = 0\n')
+			assert.strictEqual(ctx.hasErrors(), true)
+			const errors = ctx.getErrors()
+			assert.ok(errors.some((e) => e.message.includes('type mismatch')))
+		})
+
 		it('should error on f32/f64 type mismatch', () => {
-			const ctx = compileAndCheck('x:f32 = 0\ny:f64 = x\n')
+			const ctx = compileAndCheck('x:f32 = 0.0\ny:f64 = x\n')
 			assert.strictEqual(ctx.hasErrors(), true)
 			const errors = ctx.getErrors()
 			assert.ok(errors.some((e) => e.message.includes('type mismatch')))
 		})
 
 		it('should allow same float type assignment', () => {
-			const ctx = compileAndCheck('x:f32 = 0\ny:f32 = x\n')
+			const ctx = compileAndCheck('x:f32 = 0.0\ny:f32 = x\n')
 			assert.strictEqual(ctx.hasErrors(), false)
 		})
 	})
@@ -314,6 +321,51 @@ describe('check/variable bindings', () => {
 		it('should compile shadowing to valid WASM', () => {
 			const result = compile('x:i32 = 0\nx:i32 = x\npanic\n')
 			assert.strictEqual(result.valid, true)
+		})
+	})
+
+	describe('runtime negation', () => {
+		it('should compile -x where x is i32', () => {
+			const result = compile('x:i32 = 42\ny:i32 = -x\npanic\n')
+			assert.strictEqual(result.valid, true)
+			// WASM uses 0-x for integer negation
+			assert.ok(result.text.includes('i32.sub'))
+		})
+
+		it('should compile -x where x is i64', () => {
+			const result = compile('x:i64 = 42\ny:i64 = -x\npanic\n')
+			assert.strictEqual(result.valid, true)
+			assert.ok(result.text.includes('i64.sub'))
+		})
+
+		it('should compile -x where x is f32', () => {
+			const result = compile('x:f32 = 1.0\ny:f32 = -x\npanic\n')
+			assert.strictEqual(result.valid, true)
+			// WASM has direct fneg for floats
+			assert.ok(result.text.includes('f32.neg'))
+		})
+
+		it('should compile -x where x is f64', () => {
+			const result = compile('x:f64 = 1.0\ny:f64 = -x\npanic\n')
+			assert.strictEqual(result.valid, true)
+			assert.ok(result.text.includes('f64.neg'))
+		})
+	})
+
+	describe('scientific notation', () => {
+		it('should compile integer with scientific notation', () => {
+			const ctx = compileAndCheck('x:i64 = 1e10\n')
+			assert.strictEqual(ctx.hasErrors(), false)
+		})
+
+		it('should compile large integer with scientific notation', () => {
+			const result = compile('x:i64 = 1e18\npanic\n')
+			assert.strictEqual(result.valid, true)
+		})
+
+		it('should error on i32 overflow from scientific notation', () => {
+			const ctx = compileAndCheck('x:i32 = 1e10\n')
+			assert.strictEqual(ctx.hasErrors(), true)
 		})
 	})
 

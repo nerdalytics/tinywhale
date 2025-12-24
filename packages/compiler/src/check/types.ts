@@ -32,18 +32,22 @@ export function symbolId(n: number): SymbolId {
 /**
  * Instruction kinds.
  * These represent semantic operations in the IR.
+ *
+ * Number ranges:
+ * - Terminators: 0-9
+ * - Constants: 10-19
+ * - Variables: 20-29
+ * - Operators: 30-39
  */
 export const InstKind = {
-	// Variables (20-29)
 	/** Variable binding: arg0 = SymbolId, arg1 = initializer InstId */
 	Bind: 20,
 	/** Float constant: arg0 = FloatId (index into FloatStore) */
 	FloatConst: 11,
-
-	// Constants (10-19)
 	/** Integer constant: arg0 = low 32 bits, arg1 = high 32 bits (for i64) */
 	IntConst: 10,
-	// Terminators (0-9)
+	/** Unary negation: arg0 = operand InstId */
+	Negate: 30,
 	/** panic - unconditional trap, terminates control flow */
 	Unreachable: 0,
 	/** Variable reference: arg0 = SymbolId */

@@ -1,0 +1,8 @@
+# Runtime negation of variables
+x:i32 = 42
+y:i32 = -x     # y = -42 (runtime negation)
+
+a:f64 = 3.14
+b:f64 = -a     # b = -3.14 (uses f64.neg)
+
+panic

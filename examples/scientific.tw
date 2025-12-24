@@ -1,0 +1,9 @@
+# Scientific notation for integers
+billion:i64 = 1e9          # 1,000,000,000
+trillion:i64 = 1e12        # 1,000,000,000,000
+
+# Float literals still require decimal point
+pi:f64 = 3.14159e0         # same as 3.14159
+tiny:f32 = 1.5e-10         # 0.00000000015
+
+panic
