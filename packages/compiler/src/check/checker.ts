@@ -207,22 +207,6 @@ function emitF32OverflowError(
 	return { instId: -1 as InstId, typeId: BuiltinTypeId.Invalid }
 }
 
-/** Handle integer literal being assigned to a float type (implicit conversion) */
-function checkIntLiteralAsFloat(
-	nodeId: NodeId,
-	expectedType: TypeId,
-	literalText: string,
-	negate: boolean,
-	state: CheckerState,
-	context: CompilationContext
-): ExprResult {
-	const value = applyNegation(Number.parseFloat(literalText), negate)
-	if (expectedType === BuiltinTypeId.F32 && !isValidF32(value)) {
-		return emitF32OverflowError(nodeId, formatDisplayValue(literalText, negate), context)
-	}
-	return emitFloatConstInst(nodeId, expectedType, value, state, context)
-}
-
 /** Emit an IntConst instruction and return ExprResult */
 function emitIntConstInst(
 	nodeId: NodeId,
@@ -255,6 +239,18 @@ function emitIntBoundsError(
 	return { instId: -1 as InstId, typeId: BuiltinTypeId.Invalid }
 }
 
+/** Parse integer literal text, handling scientific notation (e.g., 1e10) */
+function parseIntegerLiteral(text: string): bigint {
+	const expMatch = text.match(/^(\d+)[eE]([+-]?\d+)$/)
+	if (expMatch) {
+		const base = BigInt(expMatch[1] as string)
+		const exp = Number(expMatch[2])
+		if (exp < 0) throw new Error('Negative exponent not allowed for integers')
+		return base * 10n ** BigInt(exp)
+	}
+	return BigInt(text)
+}
+
 /** Check an integer literal expression for integer types */
 function checkIntLiteralAsInt(
 	nodeId: NodeId,
@@ -264,7 +260,7 @@ function checkIntLiteralAsInt(
 	state: CheckerState,
 	context: CompilationContext
 ): ExprResult {
-	let value = BigInt(literalText)
+	let value = parseIntegerLiteral(literalText)
 	if (negate) value = -value
 
 	if (!valueFitsInType(value, expectedType)) {
@@ -287,7 +283,12 @@ function checkIntLiteral(
 	const literalText = context.strings.get(token.payload as StringId)
 
 	if (isFloatType(expectedType)) {
-		return checkIntLiteralAsFloat(nodeId, expectedType, literalText, negate, state, context)
+		const expected = state.types.typeName(expectedType)
+		context.emitAtNode('TWCHECK016' as DiagnosticCode, nodeId, {
+			expected,
+			found: 'integer literal',
+		})
+		return { instId: -1 as InstId, typeId: BuiltinTypeId.Invalid }
 	}
 	return checkIntLiteralAsInt(nodeId, expectedType, literalText, negate, state, context)
 }
@@ -369,11 +370,6 @@ function checkFloatLiteral(
 /**
  * Check a unary expression (currently only unary minus).
  * In postorder, the child is at exprNodeId - 1.
- *
- * @param exprNodeId - The UnaryExpr node ID
- * @param expectedType - The expected type
- * @param state - Checker state
- * @param context - Compilation context
  */
 function checkUnaryExpr(
 	exprNodeId: NodeId,
@@ -394,10 +390,21 @@ function checkUnaryExpr(
 		return checkFloatLiteral(childId, expectedType, state, context, true)
 	}
 
-	// For non-literal negation (e.g., -x where x is a variable), emit error
-	// TODO: Support runtime negation in the future
-	context.emitAtNode('TWCHECK015' as DiagnosticCode, exprNodeId, {})
-	return { instId: -1 as InstId, typeId: BuiltinTypeId.Invalid }
+	// Runtime negation: check child expression first
+	const childResult = checkExpression(childId, expectedType, state, context)
+	if (childResult.typeId === BuiltinTypeId.Invalid) {
+		return childResult
+	}
+
+	// Emit Negate instruction
+	const instId = state.insts.add({
+		arg0: childResult.instId as number,
+		arg1: 0,
+		kind: InstKind.Negate,
+		parseNodeId: exprNodeId,
+		typeId: childResult.typeId,
+	})
+	return { instId, typeId: childResult.typeId }
 }
 
 /**

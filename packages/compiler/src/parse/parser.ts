@@ -180,7 +180,7 @@ function createNodeEmittingSemantics(
 				tokenId: tid,
 			})
 		},
-		intLiteral(_digits: Node): NodeId {
+		intLiteral(_digits: Node, _expE: Node, _expSign: Node, _expDigits: Node): NodeId {
 			const tid = getTokenIdForOhmNode(this)
 			return context.nodes.add({
 				kind: NodeKind.IntLiteral,

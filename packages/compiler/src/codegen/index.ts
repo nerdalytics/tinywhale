@@ -129,6 +129,31 @@ function emitBind(
 	return mod.local.set(symbol.localIndex, initExpr)
 }
 
+function emitNegate(
+	mod: binaryen.Module,
+	inst: Inst,
+	valueMap: Map<number, binaryen.ExpressionRef>,
+	context: CompilationContext
+): binaryen.ExpressionRef | null {
+	const operand = valueMap.get(inst.arg0)
+	if (operand === undefined) return null
+
+	const binaryenType = toBinaryenType(inst.typeId, context)
+
+	switch (binaryenType) {
+		case binaryen.i32:
+			return mod.i32.sub(mod.i32.const(0), operand)
+		case binaryen.i64:
+			return mod.i64.sub(mod.i64.const(0, 0), operand)
+		case binaryen.f32:
+			return mod.f32.neg(operand)
+		case binaryen.f64:
+			return mod.f64.neg(operand)
+		default:
+			return null
+	}
+}
+
 /**
  * Emit an instruction and return its expression (if it produces a value).
  */
@@ -149,13 +174,20 @@ function emitInstruction(
 			return emitVarRef(mod, inst, context)
 		case InstKind.Bind:
 			return emitBind(mod, inst, valueMap, context)
+		case InstKind.Negate:
+			return emitNegate(mod, inst, valueMap, context)
 		default:
 			return null
 	}
 }
 
 function isValueProducer(kind: import('../check/types.ts').InstKind): boolean {
-	return kind === InstKind.IntConst || kind === InstKind.FloatConst || kind === InstKind.VarRef
+	return (
+		kind === InstKind.IntConst ||
+		kind === InstKind.FloatConst ||
+		kind === InstKind.VarRef ||
+		kind === InstKind.Negate
+	)
 }
 
 function isStatement(kind: import('../check/types.ts').InstKind): boolean {
