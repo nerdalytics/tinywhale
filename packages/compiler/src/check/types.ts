@@ -38,6 +38,7 @@ export function symbolId(n: number): SymbolId {
  * - Constants: 10-19
  * - Variables: 20-29
  * - Operators: 30-39
+ * - Control flow: 40-49
  */
 export const InstKind = {
 	/** Variable binding: arg0 = SymbolId, arg1 = initializer InstId */
@@ -46,8 +47,14 @@ export const InstKind = {
 	FloatConst: 11,
 	/** Integer constant: arg0 = low 32 bits, arg1 = high 32 bits (for i64) */
 	IntConst: 10,
+	/** Match expression: arg0 = scrutinee InstId, arg1 = arm count */
+	Match: 40,
+	/** Match arm: arg0 = pattern InstId, arg1 = body InstId */
+	MatchArm: 41,
 	/** Unary negation: arg0 = operand InstId */
 	Negate: 30,
+	/** Pattern binding: arg0 = SymbolId, arg1 = scrutinee InstId */
+	PatternBind: 42,
 	/** panic - unconditional trap, terminates control flow */
 	Unreachable: 0,
 	/** Variable reference: arg0 = SymbolId */

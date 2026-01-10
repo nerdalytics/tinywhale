@@ -140,6 +140,30 @@ export const TWCHECK017: DiagnosticDef = {
 	suggestion: 'Use a smaller value or change the type to f64.',
 }
 
+export const TWCHECK018: DiagnosticDef = {
+	code: 'TWCHECK018',
+	description: 'Integer literal patterns can only match integer types (i32, i64).',
+	message: 'pattern type mismatch: `{patternType}` pattern cannot match `{scrutineeType}`',
+	severity: DiagnosticSeverity.Error,
+	suggestion: 'Use a wildcard pattern `_` or binding pattern for non-integer scrutinees.',
+}
+
+export const TWCHECK019: DiagnosticDef = {
+	code: 'TWCHECK019',
+	description: 'A match arm was found outside of a match expression.',
+	message: 'match arm outside match expression',
+	severity: DiagnosticSeverity.Error,
+	suggestion: 'Match arms must be indented under a `match` expression.',
+}
+
+export const TWCHECK020: DiagnosticDef = {
+	code: 'TWCHECK020',
+	description: 'Match expression must have a catch-all pattern as the last arm.',
+	message: 'non-exhaustive match: missing catch-all pattern',
+	severity: DiagnosticSeverity.Error,
+	suggestion: 'Add a wildcard pattern `_` or binding pattern as the last arm.',
+}
+
 // =============================================================================
 // CHECKER WARNINGS (TWCHECK050-099)
 // =============================================================================
@@ -178,6 +202,9 @@ export const COMPILER_DIAGNOSTICS = {
 	TWCHECK015,
 	TWCHECK016,
 	TWCHECK017,
+	TWCHECK018,
+	TWCHECK019,
+	TWCHECK020,
 	TWCHECK050,
 	TWGEN001,
 	TWLEX001,

@@ -23,47 +23,47 @@ import {
 	type TypeId,
 } from './types.ts'
 
-/**
- * Tracks a range of unreachable statements.
- */
 interface UnreachableRange {
-	/** First unreachable statement node */
 	firstNodeId: NodeId
-	/** First line of unreachable code */
 	startLine: number
-	/** Last line of unreachable code */
 	endLine: number
 }
 
 /**
- * Internal state during checking.
+ * Context for collecting match arms.
  */
-interface CheckerState {
-	/** Instruction store being populated */
-	readonly insts: InstStore
-	/** Scope store */
-	readonly scopes: ScopeStore
-	/** Symbol store for variable bindings */
-	readonly symbols: SymbolStore
-	/** Type store */
-	readonly types: TypeStore
-	/** Current scope */
-	currentScope: Scope
-	/** Tracking for grouped unreachable warnings */
-	unreachableRange: UnreachableRange | null
+interface MatchContext {
+	/** Scrutinee expression result */
+	scrutinee: ExprResult
+	/** Scrutinee node ID (for diagnostics) */
+	scrutineeNodeId: NodeId
+	/** Expected result type of the match */
+	expectedType: TypeId
+	/** Collected arms (pattern + body) */
+	arms: Array<{ patternNodeId: NodeId; bodyInstId: InstId }>
+	/** The node ID of the match binding/expr for diagnostics */
+	matchNodeId: NodeId
+	/** Binding name for variable creation after finalization */
+	bindingNameId: StringId
+	/** Binding node ID for symbol creation */
+	bindingNodeId: NodeId
 }
 
-/**
- * Result of checking an expression.
- */
+interface CheckerState {
+	readonly insts: InstStore
+	readonly scopes: ScopeStore
+	readonly symbols: SymbolStore
+	readonly types: TypeStore
+	currentScope: Scope
+	unreachableRange: UnreachableRange | null
+	matchContext: MatchContext | null
+}
+
 interface ExprResult {
 	typeId: TypeId
 	instId: InstId
 }
 
-/**
- * Determines if a node kind is a control flow terminator.
- */
 function isTerminator(kind: NodeKind): boolean {
 	return kind === NodeKind.PanicStatement
 }
@@ -85,9 +85,13 @@ function isExpressionNode(kind: NodeKind): boolean {
 }
 
 /**
- * Get the statement child from a line node.
- * Returns null if the line has no statement.
+ * Checks if a node kind represents a pattern.
+ * Pattern kinds are in range 200-249.
  */
+function isPatternNode(kind: NodeKind): boolean {
+	return kind >= 200 && kind < 250
+}
+
 function getStatementFromLine(
 	lineId: NodeId,
 	context: CompilationContext
@@ -100,9 +104,6 @@ function getStatementFromLine(
 	return null
 }
 
-/**
- * Get the type name from a TypeAnnotation node's token.
- */
 function getTypeNameFromToken(tokenKind: TokenKind): { name: string; typeId: TypeId } | null {
 	switch (tokenKind) {
 		case TokenKind.I32:
@@ -127,9 +128,6 @@ const INT_BOUNDS = {
 	i64: { max: BigInt('9223372036854775807'), min: BigInt('-9223372036854775808') },
 }
 
-/**
- * Check if a BigInt value fits in the given integer type bounds.
- */
 function valueFitsInType(value: bigint, typeId: TypeId): boolean {
 	if (typeId === BuiltinTypeId.I32) {
 		return value >= INT_BOUNDS.i32.min && value <= INT_BOUNDS.i32.max
@@ -154,28 +152,23 @@ function splitBigIntTo32BitParts(value: bigint, typeId: TypeId): { low: number; 
 	return { high, low }
 }
 
-/** Check if value is valid for f32 (doesn't overflow to infinity) */
 function isValidF32(value: number): boolean {
 	const f32Value = Math.fround(value)
 	return Number.isFinite(f32Value) || !Number.isFinite(value)
 }
 
-/** Check if expected type is a float type */
 function isFloatType(typeId: TypeId): boolean {
 	return typeId === BuiltinTypeId.F32 || typeId === BuiltinTypeId.F64
 }
 
-/** Apply negation to a value */
 function applyNegation(value: number, negate: boolean): number {
 	return negate ? -value : value
 }
 
-/** Format display value for error messages */
 function formatDisplayValue(literalText: string, negate: boolean): string {
 	return negate ? `-${literalText}` : literalText
 }
 
-/** Emit a FloatConst instruction and return ExprResult */
 function emitFloatConstInst(
 	nodeId: NodeId,
 	typeId: TypeId,
@@ -194,7 +187,6 @@ function emitFloatConstInst(
 	return { instId, typeId }
 }
 
-/** Emit f32 overflow error */
 function emitF32OverflowError(
 	nodeId: NodeId,
 	displayValue: string,
@@ -207,7 +199,6 @@ function emitF32OverflowError(
 	return { instId: -1 as InstId, typeId: BuiltinTypeId.Invalid }
 }
 
-/** Emit an IntConst instruction and return ExprResult */
 function emitIntConstInst(
 	nodeId: NodeId,
 	expectedType: TypeId,
@@ -225,7 +216,6 @@ function emitIntConstInst(
 	return { instId, typeId: expectedType }
 }
 
-/** Emit integer bounds overflow error */
 function emitIntBoundsError(
 	nodeId: NodeId,
 	typeName: string,
@@ -251,7 +241,6 @@ function parseIntegerLiteral(text: string): bigint {
 	return BigInt(text)
 }
 
-/** Check an integer literal expression for integer types */
 function checkIntLiteralAsInt(
 	nodeId: NodeId,
 	expectedType: TypeId,
@@ -270,7 +259,6 @@ function checkIntLiteralAsInt(
 	return emitIntConstInst(nodeId, expectedType, value, state)
 }
 
-/** Check an integer literal expression. */
 function checkIntLiteral(
 	nodeId: NodeId,
 	expectedType: TypeId,
@@ -293,9 +281,6 @@ function checkIntLiteral(
 	return checkIntLiteralAsInt(nodeId, expectedType, literalText, negate, state, context)
 }
 
-/**
- * Check a variable reference expression.
- */
 function checkVarRef(
 	nodeId: NodeId,
 	expectedType: TypeId,
@@ -332,7 +317,6 @@ function checkVarRef(
 	return { instId, typeId: symbol.typeId }
 }
 
-/** Emit float type mismatch error */
 function emitFloatTypeMismatchError(
 	nodeId: NodeId,
 	expected: string,
@@ -345,7 +329,6 @@ function emitFloatTypeMismatchError(
 	return { instId: -1 as InstId, typeId: BuiltinTypeId.Invalid }
 }
 
-/** Check a float literal expression. */
 function checkFloatLiteral(
 	nodeId: NodeId,
 	expectedType: TypeId,
@@ -407,9 +390,6 @@ function checkUnaryExpr(
 	return { instId, typeId: childResult.typeId }
 }
 
-/**
- * Check an expression node.
- */
 function checkExpression(
 	exprId: NodeId,
 	expectedType: TypeId,
@@ -515,9 +495,287 @@ function processVariableBinding(
 	})
 }
 
+function getMatchArmFromLine(
+	lineId: NodeId,
+	context: CompilationContext
+): { id: NodeId; kind: NodeKind } | null {
+	for (const [childId, child] of context.nodes.iterateChildren(lineId)) {
+		if (child.kind === NodeKind.MatchArm) {
+			return { id: childId, kind: child.kind }
+		}
+	}
+	return null
+}
+
+function isIntegerType(typeId: TypeId): boolean {
+	return typeId === BuiltinTypeId.I32 || typeId === BuiltinTypeId.I64
+}
+
+function validateLiteralPattern(
+	patternId: NodeId,
+	scrutineeType: TypeId,
+	state: CheckerState,
+	context: CompilationContext
+): void {
+	if (!isIntegerType(scrutineeType)) {
+		context.emitAtNode('TWCHECK018' as DiagnosticCode, patternId, {
+			patternType: 'integer literal',
+			scrutineeType: state.types.typeName(scrutineeType),
+		})
+	}
+}
+
+function checkOrPatternChildren(
+	patternId: NodeId,
+	scrutineeType: TypeId,
+	state: CheckerState,
+	context: CompilationContext
+): void {
+	for (const [childId, child] of context.nodes.iterateChildren(patternId)) {
+		if (isPatternNode(child.kind)) {
+			checkPattern(childId, scrutineeType, state, context)
+		}
+	}
+}
+
+function checkPattern(
+	patternId: NodeId,
+	scrutineeType: TypeId,
+	state: CheckerState,
+	context: CompilationContext
+): NodeId {
+	const patternNode = context.nodes.get(patternId)
+
+	switch (patternNode.kind) {
+		case NodeKind.LiteralPattern:
+			validateLiteralPattern(patternId, scrutineeType, state, context)
+			break
+		case NodeKind.OrPattern:
+			checkOrPatternChildren(patternId, scrutineeType, state, context)
+			break
+	}
+
+	return patternId
+}
+
 /**
- * Emit an instruction for a statement.
+ * Process a MatchArm node.
+ * In postorder: [Pattern..., Expression..., MatchArm]
  */
+function processMatchArm(armId: NodeId, state: CheckerState, context: CompilationContext): void {
+	if (!state.matchContext) {
+		context.emitAtNode('TWCHECK019' as DiagnosticCode, armId)
+		return
+	}
+
+	// In postorder, children are before parent. We need to find the pattern and expression.
+	// The expression is the last child (closest to MatchArm).
+	// Pattern(s) come before the expression.
+	const exprId = nodeId((armId as number) - 1)
+	const exprNode = context.nodes.get(exprId)
+
+	if (!isExpressionNode(exprNode.kind)) {
+		// Malformed arm
+		return
+	}
+
+	// Pattern is before the expression's subtree
+	const patternId = nodeId((exprId as number) - exprNode.subtreeSize)
+	const patternNode = context.nodes.get(patternId)
+
+	if (!isPatternNode(patternNode.kind)) {
+		// Malformed arm
+		return
+	}
+
+	// Check the pattern
+	checkPattern(patternId, state.matchContext.scrutinee.typeId, state, context)
+
+	// Check the body expression
+	const bodyResult = checkExpression(exprId, state.matchContext.expectedType, state, context)
+
+	// Add to collected arms
+	if (bodyResult.typeId !== BuiltinTypeId.Invalid) {
+		state.matchContext.arms.push({
+			bodyInstId: bodyResult.instId,
+			patternNodeId: patternId,
+		})
+	}
+}
+
+function isSimpleCatchAll(kind: NodeKind): boolean {
+	return kind === NodeKind.WildcardPattern || kind === NodeKind.BindingPattern
+}
+
+function orPatternContainsCatchAll(patternId: NodeId, context: CompilationContext): boolean {
+	for (const [childId, child] of context.nodes.iterateChildren(patternId)) {
+		if (isPatternNode(child.kind) && isCatchAllPattern(childId, context)) {
+			return true
+		}
+	}
+	return false
+}
+
+/**
+ * Check if a pattern is a catch-all (wildcard or binding).
+ * For OrPattern, recursively checks if any child is a catch-all.
+ */
+function isCatchAllPattern(patternId: NodeId, context: CompilationContext): boolean {
+	const pattern = context.nodes.get(patternId)
+
+	if (isSimpleCatchAll(pattern.kind)) return true
+	if (pattern.kind === NodeKind.OrPattern) return orPatternContainsCatchAll(patternId, context)
+	return false
+}
+
+function checkMatchExhaustiveness(
+	arms: MatchContext['arms'],
+	matchNodeId: NodeId,
+	context: CompilationContext
+): void {
+	const lastArm = arms[arms.length - 1]
+	if (!lastArm || !isCatchAllPattern(lastArm.patternNodeId, context)) {
+		context.emitAtNode('TWCHECK020' as DiagnosticCode, matchNodeId)
+	}
+}
+
+function emitMatchArmInsts(
+	arms: MatchContext['arms'],
+	matchNodeId: NodeId,
+	expectedType: TypeId,
+	state: CheckerState
+): void {
+	for (const arm of arms) {
+		state.insts.add({
+			arg0: arm.patternNodeId as number,
+			arg1: arm.bodyInstId as number,
+			kind: InstKind.MatchArm,
+			parseNodeId: matchNodeId,
+			typeId: expectedType,
+		})
+	}
+}
+
+function createMatchBinding(
+	matchCtx: MatchContext,
+	matchInstId: InstId,
+	state: CheckerState
+): void {
+	const symId = state.symbols.add({
+		nameId: matchCtx.bindingNameId,
+		parseNodeId: matchCtx.bindingNodeId,
+		typeId: matchCtx.expectedType,
+	})
+	state.insts.add({
+		arg0: symId as number,
+		arg1: matchInstId as number,
+		kind: InstKind.Bind,
+		parseNodeId: matchCtx.bindingNodeId,
+		typeId: matchCtx.expectedType,
+	})
+}
+
+function finalizeMatch(state: CheckerState, context: CompilationContext): void {
+	if (!state.matchContext) return
+
+	const { arms, expectedType, matchNodeId, scrutinee } = state.matchContext
+
+	checkMatchExhaustiveness(arms, matchNodeId, context)
+	emitMatchArmInsts(arms, matchNodeId, expectedType, state)
+
+	const matchInstId = state.insts.add({
+		arg0: scrutinee.instId as number,
+		arg1: arms.length,
+		kind: InstKind.Match,
+		parseNodeId: matchNodeId,
+		typeId: expectedType,
+	})
+
+	createMatchBinding(state.matchContext, matchInstId, state)
+	state.matchContext = null
+}
+
+interface MatchBindingNodes {
+	identId: NodeId
+	typeAnnotationId: NodeId
+	scrutineeId: NodeId
+	bindingNameId: StringId
+	expectedType: TypeId
+}
+
+/** Extract raw positional nodes from match binding, returns null if structure invalid */
+function extractMatchBindingPositionalNodes(
+	bindingId: NodeId,
+	context: CompilationContext
+): {
+	matchExprNode: ReturnType<typeof context.nodes.get>
+	scrutineeId: NodeId
+	typeAnnotationId: NodeId
+	identId: NodeId
+} | null {
+	const matchExprId = nodeId((bindingId as number) - 1)
+	const matchExprNode = context.nodes.get(matchExprId)
+	if (matchExprNode.kind !== NodeKind.MatchExpr) return null
+
+	const scrutineeId = nodeId((matchExprId as number) - 1)
+	if (!isExpressionNode(context.nodes.get(scrutineeId).kind)) return null
+
+	const typeAnnotationId = nodeId((matchExprId as number) - matchExprNode.subtreeSize)
+	if (context.nodes.get(typeAnnotationId).kind !== NodeKind.TypeAnnotation) return null
+
+	const identId = nodeId(
+		(typeAnnotationId as number) - context.nodes.get(typeAnnotationId).subtreeSize
+	)
+	if (context.nodes.get(identId).kind !== NodeKind.Identifier) return null
+
+	return { identId, matchExprNode, scrutineeId, typeAnnotationId }
+}
+
+function extractMatchBindingNodes(
+	bindingId: NodeId,
+	context: CompilationContext
+): MatchBindingNodes | null {
+	const positional = extractMatchBindingPositionalNodes(bindingId, context)
+	if (!positional) return null
+
+	const { identId, scrutineeId, typeAnnotationId } = positional
+	const bindingNameId = context.tokens.get(context.nodes.get(identId).tokenId).payload as StringId
+	const typeToken = context.tokens.get(context.nodes.get(typeAnnotationId).tokenId)
+	const typeInfo = getTypeNameFromToken(typeToken.kind)
+
+	if (!typeInfo) {
+		context.emitAtNode('TWCHECK010' as DiagnosticCode, typeAnnotationId, { found: 'unknown' })
+		return null
+	}
+
+	return { bindingNameId, expectedType: typeInfo.typeId, identId, scrutineeId, typeAnnotationId }
+}
+
+function startMatchBinding(
+	bindingId: NodeId,
+	state: CheckerState,
+	context: CompilationContext
+): void {
+	const nodes = extractMatchBindingNodes(bindingId, context)
+	if (!nodes) {
+		processVariableBinding(bindingId, state, context)
+		return
+	}
+
+	const scrutineeResult = checkExpression(nodes.scrutineeId, nodes.expectedType, state, context)
+	if (scrutineeResult.typeId === BuiltinTypeId.Invalid) return
+
+	state.matchContext = {
+		arms: [],
+		bindingNameId: nodes.bindingNameId,
+		bindingNodeId: bindingId,
+		expectedType: nodes.expectedType,
+		matchNodeId: bindingId,
+		scrutinee: scrutineeResult,
+		scrutineeNodeId: nodes.scrutineeId,
+	}
+}
+
 function emitStatement(
 	stmtId: NodeId,
 	stmtKind: NodeKind,
@@ -535,21 +793,23 @@ function emitStatement(
 			})
 			break
 		case NodeKind.VariableBinding:
-			processVariableBinding(stmtId, state, context)
+			// Check if this is a match binding
+			{
+				const matchExprId = nodeId((stmtId as number) - 1)
+				const matchExprNode = context.nodes.get(matchExprId)
+				if (matchExprNode.kind === NodeKind.MatchExpr) {
+					startMatchBinding(stmtId, state, context)
+				} else {
+					processVariableBinding(stmtId, state, context)
+				}
+			}
+			break
+		case NodeKind.MatchExpr:
+			// Standalone match expression (discarded form) - not yet implemented
 			break
 	}
 }
 
-/**
- * Checks if a line kind requires a scope (indented or dedented).
- */
-function isIndentedOrDedentedLine(kind: NodeKind): boolean {
-	return kind === NodeKind.IndentedLine || kind === NodeKind.DedentLine
-}
-
-/**
- * Emit the grouped unreachable warning if there's an active range.
- */
 function flushUnreachableWarning(state: CheckerState, context: CompilationContext): void {
 	const range = state.unreachableRange
 	if (!range) return
@@ -568,18 +828,12 @@ function flushUnreachableWarning(state: CheckerState, context: CompilationContex
 	state.unreachableRange = null
 }
 
-/**
- * Get the line number for a node.
- */
 function getNodeLine(nodeId: NodeId, context: CompilationContext): number {
 	const node = context.nodes.get(nodeId)
 	const token = context.tokens.get(node.tokenId)
 	return token.line
 }
 
-/**
- * Track an unreachable statement for grouped warning.
- */
 function trackUnreachable(stmtId: NodeId, state: CheckerState, context: CompilationContext): void {
 	const line = getNodeLine(stmtId, context)
 
@@ -594,9 +848,6 @@ function trackUnreachable(stmtId: NodeId, state: CheckerState, context: Compilat
 	}
 }
 
-/**
- * Process the statement within a RootLine.
- */
 function processRootLineStatement(
 	lineId: NodeId,
 	state: CheckerState,
@@ -616,10 +867,50 @@ function processRootLineStatement(
 	}
 }
 
+function processIndentedLineAsMatchArm(
+	lineId: NodeId,
+	state: CheckerState,
+	context: CompilationContext
+): boolean {
+	if (!state.matchContext) return false
+
+	const arm = getMatchArmFromLine(lineId, context)
+	if (!arm) return false
+
+	processMatchArm(arm.id, state, context)
+	return true
+}
+
+function handleIndentedLine(
+	lineId: NodeId,
+	state: CheckerState,
+	context: CompilationContext
+): void {
+	if (!processIndentedLineAsMatchArm(lineId, state, context)) {
+		context.emitAtNode('TWCHECK001' as DiagnosticCode, lineId)
+	}
+}
+
+function handleDedentLine(lineId: NodeId, state: CheckerState, context: CompilationContext): void {
+	if (!state.matchContext) {
+		context.emitAtNode('TWCHECK001' as DiagnosticCode, lineId)
+		return
+	}
+	finalizeMatch(state, context)
+	const stmt = getStatementFromLine(lineId, context)
+	if (stmt) emitStatement(stmt.id, stmt.kind, state, context)
+}
+
+function handleRootLine(lineId: NodeId, state: CheckerState, context: CompilationContext): void {
+	if (state.matchContext) finalizeMatch(state, context)
+	processRootLineStatement(lineId, state, context)
+}
+
 /**
  * Process a line node.
- * - RootLine: valid, process statement
- * - IndentedLine/DedentLine: error - invalid indentation
+ * - RootLine: finalize any pending match, then process statement
+ * - IndentedLine: if match context active, process as match arm; else error
+ * - DedentLine: if match context active, finalize it and process any statement; else error
  */
 function processLine(
 	lineId: NodeId,
@@ -627,12 +918,16 @@ function processLine(
 	state: CheckerState,
 	context: CompilationContext
 ): void {
-	if (isIndentedOrDedentedLine(line.kind)) {
-		context.emitAtNode('TWCHECK001' as DiagnosticCode, lineId)
-		return
+	switch (line.kind) {
+		case NodeKind.IndentedLine:
+			handleIndentedLine(lineId, state, context)
+			break
+		case NodeKind.DedentLine:
+			handleDedentLine(lineId, state, context)
+			break
+		default:
+			handleRootLine(lineId, state, context)
 	}
-
-	processRootLineStatement(lineId, state, context)
 }
 
 /**
@@ -675,6 +970,7 @@ export function check(context: CompilationContext): CheckResult {
 	const state: CheckerState = {
 		currentScope: mainScope,
 		insts,
+		matchContext: null,
 		scopes,
 		symbols,
 		types,
@@ -705,6 +1001,11 @@ export function check(context: CompilationContext): CheckResult {
 	const lines = getLineChildrenInSourceOrder(programId, context)
 	for (const [lineId, line] of lines) {
 		processLine(lineId, line, state, context)
+	}
+
+	// Finalize any pending match at end of program
+	if (state.matchContext) {
+		finalizeMatch(state, context)
 	}
 
 	flushUnreachableWarning(state, context)

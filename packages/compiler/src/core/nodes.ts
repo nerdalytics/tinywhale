@@ -8,6 +8,7 @@ import type { TokenId } from './tokens.ts'
 
 /** Node kinds - one per grammar production. */
 export const NodeKind = {
+	BindingPattern: 202,
 	DedentLine: 1,
 	FloatLiteral: 103,
 
@@ -16,6 +17,10 @@ export const NodeKind = {
 	// Line types (0-9)
 	IndentedLine: 0,
 	IntLiteral: 101,
+	LiteralPattern: 201,
+	MatchArm: 13,
+	MatchExpr: 12,
+	OrPattern: 203,
 
 	// Statements (10-99)
 	PanicStatement: 10,
@@ -28,9 +33,32 @@ export const NodeKind = {
 	TypeAnnotation: 150,
 	UnaryExpr: 102,
 	VariableBinding: 11,
+
+	// Patterns (200-249)
+	WildcardPattern: 200,
 } as const
 
 export type NodeKind = (typeof NodeKind)[keyof typeof NodeKind]
+
+/** Check if a node kind is an expression (100-149) */
+export function isExpressionNode(kind: NodeKind): boolean {
+	return kind >= 100 && kind < 150
+}
+
+/** Check if a node kind is a statement (10-99) */
+export function isStatementNode(kind: NodeKind): boolean {
+	return kind >= 10 && kind < 100
+}
+
+/** Check if a node kind is a pattern (200-249) */
+export function isPatternNode(kind: NodeKind): boolean {
+	return kind >= 200 && kind < 250
+}
+
+/** Check if a node kind is a terminator (ends control flow) */
+export function isTerminator(kind: NodeKind): boolean {
+	return kind === NodeKind.PanicStatement
+}
 
 /**
  * Branded type for node IDs.

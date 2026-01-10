@@ -5,6 +5,7 @@
 
 /** Token kinds - small integer discriminant. */
 export const TokenKind = {
+	Arrow: 6,
 	Colon: 3,
 	Dedent: 1,
 
@@ -22,11 +23,14 @@ export const TokenKind = {
 	// Structural tokens (0-9)
 	Indent: 0,
 	IntLiteral: 101,
+	Match: 15,
 	Minus: 5,
 	Newline: 2,
 
 	// Keywords (10-99)
 	Panic: 10,
+	Pipe: 8,
+	Underscore: 7,
 } as const
 
 export type TokenKind = (typeof TokenKind)[keyof typeof TokenKind]

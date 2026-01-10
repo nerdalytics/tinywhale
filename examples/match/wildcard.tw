@@ -1,0 +1,3 @@
+x: i32 = 42
+result: i32 = match x
+	_ -> 0
