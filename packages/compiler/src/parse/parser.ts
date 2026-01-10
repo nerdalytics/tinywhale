@@ -22,6 +22,8 @@ function tokenToOhmString(
 			return `⇤${token.payload}`
 		case TokenKind.Panic:
 			return 'panic'
+		case TokenKind.Match:
+			return 'match'
 		case TokenKind.I32:
 			return 'i32'
 		case TokenKind.I64:
@@ -43,6 +45,12 @@ function tokenToOhmString(
 			return '='
 		case TokenKind.Minus:
 			return '-'
+		case TokenKind.Arrow:
+			return '->'
+		case TokenKind.Underscore:
+			return '_'
+		case TokenKind.Pipe:
+			return '|'
 		default:
 			return null
 	}
@@ -216,7 +224,132 @@ function createNodeEmittingSemantics(
 		},
 	})
 
+	// Emit pattern nodes
+	semantics.addOperation<NodeId>('emitPattern', {
+		BindingPattern(ident: Node): NodeId {
+			const tid = getTokenIdForOhmNode(ident)
+			return context.nodes.add({
+				kind: NodeKind.BindingPattern,
+				subtreeSize: 1,
+				tokenId: tid,
+			})
+		},
+		LiteralPattern(_optMinus: Node, _lit: Node): NodeId {
+			const tid = getTokenIdForOhmNode(this)
+			return context.nodes.add({
+				kind: NodeKind.LiteralPattern,
+				subtreeSize: 1, // Leaf - minus is part of pattern
+				tokenId: tid,
+			})
+		},
+		OrPattern(first: Node, _pipes: Node, rest: Node): NodeId {
+			// Emit all primary patterns first (postorder)
+			const startCount = context.nodes.count()
+			first['emitPattern']()
+			for (const child of rest.children) {
+				child['emitPattern']()
+			}
+			const childCount = context.nodes.count() - startCount
+
+			// If only one pattern, return it directly (no OrPattern wrapper)
+			if (childCount === 1) {
+				return startCount as NodeId
+			}
+
+			const tid = getTokenIdForOhmNode(this)
+			return context.nodes.add({
+				kind: NodeKind.OrPattern,
+				subtreeSize: 1 + childCount,
+				tokenId: tid,
+			})
+		},
+		Pattern(orPattern: Node): NodeId {
+			return orPattern['emitPattern']()
+		},
+		PrimaryPattern(pattern: Node): NodeId {
+			return pattern['emitPattern']()
+		},
+		WildcardPattern(_underscore: Node): NodeId {
+			const tid = getTokenIdForOhmNode(this)
+			return context.nodes.add({
+				kind: NodeKind.WildcardPattern,
+				subtreeSize: 1,
+				tokenId: tid,
+			})
+		},
+	})
+
+	// Emit match arm nodes
+	semantics.addOperation<NodeId>('emitMatchArm', {
+		MatchArm(pattern: Node, _arrow: Node, expr: Node): NodeId {
+			const startCount = context.nodes.count()
+			pattern['emitPattern']()
+			expr['emitExpression']()
+			const childCount = context.nodes.count() - startCount
+
+			const tid = getTokenIdForOhmNode(this)
+			return context.nodes.add({
+				kind: NodeKind.MatchArm,
+				subtreeSize: 1 + childCount,
+				tokenId: tid,
+			})
+		},
+	})
+
+	// Emit indented content (MatchArm or Statement)
+	semantics.addOperation<NodeId>('emitIndentedContent', {
+		IndentedContent(content: Node): NodeId {
+			// Try to emit as MatchArm first, otherwise as Statement
+			if (content.ctorName === 'MatchArm') {
+				return content['emitMatchArm']()
+			}
+			return content['emitStatement']()
+		},
+		MatchArm(pattern: Node, _arrow: Node, expr: Node): NodeId {
+			const startCount = context.nodes.count()
+			pattern['emitPattern']()
+			expr['emitExpression']()
+			const childCount = context.nodes.count() - startCount
+
+			const tid = getTokenIdForOhmNode(this)
+			return context.nodes.add({
+				kind: NodeKind.MatchArm,
+				subtreeSize: 1 + childCount,
+				tokenId: tid,
+			})
+		},
+	})
+
 	semantics.addOperation<NodeId>('emitStatement', {
+		MatchBinding(ident: Node, typeAnnotation: Node, _equals: Node, matchExpr: Node): NodeId {
+			const startCount = context.nodes.count()
+			// Emit children first (postorder)
+			ident['emitExpression']()
+			typeAnnotation['emitTypeAnnotation']()
+			matchExpr['emitStatement']() // MatchExpr emits scrutinee + MatchExpr node
+			const childCount = context.nodes.count() - startCount
+
+			const lineNumber = getLineNumber(this)
+			const tid = getTokenIdForLine(lineNumber)
+
+			return context.nodes.add({
+				kind: NodeKind.VariableBinding,
+				subtreeSize: 1 + childCount,
+				tokenId: tid,
+			})
+		},
+		MatchExpr(_matchKeyword: Node, scrutinee: Node): NodeId {
+			const startCount = context.nodes.count()
+			scrutinee['emitExpression']()
+			const childCount = context.nodes.count() - startCount
+
+			const tid = getTokenIdForOhmNode(this)
+			return context.nodes.add({
+				kind: NodeKind.MatchExpr,
+				subtreeSize: 1 + childCount,
+				tokenId: tid,
+			})
+		},
 		PanicStatement(_panicKeyword: Node): NodeId {
 			const lineNumber = getLineNumber(this)
 			const tid = getTokenIdForLine(lineNumber)
@@ -268,13 +401,13 @@ function createNodeEmittingSemantics(
 				tokenId: tid,
 			})
 		},
-		IndentedLine(_indentToken: Node, optionalStatement: Node) {
+		IndentedLine(_indentToken: Node, optionalContent: Node) {
 			const lineNumber = getLineNumber(this)
 			const startCount = context.nodes.count()
 
-			const stmtNode = optionalStatement.children[0]
-			if (stmtNode !== undefined) {
-				stmtNode['emitStatement']()
+			const contentNode = optionalContent.children[0]
+			if (contentNode !== undefined) {
+				contentNode['emitIndentedContent']()
 			}
 
 			const childCount = context.nodes.count() - startCount

@@ -2,12 +2,14 @@ TinyWhale {
   Program (a program) = Line*
   Line (a line) = IndentedLine | DedentLine | RootLine
 
-  IndentedLine = indentToken Statement?
+  // IndentedLine can contain a MatchArm or Statement
+  IndentedLine = indentToken IndentedContent?
+  IndentedContent = MatchArm | Statement
   DedentLine = dedentToken+ Statement?
   RootLine = Statement
 
   // Statements
-  Statement = VariableBinding | PanicStatement
+  Statement = MatchBinding | MatchExpr | VariableBinding | PanicStatement
   PanicStatement = panic
 
   // Variable binding: x:i32 = expr (with optional spaces)
@@ -15,15 +17,32 @@ TinyWhale {
   TypeAnnotation = colon TypeName
   TypeName = typeKeyword
 
+  // Match expression: result: Type = match scrutinee
+  MatchBinding = identifier TypeAnnotation equals MatchExpr
+  MatchExpr = matchKeyword Expression
+
+  // Match arm: Pattern -> Expression
+  MatchArm = Pattern arrow Expression
+
+  // Pattern grammar
+  Pattern = OrPattern
+  OrPattern = PrimaryPattern (pipe PrimaryPattern)*
+  PrimaryPattern = WildcardPattern | LiteralPattern | BindingPattern
+
+  WildcardPattern = underscore
+  LiteralPattern = minus? intLiteral
+  BindingPattern = ~keyword ~underscore identifier
+
   // Expressions
   Expression = UnaryExpr | identifier | floatLiteral | intLiteral
   UnaryExpr = minus PrimaryExpr
   PrimaryExpr = identifier | floatLiteral | intLiteral
 
   // Keywords
-  keyword = panic | typeKeyword
+  keyword = panic | typeKeyword | matchKeyword
   typeKeyword = i32 | i64 | f32 | f64
   panic = "panic" ~identifierPart
+  matchKeyword = "match" ~identifierPart
   i32 = "i32" ~identifierPart
   i64 = "i64" ~identifierPart
   f32 = "f32" ~identifierPart
@@ -37,6 +56,9 @@ TinyWhale {
   colon = ":"
   equals = "="
   minus = "-"
+  arrow = "->"
+  underscore = "_" ~identifierPart
+  pipe = "|"
 
   // Lexical token rules (marker followed by indent level)
   indentToken = "⇥" digit+

@@ -183,7 +183,19 @@ const KEYWORDS: Record<string, (typeof TokenKind)[keyof typeof TokenKind]> = {
 	f64: TokenKind.F64,
 	i32: TokenKind.I32,
 	i64: TokenKind.I64,
+	match: TokenKind.Match,
 	panic: TokenKind.Panic,
+}
+
+const SIMPLE_OPERATORS: Record<string, TokenKind | undefined> = {
+	':': TokenKind.Colon,
+	'=': TokenKind.Equals,
+	'|': TokenKind.Pipe,
+}
+
+function getTokenKindForText(text: string): TokenKind | null {
+	if (text === '_') return TokenKind.Underscore
+	return KEYWORDS[text] ?? null
 }
 
 function isIdentifierStart(char: string): boolean {
@@ -232,7 +244,16 @@ function emitIndentToken(
 	lineNumber: number,
 	context: CompilationContext
 ): void {
-	if (newLevel <= previousLevel) return
+	// Emit an Indent token for every indented line (level > 0),
+	// not just when level increases. This ensures consecutive lines
+	// at the same indent level each start with an indent marker,
+	// which is needed for proper parsing of match arms and other
+	// indented content.
+	if (newLevel <= 0) return
+	if (newLevel <= previousLevel) {
+		context.tokens.add({ column: 1, kind: TokenKind.Indent, line: lineNumber, payload: newLevel })
+		return
+	}
 	context.tokens.add({ column: 1, kind: TokenKind.Indent, line: lineNumber, payload: newLevel })
 }
 
@@ -250,6 +271,7 @@ function emitDedentTokens(
 /**
  * Tokenize identifier or keyword at position.
  * Returns the end position after the identifier.
+ * Special case: standalone '_' is tokenized as Underscore (wildcard pattern).
  */
 function tokenizeIdentifierOrKeyword(
 	content: string,
@@ -264,28 +286,17 @@ function tokenizeIdentifierOrKeyword(
 	}
 	const text = content.slice(startPos, pos)
 	const column = indentCount + startPos + 1
+	const tokenKind = getTokenKindForText(text)
 
-	const keywordKind = KEYWORDS[text]
-	if (keywordKind !== undefined) {
-		context.tokens.add({
-			column,
-			kind: keywordKind,
-			line: lineNumber,
-			payload: 0,
-		})
+	if (tokenKind !== null) {
+		context.tokens.add({ column, kind: tokenKind, line: lineNumber, payload: 0 })
 	} else {
 		const stringId = context.strings.intern(text)
-		context.tokens.add({
-			column,
-			kind: TokenKind.Identifier,
-			line: lineNumber,
-			payload: stringId,
-		})
+		context.tokens.add({ column, kind: TokenKind.Identifier, line: lineNumber, payload: stringId })
 	}
 	return pos
 }
 
-/** Consume digits and return new position */
 function consumeDigits(content: string, pos: number): number {
 	while (pos < content.length && isDigit(content[pos] as string)) {
 		pos++
@@ -293,7 +304,6 @@ function consumeDigits(content: string, pos: number): number {
 	return pos
 }
 
-/** Check if position has a decimal point followed by digit */
 function hasDecimalPoint(content: string, pos: number): boolean {
 	return (
 		pos < content.length &&
@@ -303,12 +313,10 @@ function hasDecimalPoint(content: string, pos: number): boolean {
 	)
 }
 
-/** Check if character is an exponent marker */
 function isExponentMarker(char: string): boolean {
 	return char === 'e' || char === 'E'
 }
 
-/** Check if character is a sign */
 function isSign(char: string): boolean {
 	return char === '+' || char === '-'
 }
@@ -360,41 +368,32 @@ function tokenizeNumericLiteral(
 	return pos
 }
 
+function getMinusOrArrowToken(content: string, pos: number): { kind: TokenKind; advance: number } {
+	const isArrow = pos + 1 < content.length && content[pos + 1] === '>'
+	return isArrow ? { advance: 2, kind: TokenKind.Arrow } : { advance: 1, kind: TokenKind.Minus }
+}
+
 function tokenizeOperator(
 	char: string,
 	pos: number,
 	indentCount: number,
 	lineNumber: number,
-	context: CompilationContext
+	context: CompilationContext,
+	content: string
 ): number | null {
-	if (char === ':') {
-		context.tokens.add({
-			column: indentCount + pos + 1,
-			kind: TokenKind.Colon,
-			line: lineNumber,
-			payload: 0,
-		})
+	const column = indentCount + pos + 1
+
+	const simpleKind = SIMPLE_OPERATORS[char]
+	if (simpleKind !== undefined) {
+		context.tokens.add({ column, kind: simpleKind, line: lineNumber, payload: 0 })
 		return pos + 1
 	}
-	if (char === '=') {
-		context.tokens.add({
-			column: indentCount + pos + 1,
-			kind: TokenKind.Equals,
-			line: lineNumber,
-			payload: 0,
-		})
-		return pos + 1
-	}
-	if (char === '-') {
-		context.tokens.add({
-			column: indentCount + pos + 1,
-			kind: TokenKind.Minus,
-			line: lineNumber,
-			payload: 0,
-		})
-		return pos + 1
-	}
-	return null
+
+	if (char !== '-') return null
+
+	const { advance, kind } = getMinusOrArrowToken(content, pos)
+	context.tokens.add({ column, kind, line: lineNumber, payload: 0 })
+	return pos + advance
 }
 
 interface TokenizeState {
@@ -416,7 +415,7 @@ function handleKnownToken(char: string, pos: number, state: TokenizeState): numb
 	if (isDigit(char)) {
 		return tokenizeNumericLiteral(content, pos, indentCount, lineNumber, context)
 	}
-	return tokenizeOperator(char, pos, indentCount, lineNumber, context)
+	return tokenizeOperator(char, pos, indentCount, lineNumber, context, content)
 }
 
 function tokenizeSingleToken(char: string, pos: number, state: TokenizeState): number | 'break' {
