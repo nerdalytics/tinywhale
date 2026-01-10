@@ -3,6 +3,7 @@
  * Carbon-style data-oriented design with 16-byte instructions.
  */
 
+import type { FloatId, StringId } from '../core/context.ts'
 import type { NodeId } from '../core/nodes.ts'
 
 export type InstId = number & { readonly __brand: 'InstId' }
@@ -161,7 +162,7 @@ export interface Scope {
  */
 export interface SymbolEntry {
 	/** Interned name of the symbol */
-	readonly nameId: import('../core/context.ts').StringId
+	readonly nameId: StringId
 	/** Type of this symbol */
 	readonly typeId: TypeId
 	/** WASM local index (fresh for each binding, supports shadowing) */
@@ -176,4 +177,58 @@ export interface SymbolEntry {
 export interface CheckResult {
 	/** Whether checking succeeded (no errors) */
 	readonly succeeded: boolean
+}
+
+// Inst accessor functions - type-safe access to instruction arguments
+
+export function getIntConstLow(inst: Inst): number {
+	return inst.arg0
+}
+
+export function getIntConstHigh(inst: Inst): number {
+	return inst.arg1
+}
+
+export function getFloatConstId(inst: Inst): FloatId {
+	return inst.arg0 as FloatId
+}
+
+export function getVarRefSymbolId(inst: Inst): SymbolId {
+	return inst.arg0 as SymbolId
+}
+
+export function getBindSymbolId(inst: Inst): SymbolId {
+	return inst.arg0 as SymbolId
+}
+
+export function getBindInitId(inst: Inst): InstId {
+	return inst.arg1 as InstId
+}
+
+export function getNegateOperandId(inst: Inst): InstId {
+	return inst.arg0 as InstId
+}
+
+export function getMatchScrutineeId(inst: Inst): InstId {
+	return inst.arg0 as InstId
+}
+
+export function getMatchArmCount(inst: Inst): number {
+	return inst.arg1
+}
+
+export function getMatchArmPatternNodeId(inst: Inst): NodeId {
+	return inst.arg0 as NodeId
+}
+
+export function getMatchArmBodyId(inst: Inst): InstId {
+	return inst.arg1 as InstId
+}
+
+export function getPatternBindSymbolId(inst: Inst): SymbolId {
+	return inst.arg0 as SymbolId
+}
+
+export function getPatternBindScrutineeId(inst: Inst): InstId {
+	return inst.arg1 as InstId
 }

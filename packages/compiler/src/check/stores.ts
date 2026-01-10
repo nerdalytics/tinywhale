@@ -109,7 +109,7 @@ export class ScopeStore {
 export class SymbolStore {
 	private readonly symbols: SymbolEntry[] = []
 	/** Current binding per name (overwrites on shadowing) */
-	private readonly nameToSymbol: Map<number, SymbolId> = new Map()
+	private readonly nameToSymbol: Map<StringId, SymbolId> = new Map()
 	/** Next WASM local index to allocate */
 	private nextLocalIndex = 0
 
@@ -123,7 +123,7 @@ export class SymbolStore {
 		const fullEntry: SymbolEntry = { ...entry, localIndex }
 		this.symbols.push(fullEntry)
 		// Overwrite previous binding (shadowing)
-		this.nameToSymbol.set(entry.nameId as number, id)
+		this.nameToSymbol.set(entry.nameId, id)
 		return id
 	}
 
@@ -132,7 +132,7 @@ export class SymbolStore {
 	 * Returns undefined if the name has not been bound.
 	 */
 	lookupByName(nameId: StringId): SymbolId | undefined {
-		return this.nameToSymbol.get(nameId as number)
+		return this.nameToSymbol.get(nameId)
 	}
 
 	/**

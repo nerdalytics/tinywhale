@@ -41,6 +41,14 @@ export function tokenId(n: number): TokenId {
 	return n as TokenId
 }
 
+export function nextTokenId(id: TokenId): TokenId {
+	return (id + 1) as TokenId
+}
+
+export function offsetTokenId(id: TokenId, offset: number): TokenId {
+	return (id + offset) as TokenId
+}
+
 /**
  * A single token - fixed size, no pointers.
  * Payload meaning depends on kind:

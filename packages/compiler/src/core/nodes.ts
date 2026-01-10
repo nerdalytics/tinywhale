@@ -70,6 +70,14 @@ export function nodeId(n: number): NodeId {
 	return n as NodeId
 }
 
+export function prevNodeId(id: NodeId): NodeId {
+	return (id - 1) as NodeId
+}
+
+export function offsetNodeId(id: NodeId, offset: number): NodeId {
+	return (id + offset) as NodeId
+}
+
 /**
  * Range of node IDs for child access.
  */
@@ -135,7 +143,7 @@ export class NodeStore {
 		const childCount = node.subtreeSize - 1
 		return {
 			count: childCount,
-			start: (id - childCount) as NodeId,
+			start: offsetNodeId(id, -childCount),
 		}
 	}
 
@@ -150,15 +158,14 @@ export class NodeStore {
 		if (count === 0) return
 
 		// Start at the end of the child range
-		let pos = (start as number) + count - 1
+		let pos = offsetNodeId(start, count - 1)
 
-		while (pos >= (start as number)) {
-			const childId = pos as NodeId
-			const child = this.nodes[childId]
+		while (pos >= start) {
+			const child = this.nodes[pos]
 			if (child === undefined) break
-			yield [childId, child]
+			yield [pos, child]
 			// Move backwards past this child's subtree to find previous sibling
-			pos -= child.subtreeSize
+			pos = offsetNodeId(pos, -child.subtreeSize)
 		}
 	}
 
@@ -168,10 +175,10 @@ export class NodeStore {
 	 */
 	*iterateSubtree(id: NodeId): Generator<[NodeId, ParseNode]> {
 		const node = this.get(id)
-		const start = id - node.subtreeSize + 1
-		for (let i = start; i <= id; i++) {
+		const start = offsetNodeId(id, -node.subtreeSize + 1)
+		for (let i = start; i <= id; i = offsetNodeId(i, 1)) {
 			const n = this.nodes[i]
-			if (n !== undefined) yield [i as NodeId, n]
+			if (n !== undefined) yield [i, n]
 		}
 	}
 
