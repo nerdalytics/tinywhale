@@ -1,8 +1,8 @@
 import type { Node } from 'ohm-js'
-import type { CompilationContext } from '../core/context.ts'
+import type { CompilationContext, StringId } from '../core/context.ts'
 import type { DiagnosticCode } from '../core/diagnostics.ts'
 import { type NodeId, NodeKind } from '../core/nodes.ts'
-import { type TokenId, TokenKind, tokenId } from '../core/tokens.ts'
+import { type Token, type TokenId, TokenKind, tokenId } from '../core/tokens.ts'
 import type { TinyWhaleSemantics } from './tinywhale.ohm-bundle.js'
 import TinyWhaleGrammar from './tinywhale.ohm-bundle.js'
 
@@ -11,10 +11,7 @@ export interface ParseResult {
 	rootNode?: NodeId
 }
 
-function tokenToOhmString(
-	token: import('../core/tokens.ts').Token,
-	context: CompilationContext
-): string | null {
+function tokenToOhmString(token: Token, context: CompilationContext): string | null {
 	switch (token.kind) {
 		case TokenKind.Indent:
 			return `⇥${token.payload}`
@@ -33,12 +30,12 @@ function tokenToOhmString(
 		case TokenKind.F64:
 			return 'f64'
 		case TokenKind.Identifier:
-			return context.strings.get(token.payload as import('../core/context.ts').StringId)
+			return context.strings.get(token.payload as StringId)
 		case TokenKind.IntLiteral:
 			// Now stored as StringId
-			return context.strings.get(token.payload as import('../core/context.ts').StringId)
+			return context.strings.get(token.payload as StringId)
 		case TokenKind.FloatLiteral:
-			return context.strings.get(token.payload as import('../core/context.ts').StringId)
+			return context.strings.get(token.payload as StringId)
 		case TokenKind.Colon:
 			return ':'
 		case TokenKind.Equals:
@@ -88,7 +85,7 @@ interface TokenMappingState {
 }
 
 function updateOhmPosition(
-	token: import('../core/tokens.ts').Token,
+	token: Token,
 	state: TokenMappingState,
 	ohmPositionToToken: Map<number, TokenId>,
 	id: TokenId,

@@ -2,20 +2,27 @@ import binaryen from 'binaryen'
 
 import {
 	BuiltinTypeId,
+	getBindInitId,
+	getBindSymbolId,
+	getFloatConstId,
+	getIntConstHigh,
+	getIntConstLow,
+	getMatchArmBodyId,
+	getMatchArmCount,
+	getMatchArmPatternNodeId,
+	getMatchScrutineeId,
+	getNegateOperandId,
+	getVarRefSymbolId,
 	type Inst,
 	type InstId,
 	InstKind,
 	instId,
 	type TypeId,
 } from '../check/types.ts'
-import {
-	type CompilationContext,
-	DiagnosticSeverity,
-	type FloatId,
-	type StringId,
-} from '../core/context.ts'
+import { type CompilationContext, DiagnosticSeverity, type StringId } from '../core/context.ts'
 import type { DiagnosticCode } from '../core/diagnostics.ts'
 import { type NodeId, NodeKind } from '../core/nodes.ts'
+import { nextTokenId } from '../core/tokens.ts'
 
 export class CompileError extends Error {
 	constructor(message: string) {
@@ -86,9 +93,9 @@ function emitIntConst(
 ): binaryen.ExpressionRef {
 	const binaryenType = toBinaryenType(inst.typeId, context)
 	if (binaryenType === binaryen.i64) {
-		return mod.i64.const(inst.arg0, inst.arg1)
+		return mod.i64.const(getIntConstLow(inst), getIntConstHigh(inst))
 	}
-	return mod.i32.const(inst.arg0)
+	return mod.i32.const(getIntConstLow(inst))
 }
 
 /**
@@ -100,7 +107,7 @@ function emitFloatConst(
 	inst: Inst,
 	context: CompilationContext
 ): binaryen.ExpressionRef {
-	const floatId = inst.arg0 as FloatId
+	const floatId = getFloatConstId(inst)
 	const value = context.floats.get(floatId)
 	const binaryenType = toBinaryenType(inst.typeId, context)
 
@@ -115,8 +122,8 @@ function emitVarRef(
 	inst: Inst,
 	context: CompilationContext
 ): binaryen.ExpressionRef | null {
-	const symId = inst.arg0
-	const symbol = context.symbols?.get(symId as import('../check/types.ts').SymbolId)
+	const symId = getVarRefSymbolId(inst)
+	const symbol = context.symbols?.get(symId)
 	if (!symbol) return null
 	const binaryenType = toBinaryenType(symbol.typeId, context)
 	return mod.local.get(symbol.localIndex, binaryenType)
@@ -125,12 +132,12 @@ function emitVarRef(
 function emitBind(
 	mod: binaryen.Module,
 	inst: Inst,
-	valueMap: Map<number, binaryen.ExpressionRef>,
+	valueMap: Map<InstId, binaryen.ExpressionRef>,
 	context: CompilationContext
 ): binaryen.ExpressionRef | null {
-	const symId = inst.arg0
-	const initInstId = inst.arg1
-	const symbol = context.symbols?.get(symId as import('../check/types.ts').SymbolId)
+	const symId = getBindSymbolId(inst)
+	const initInstId = getBindInitId(inst)
+	const symbol = context.symbols?.get(symId)
 	if (!symbol) return null
 
 	const initExpr = valueMap.get(initInstId)
@@ -142,10 +149,11 @@ function emitBind(
 function emitNegate(
 	mod: binaryen.Module,
 	inst: Inst,
-	valueMap: Map<number, binaryen.ExpressionRef>,
+	valueMap: Map<InstId, binaryen.ExpressionRef>,
 	context: CompilationContext
 ): binaryen.ExpressionRef | null {
-	const operand = valueMap.get(inst.arg0)
+	const operandId = getNegateOperandId(inst)
+	const operand = valueMap.get(operandId)
 	if (operand === undefined) return null
 
 	const binaryenType = toBinaryenType(inst.typeId, context)
@@ -181,8 +189,8 @@ function extractLiteralValue(
 	// Check if pattern starts with Minus (kind=5)
 	if (firstToken.kind === 5) {
 		// Negated literal: tokenId+1 is the IntLiteral
-		const literalTokenId = (patternNode.tokenId as number) + 1
-		const literalToken = context.tokens.get(literalTokenId as import('../core/tokens.ts').TokenId)
+		const literalTokenId = nextTokenId(patternNode.tokenId)
+		const literalToken = context.tokens.get(literalTokenId)
 		const text = context.strings.get(literalToken.payload as StringId)
 		return { isNegated: true, value: BigInt(text) }
 	}
@@ -319,16 +327,19 @@ interface MatchArm {
  * Collect match arm instructions that precede the Match instruction.
  */
 function collectMatchArms(
-	currentInstId: number,
+	currentInstId: InstId,
 	armCount: number,
 	context: CompilationContext
 ): MatchArm[] {
 	const arms: MatchArm[] = []
 	for (let i = armCount; i >= 1; i--) {
-		const armInstId = instId(currentInstId - i)
+		const armInstId = instId((currentInstId as number) - i)
 		const armInst = context.insts?.get(armInstId)
 		if (armInst?.kind === InstKind.MatchArm) {
-			arms.push({ bodyInstId: armInst.arg1 as InstId, patternNodeId: armInst.arg0 as NodeId })
+			arms.push({
+				bodyInstId: getMatchArmBodyId(armInst),
+				patternNodeId: getMatchArmPatternNodeId(armInst),
+			})
 		}
 	}
 	return arms
@@ -351,11 +362,11 @@ function processMatchArm(
 	arm: MatchArm,
 	scrutineeExpr: binaryen.ExpressionRef,
 	typeId: TypeId,
-	valueMap: Map<number, binaryen.ExpressionRef>,
+	valueMap: Map<InstId, binaryen.ExpressionRef>,
 	currentResult: binaryen.ExpressionRef | null,
 	context: CompilationContext
 ): binaryen.ExpressionRef | null {
-	const bodyExpr = valueMap.get(arm.bodyInstId as number)
+	const bodyExpr = valueMap.get(arm.bodyInstId)
 	if (bodyExpr === undefined) return currentResult
 	const comparison = emitPatternComparison(mod, scrutineeExpr, arm.patternNodeId, typeId, context)
 	return buildArmResult(mod, comparison, bodyExpr, currentResult)
@@ -366,7 +377,7 @@ function buildMatchChain(
 	scrutineeExpr: binaryen.ExpressionRef,
 	arms: MatchArm[],
 	typeId: TypeId,
-	valueMap: Map<number, binaryen.ExpressionRef>,
+	valueMap: Map<InstId, binaryen.ExpressionRef>,
 	context: CompilationContext
 ): binaryen.ExpressionRef | null {
 	let result: binaryen.ExpressionRef | null = null
@@ -383,14 +394,16 @@ function buildMatchChain(
 function emitMatch(
 	mod: binaryen.Module,
 	inst: Inst,
-	currentInstId: number,
-	valueMap: Map<number, binaryen.ExpressionRef>,
+	currentInstId: InstId,
+	valueMap: Map<InstId, binaryen.ExpressionRef>,
 	context: CompilationContext
 ): binaryen.ExpressionRef | null {
-	const scrutineeExpr = valueMap.get(inst.arg0)
+	const scrutineeId = getMatchScrutineeId(inst)
+	const scrutineeExpr = valueMap.get(scrutineeId)
 	if (scrutineeExpr === undefined) return null
 
-	const arms = collectMatchArms(currentInstId, inst.arg1, context)
+	const armCount = getMatchArmCount(inst)
+	const arms = collectMatchArms(currentInstId, armCount, context)
 	if (arms.length === 0) return null
 
 	return buildMatchChain(mod, scrutineeExpr, arms, inst.typeId, valueMap, context)
@@ -402,8 +415,8 @@ function emitMatch(
 function emitInstruction(
 	mod: binaryen.Module,
 	inst: Inst,
-	instId: number,
-	valueMap: Map<number, binaryen.ExpressionRef>,
+	currentInstId: InstId,
+	valueMap: Map<InstId, binaryen.ExpressionRef>,
 	context: CompilationContext
 ): binaryen.ExpressionRef | null {
 	switch (inst.kind) {
@@ -420,7 +433,7 @@ function emitInstruction(
 		case InstKind.Negate:
 			return emitNegate(mod, inst, valueMap, context)
 		case InstKind.Match:
-			return emitMatch(mod, inst, instId, valueMap, context)
+			return emitMatch(mod, inst, currentInstId, valueMap, context)
 		case InstKind.MatchArm:
 			// MatchArm is handled by emitMatch - skip here
 			return null
@@ -429,7 +442,7 @@ function emitInstruction(
 	}
 }
 
-function isValueProducer(kind: import('../check/types.ts').InstKind): boolean {
+function isValueProducer(kind: InstKind): boolean {
 	return (
 		kind === InstKind.IntConst ||
 		kind === InstKind.FloatConst ||
@@ -439,15 +452,15 @@ function isValueProducer(kind: import('../check/types.ts').InstKind): boolean {
 	)
 }
 
-function isStatement(kind: import('../check/types.ts').InstKind): boolean {
+function isStatement(kind: InstKind): boolean {
 	return kind === InstKind.Unreachable || kind === InstKind.Bind
 }
 
 function processInstruction(
-	currentInstId: number,
+	currentInstId: InstId,
 	inst: Inst,
 	mod: binaryen.Module,
-	valueMap: Map<number, binaryen.ExpressionRef>,
+	valueMap: Map<InstId, binaryen.ExpressionRef>,
 	expressions: binaryen.ExpressionRef[],
 	context: CompilationContext
 ): void {
@@ -467,12 +480,12 @@ function collectExpressions(
 	context: CompilationContext
 ): binaryen.ExpressionRef[] {
 	const expressions: binaryen.ExpressionRef[] = []
-	const valueMap = new Map<number, binaryen.ExpressionRef>()
+	const valueMap = new Map<InstId, binaryen.ExpressionRef>()
 
 	if (!context.insts) return expressions
 
-	for (const [instId, inst] of context.insts) {
-		processInstruction(instId as number, inst, mod, valueMap, expressions, context)
+	for (const [currentInstId, inst] of context.insts) {
+		processInstruction(currentInstId, inst, mod, valueMap, expressions, context)
 	}
 
 	return expressions

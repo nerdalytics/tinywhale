@@ -11,7 +11,7 @@
 
 import type { CompilationContext, StringId } from '../core/context.ts'
 import type { DiagnosticCode } from '../core/diagnostics.ts'
-import { type NodeId, NodeKind, nodeId } from '../core/nodes.ts'
+import { type NodeId, NodeKind, nodeId, offsetNodeId, prevNodeId } from '../core/nodes.ts'
 import { TokenKind } from '../core/tokens.ts'
 import { InstStore, ScopeStore, SymbolStore, TypeStore } from './stores.ts'
 import {
@@ -61,7 +61,11 @@ interface CheckerState {
 
 interface ExprResult {
 	typeId: TypeId
-	instId: InstId
+	instId: InstId | null
+}
+
+function isValidExprResult(result: ExprResult): result is { typeId: TypeId; instId: InstId } {
+	return result.typeId !== BuiltinTypeId.Invalid && result.instId !== null
 }
 
 function isTerminator(kind: NodeKind): boolean {
@@ -196,7 +200,7 @@ function emitF32OverflowError(
 		type: 'f32',
 		value: displayValue,
 	})
-	return { instId: -1 as InstId, typeId: BuiltinTypeId.Invalid }
+	return { instId: null, typeId: BuiltinTypeId.Invalid }
 }
 
 function emitIntConstInst(
@@ -226,7 +230,7 @@ function emitIntBoundsError(
 		type: typeName,
 		value: displayValue,
 	})
-	return { instId: -1 as InstId, typeId: BuiltinTypeId.Invalid }
+	return { instId: null, typeId: BuiltinTypeId.Invalid }
 }
 
 /** Parse integer literal text, handling scientific notation (e.g., 1e10) */
@@ -276,7 +280,7 @@ function checkIntLiteral(
 			expected,
 			found: 'integer literal',
 		})
-		return { instId: -1 as InstId, typeId: BuiltinTypeId.Invalid }
+		return { instId: null, typeId: BuiltinTypeId.Invalid }
 	}
 	return checkIntLiteralAsInt(nodeId, expectedType, literalText, negate, state, context)
 }
@@ -294,7 +298,7 @@ function checkVarRef(
 	const symId = state.symbols.lookupByName(nameId)
 	if (symId === undefined) {
 		context.emitAtNode('TWCHECK013' as DiagnosticCode, nodeId, { name })
-		return { instId: -1 as InstId, typeId: BuiltinTypeId.Invalid }
+		return { instId: null, typeId: BuiltinTypeId.Invalid }
 	}
 
 	const symbol = state.symbols.get(symId)
@@ -303,7 +307,7 @@ function checkVarRef(
 		const expected = state.types.typeName(expectedType)
 		const found = state.types.typeName(symbol.typeId)
 		context.emitAtNode('TWCHECK012' as DiagnosticCode, nodeId, { expected, found })
-		return { instId: -1 as InstId, typeId: BuiltinTypeId.Invalid }
+		return { instId: null, typeId: BuiltinTypeId.Invalid }
 	}
 
 	const instId = state.insts.add({
@@ -326,7 +330,7 @@ function emitFloatTypeMismatchError(
 		expected,
 		found: 'float literal',
 	})
-	return { instId: -1 as InstId, typeId: BuiltinTypeId.Invalid }
+	return { instId: null, typeId: BuiltinTypeId.Invalid }
 }
 
 function checkFloatLiteral(
@@ -361,7 +365,7 @@ function checkUnaryExpr(
 	context: CompilationContext
 ): ExprResult {
 	// In postorder storage, the child expression is immediately before the UnaryExpr
-	const childId = nodeId((exprNodeId as number) - 1)
+	const childId = prevNodeId(exprNodeId)
 	const child = context.nodes.get(childId)
 
 	// Handle literal negation specially (compile-time constant folding)
@@ -375,7 +379,7 @@ function checkUnaryExpr(
 
 	// Runtime negation: check child expression first
 	const childResult = checkExpression(childId, expectedType, state, context)
-	if (childResult.typeId === BuiltinTypeId.Invalid) {
+	if (!isValidExprResult(childResult)) {
 		return childResult
 	}
 
@@ -410,7 +414,7 @@ function checkExpression(
 		default:
 			// Should be unreachable - all expression kinds should be handled
 			console.assert(false, 'checkExpression: unhandled expression kind %d', node.kind)
-			return { instId: -1 as InstId, typeId: BuiltinTypeId.Invalid }
+			return { instId: null, typeId: BuiltinTypeId.Invalid }
 	}
 }
 
@@ -429,7 +433,7 @@ function processVariableBinding(
 ): void {
 	// In postorder, expression root is immediately before VariableBinding
 	// Then we work backwards using subtreeSize to find TypeAnnotation and Identifier
-	const exprId = nodeId((bindingId as number) - 1)
+	const exprId = prevNodeId(bindingId)
 	const exprNode = context.nodes.get(exprId)
 	console.assert(
 		isExpressionNode(exprNode.kind),
@@ -438,7 +442,7 @@ function processVariableBinding(
 	)
 
 	// TypeAnnotation is before the expression's entire subtree
-	const typeAnnotationId = nodeId((exprId as number) - exprNode.subtreeSize)
+	const typeAnnotationId = offsetNodeId(exprId, -exprNode.subtreeSize)
 	const typeAnnotationNode = context.nodes.get(typeAnnotationId)
 	console.assert(
 		typeAnnotationNode.kind === NodeKind.TypeAnnotation,
@@ -447,7 +451,7 @@ function processVariableBinding(
 	)
 
 	// Identifier is before the TypeAnnotation's subtree (subtreeSize=1)
-	const identId = nodeId((typeAnnotationId as number) - typeAnnotationNode.subtreeSize)
+	const identId = offsetNodeId(typeAnnotationId, -typeAnnotationNode.subtreeSize)
 	const identNode = context.nodes.get(identId)
 	console.assert(
 		identNode.kind === NodeKind.Identifier,
@@ -474,7 +478,7 @@ function processVariableBinding(
 
 	// 3. Check expression with expected type
 	const exprResult = checkExpression(exprId, declaredType, state, context)
-	if (exprResult.typeId === BuiltinTypeId.Invalid) {
+	if (!isValidExprResult(exprResult)) {
 		return // Error already reported
 	}
 
@@ -571,7 +575,7 @@ function processMatchArm(armId: NodeId, state: CheckerState, context: Compilatio
 	// In postorder, children are before parent. We need to find the pattern and expression.
 	// The expression is the last child (closest to MatchArm).
 	// Pattern(s) come before the expression.
-	const exprId = nodeId((armId as number) - 1)
+	const exprId = prevNodeId(armId)
 	const exprNode = context.nodes.get(exprId)
 
 	if (!isExpressionNode(exprNode.kind)) {
@@ -580,7 +584,7 @@ function processMatchArm(armId: NodeId, state: CheckerState, context: Compilatio
 	}
 
 	// Pattern is before the expression's subtree
-	const patternId = nodeId((exprId as number) - exprNode.subtreeSize)
+	const patternId = offsetNodeId(exprId, -exprNode.subtreeSize)
 	const patternNode = context.nodes.get(patternId)
 
 	if (!isPatternNode(patternNode.kind)) {
@@ -595,7 +599,7 @@ function processMatchArm(armId: NodeId, state: CheckerState, context: Compilatio
 	const bodyResult = checkExpression(exprId, state.matchContext.expectedType, state, context)
 
 	// Add to collected arms
-	if (bodyResult.typeId !== BuiltinTypeId.Invalid) {
+	if (isValidExprResult(bodyResult)) {
 		state.matchContext.arms.push({
 			bodyInstId: bodyResult.instId,
 			patternNodeId: patternId,
@@ -681,6 +685,10 @@ function finalizeMatch(state: CheckerState, context: CompilationContext): void {
 	const { arms, expectedType, matchNodeId, scrutinee } = state.matchContext
 
 	checkMatchExhaustiveness(arms, matchNodeId, context)
+
+	// scrutinee.instId null check (matchContext only set after valid typeId check)
+	if (scrutinee.instId === null) return
+
 	emitMatchArmInsts(arms, matchNodeId, expectedType, state)
 
 	const matchInstId = state.insts.add({
@@ -713,19 +721,17 @@ function extractMatchBindingPositionalNodes(
 	typeAnnotationId: NodeId
 	identId: NodeId
 } | null {
-	const matchExprId = nodeId((bindingId as number) - 1)
+	const matchExprId = prevNodeId(bindingId)
 	const matchExprNode = context.nodes.get(matchExprId)
 	if (matchExprNode.kind !== NodeKind.MatchExpr) return null
 
-	const scrutineeId = nodeId((matchExprId as number) - 1)
+	const scrutineeId = prevNodeId(matchExprId)
 	if (!isExpressionNode(context.nodes.get(scrutineeId).kind)) return null
 
-	const typeAnnotationId = nodeId((matchExprId as number) - matchExprNode.subtreeSize)
+	const typeAnnotationId = offsetNodeId(matchExprId, -matchExprNode.subtreeSize)
 	if (context.nodes.get(typeAnnotationId).kind !== NodeKind.TypeAnnotation) return null
 
-	const identId = nodeId(
-		(typeAnnotationId as number) - context.nodes.get(typeAnnotationId).subtreeSize
-	)
+	const identId = offsetNodeId(typeAnnotationId, -context.nodes.get(typeAnnotationId).subtreeSize)
 	if (context.nodes.get(identId).kind !== NodeKind.Identifier) return null
 
 	return { identId, matchExprNode, scrutineeId, typeAnnotationId }
@@ -795,7 +801,7 @@ function emitStatement(
 		case NodeKind.VariableBinding:
 			// Check if this is a match binding
 			{
-				const matchExprId = nodeId((stmtId as number) - 1)
+				const matchExprId = prevNodeId(stmtId)
 				const matchExprNode = context.nodes.get(matchExprId)
 				if (matchExprNode.kind === NodeKind.MatchExpr) {
 					startMatchBinding(stmtId, state, context)
