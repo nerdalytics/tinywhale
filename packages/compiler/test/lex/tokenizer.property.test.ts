@@ -4,6 +4,14 @@ import { CompilationContext } from '../../src/core/context.ts'
 import { TokenKind } from '../../src/core/tokens.ts'
 import { tokenize } from '../../src/lex/tokenizer.ts'
 
+function getTokenSequence(ctx: CompilationContext): Array<{ kind: number; line: number; column: number }> {
+	const tokens: Array<{ kind: number; line: number; column: number }> = []
+	for (const [, token] of ctx.tokens) {
+		tokens.push({ kind: token.kind, line: token.line, column: token.column })
+	}
+	return tokens
+}
+
 describe('lex/tokenizer properties', () => {
 	describe('safety properties', () => {
 		it('never throws on arbitrary string input', () => {
@@ -36,6 +44,23 @@ describe('lex/tokenizer properties', () => {
 					const lastIndex = ctx.tokens.count() - 1
 					const lastToken = ctx.tokens.get(lastIndex as never)
 					return lastToken.kind === TokenKind.Eof
+				}),
+				{ numRuns: 1000 }
+			)
+		})
+	})
+
+	describe('determinism properties', () => {
+		it('same input always produces same token sequence', () => {
+			fc.assert(
+				fc.property(fc.string(), (input) => {
+					const ctx1 = new CompilationContext(input)
+					const ctx2 = new CompilationContext(input)
+					tokenize(ctx1)
+					tokenize(ctx2)
+					const tokens1 = getTokenSequence(ctx1)
+					const tokens2 = getTokenSequence(ctx2)
+					return JSON.stringify(tokens1) === JSON.stringify(tokens2)
 				}),
 				{ numRuns: 1000 }
 			)
