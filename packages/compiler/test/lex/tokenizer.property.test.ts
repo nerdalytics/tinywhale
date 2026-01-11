@@ -1,4 +1,3 @@
-import assert from 'node:assert'
 import { describe, it } from 'node:test'
 import fc from 'fast-check'
 import { CompilationContext } from '../../src/core/context.ts'
@@ -12,6 +11,17 @@ describe('lex/tokenizer properties', () => {
 					const ctx = new CompilationContext(input)
 					tokenize(ctx)
 					return true
+				}),
+				{ numRuns: 1000 }
+			)
+		})
+
+		it('always produces at least an EOF token', () => {
+			fc.assert(
+				fc.property(fc.string(), (input) => {
+					const ctx = new CompilationContext(input)
+					tokenize(ctx)
+					return ctx.tokens.count() >= 1
 				}),
 				{ numRuns: 1000 }
 			)
