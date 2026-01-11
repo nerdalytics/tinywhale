@@ -5,6 +5,20 @@ import { NodeKind } from '../../src/core/nodes.ts'
 import { tokenize } from '../../src/lex/tokenizer.ts'
 import { parse } from '../../src/parse/parser.ts'
 
+function getNodeSequence(
+	ctx: CompilationContext
+): Array<{ kind: number; tokenId: number; subtreeSize: number }> {
+	const nodes: Array<{ kind: number; tokenId: number; subtreeSize: number }> = []
+	for (const [, node] of ctx.nodes) {
+		nodes.push({
+			kind: node.kind,
+			subtreeSize: node.subtreeSize,
+			tokenId: node.tokenId,
+		})
+	}
+	return nodes
+}
+
 describe('parse/parser properties', () => {
 	describe('safety properties', () => {
 		it('never throws on any tokenized input', () => {
@@ -127,6 +141,25 @@ describe('parse/parser properties', () => {
 						}
 					}
 					return true
+				}),
+				{ numRuns: 1000 }
+			)
+		})
+	})
+
+	describe('determinism properties', () => {
+		it('same input always produces same node sequence', () => {
+			fc.assert(
+				fc.property(fc.string(), (input) => {
+					const ctx1 = new CompilationContext(input)
+					const ctx2 = new CompilationContext(input)
+					tokenize(ctx1)
+					tokenize(ctx2)
+					parse(ctx1)
+					parse(ctx2)
+					const nodes1 = getNodeSequence(ctx1)
+					const nodes2 = getNodeSequence(ctx2)
+					return JSON.stringify(nodes1) === JSON.stringify(nodes2)
 				}),
 				{ numRuns: 1000 }
 			)
