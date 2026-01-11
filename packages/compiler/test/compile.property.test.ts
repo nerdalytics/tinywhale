@@ -148,10 +148,7 @@ describe('compile/pipeline properties', () => {
 					const normal = compile(source, { optimize: false })
 					const optimized = compile(source, { optimize: true })
 					const checkMagic = (binary: Uint8Array) =>
-						binary[0] === 0x00 &&
-						binary[1] === 0x61 &&
-						binary[2] === 0x73 &&
-						binary[3] === 0x6d
+						binary[0] === 0x00 && binary[1] === 0x61 && binary[2] === 0x73 && binary[3] === 0x6d
 					return checkMagic(normal.binary) && checkMagic(optimized.binary)
 				}),
 				{ numRuns: 100 }
@@ -162,35 +159,28 @@ describe('compile/pipeline properties', () => {
 	describe('semantic preservation properties', () => {
 		it('panic count in source equals unreachable count in WAT', () => {
 			fc.assert(
-				fc.property(
-					fc.integer({ min: 1, max: 10 }),
-					(panicCount) => {
-						const source = 'panic\n'.repeat(panicCount)
-						const result = compile(source)
-						const unreachableCount = (result.text.match(/unreachable/g) || []).length
-						return unreachableCount === panicCount
-					}
-				),
+				fc.property(fc.integer({ max: 10, min: 1 }), (panicCount) => {
+					const source = 'panic\n'.repeat(panicCount)
+					const result = compile(source)
+					const unreachableCount = (result.text.match(/unreachable/g) || []).length
+					return unreachableCount === panicCount
+				}),
 				{ numRuns: 100 }
 			)
 		})
 
 		it('variable binding count equals local count in WAT', () => {
 			fc.assert(
-				fc.property(
-					fc.integer({ min: 1, max: 5 }),
-					(bindingCount) => {
-						const bindings = Array.from(
-							{ length: bindingCount },
-							(_, i) => `v${i}:i32 = ${i}`
-						).join('\n')
-						const source = `${bindings}\npanic\n`
-						const result = compile(source)
-						// Count (local $v... declarations in WAT
-						const localCount = (result.text.match(/\(local \$/g) || []).length
-						return localCount === bindingCount
-					}
-				),
+				fc.property(fc.integer({ max: 5, min: 1 }), (bindingCount) => {
+					const bindings = Array.from({ length: bindingCount }, (_, i) => `v${i}:i32 = ${i}`).join(
+						'\n'
+					)
+					const source = `${bindings}\npanic\n`
+					const result = compile(source)
+					// Count (local $v... declarations in WAT
+					const localCount = (result.text.match(/\(local \$/g) || []).length
+					return localCount === bindingCount
+				}),
 				{ numRuns: 100 }
 			)
 		})
