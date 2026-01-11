@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test'
 import fc from 'fast-check'
 import { CompilationContext } from '../../src/core/context.ts'
+import { TokenKind } from '../../src/core/tokens.ts'
 import { tokenize } from '../../src/lex/tokenizer.ts'
 
 describe('lex/tokenizer properties', () => {
@@ -22,6 +23,19 @@ describe('lex/tokenizer properties', () => {
 					const ctx = new CompilationContext(input)
 					tokenize(ctx)
 					return ctx.tokens.count() >= 1
+				}),
+				{ numRuns: 1000 }
+			)
+		})
+
+		it('final token is always EOF', () => {
+			fc.assert(
+				fc.property(fc.string(), (input) => {
+					const ctx = new CompilationContext(input)
+					tokenize(ctx)
+					const lastIndex = ctx.tokens.count() - 1
+					const lastToken = ctx.tokens.get(lastIndex as never)
+					return lastToken.kind === TokenKind.Eof
 				}),
 				{ numRuns: 1000 }
 			)
