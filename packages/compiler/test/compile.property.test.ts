@@ -158,4 +158,41 @@ describe('compile/pipeline properties', () => {
 			)
 		})
 	})
+
+	describe('semantic preservation properties', () => {
+		it('panic count in source equals unreachable count in WAT', () => {
+			fc.assert(
+				fc.property(
+					fc.integer({ min: 1, max: 10 }),
+					(panicCount) => {
+						const source = 'panic\n'.repeat(panicCount)
+						const result = compile(source)
+						const unreachableCount = (result.text.match(/unreachable/g) || []).length
+						return unreachableCount === panicCount
+					}
+				),
+				{ numRuns: 100 }
+			)
+		})
+
+		it('variable binding count equals local count in WAT', () => {
+			fc.assert(
+				fc.property(
+					fc.integer({ min: 1, max: 5 }),
+					(bindingCount) => {
+						const bindings = Array.from(
+							{ length: bindingCount },
+							(_, i) => `v${i}:i32 = ${i}`
+						).join('\n')
+						const source = `${bindings}\npanic\n`
+						const result = compile(source)
+						// Count (local $v... declarations in WAT
+						const localCount = (result.text.match(/\(local \$/g) || []).length
+						return localCount === bindingCount
+					}
+				),
+				{ numRuns: 100 }
+			)
+		})
+	})
 })
