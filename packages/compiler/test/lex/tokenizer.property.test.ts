@@ -84,4 +84,23 @@ describe('lex/tokenizer properties', () => {
 			)
 		})
 	})
+
+	describe('indentation properties', () => {
+		it('INDENT count equals DEDENT count (balanced)', () => {
+			fc.assert(
+				fc.property(fc.string(), (input) => {
+					const ctx = new CompilationContext(input)
+					tokenize(ctx)
+					let indentCount = 0
+					let dedentCount = 0
+					for (const [, token] of ctx.tokens) {
+						if (token.kind === TokenKind.Indent) indentCount++
+						if (token.kind === TokenKind.Dedent) dedentCount++
+					}
+					return indentCount === dedentCount
+				}),
+				{ numRuns: 1000 }
+			)
+		})
+	})
 })
