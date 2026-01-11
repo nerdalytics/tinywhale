@@ -4,10 +4,12 @@ import { CompilationContext } from '../../src/core/context.ts'
 import { TokenKind } from '../../src/core/tokens.ts'
 import { tokenize } from '../../src/lex/tokenizer.ts'
 
-function getTokenSequence(ctx: CompilationContext): Array<{ kind: number; line: number; column: number }> {
+function getTokenSequence(
+	ctx: CompilationContext
+): Array<{ kind: number; line: number; column: number }> {
 	const tokens: Array<{ kind: number; line: number; column: number }> = []
 	for (const [, token] of ctx.tokens) {
-		tokens.push({ kind: token.kind, line: token.line, column: token.column })
+		tokens.push({ column: token.column, kind: token.kind, line: token.line })
 	}
 	return tokens
 }
