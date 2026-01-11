@@ -237,4 +237,463 @@ describe('parse/parser', () => {
 			assert.strictEqual(ctx.tokens.isValid(panicNode.tokenId), true)
 		})
 	})
+
+	describe('expression precedence', () => {
+		it('should parse multiplication before addition', () => {
+			const ctx = tokenizeAndParse('x:i32 = 1 + 2 * 3')
+			assert.strictEqual(ctx.hasErrors(), false)
+			// Structure: 1 + (2 * 3) - mul binds tighter
+			// Nodes: 1, 2, 3, BinaryExpr(*), BinaryExpr(+), ...
+			let binaryCount = 0
+			for (const [, node] of ctx.nodes) {
+				if (node.kind === NodeKind.BinaryExpr) binaryCount++
+			}
+			assert.strictEqual(binaryCount, 2)
+		})
+
+		it('should parse division before subtraction', () => {
+			const ctx = tokenizeAndParse('x:i32 = 10 - 6 / 2')
+			assert.strictEqual(ctx.hasErrors(), false)
+			let binaryCount = 0
+			for (const [, node] of ctx.nodes) {
+				if (node.kind === NodeKind.BinaryExpr) binaryCount++
+			}
+			assert.strictEqual(binaryCount, 2)
+		})
+
+		it('should parse comparison before logical AND', () => {
+			const ctx = tokenizeAndParse('x:i32 = 1 < 2 && 3 < 4')
+			assert.strictEqual(ctx.hasErrors(), false)
+			// Structure: (1 < 2) && (3 < 4)
+			let binaryCount = 0
+			for (const [, node] of ctx.nodes) {
+				if (node.kind === NodeKind.BinaryExpr) binaryCount++
+			}
+			assert.strictEqual(binaryCount, 3) // two comparisons + one &&
+		})
+
+		it('should parse logical AND before logical OR', () => {
+			const ctx = tokenizeAndParse('x:i32 = 1 || 2 && 3')
+			assert.strictEqual(ctx.hasErrors(), false)
+			// Structure: 1 || (2 && 3)
+			let binaryCount = 0
+			for (const [, node] of ctx.nodes) {
+				if (node.kind === NodeKind.BinaryExpr) binaryCount++
+			}
+			assert.strictEqual(binaryCount, 2)
+		})
+
+		it('should parse bitwise AND before bitwise OR', () => {
+			const ctx = tokenizeAndParse('x:i32 = 1 | 2 & 3')
+			assert.strictEqual(ctx.hasErrors(), false)
+			// Structure: 1 | (2 & 3)
+			let binaryCount = 0
+			for (const [, node] of ctx.nodes) {
+				if (node.kind === NodeKind.BinaryExpr) binaryCount++
+			}
+			assert.strictEqual(binaryCount, 2)
+		})
+
+		it('should parse bitwise XOR between AND and OR', () => {
+			const ctx = tokenizeAndParse('x:i32 = 1 | 2 ^ 3 & 4')
+			assert.strictEqual(ctx.hasErrors(), false)
+			// Structure: 1 | (2 ^ (3 & 4))
+			let binaryCount = 0
+			for (const [, node] of ctx.nodes) {
+				if (node.kind === NodeKind.BinaryExpr) binaryCount++
+			}
+			assert.strictEqual(binaryCount, 3)
+		})
+
+		it('should parse shift operators at multiplication level', () => {
+			const ctx = tokenizeAndParse('x:i32 = 1 + 2 << 3')
+			assert.strictEqual(ctx.hasErrors(), false)
+			// Structure: 1 + (2 << 3) - shift is at mul level
+			let binaryCount = 0
+			for (const [, node] of ctx.nodes) {
+				if (node.kind === NodeKind.BinaryExpr) binaryCount++
+			}
+			assert.strictEqual(binaryCount, 2)
+		})
+
+		it('should parse unary minus with highest precedence', () => {
+			const ctx = tokenizeAndParse('x:i32 = -1 * 2')
+			assert.strictEqual(ctx.hasErrors(), false)
+			// Structure: (-1) * 2
+			let unaryCount = 0
+			let binaryCount = 0
+			for (const [, node] of ctx.nodes) {
+				if (node.kind === NodeKind.UnaryExpr) unaryCount++
+				if (node.kind === NodeKind.BinaryExpr) binaryCount++
+			}
+			assert.strictEqual(unaryCount, 1)
+			assert.strictEqual(binaryCount, 1)
+		})
+
+		it('should parse bitwise NOT with highest precedence', () => {
+			const ctx = tokenizeAndParse('x:i32 = ~1 + 2')
+			assert.strictEqual(ctx.hasErrors(), false)
+			// Structure: (~1) + 2
+			let unaryCount = 0
+			let binaryCount = 0
+			for (const [, node] of ctx.nodes) {
+				if (node.kind === NodeKind.UnaryExpr) unaryCount++
+				if (node.kind === NodeKind.BinaryExpr) binaryCount++
+			}
+			assert.strictEqual(unaryCount, 1)
+			assert.strictEqual(binaryCount, 1)
+		})
+
+		it('should parse parentheses overriding precedence', () => {
+			const ctx = tokenizeAndParse('x:i32 = (1 + 2) * 3')
+			assert.strictEqual(ctx.hasErrors(), false)
+			let parenCount = 0
+			let binaryCount = 0
+			for (const [, node] of ctx.nodes) {
+				if (node.kind === NodeKind.ParenExpr) parenCount++
+				if (node.kind === NodeKind.BinaryExpr) binaryCount++
+			}
+			assert.strictEqual(parenCount, 1)
+			assert.strictEqual(binaryCount, 2)
+		})
+
+		it('should parse nested parentheses', () => {
+			const ctx = tokenizeAndParse('x:i32 = ((1 + 2) * (3 + 4))')
+			assert.strictEqual(ctx.hasErrors(), false)
+			let parenCount = 0
+			for (const [, node] of ctx.nodes) {
+				if (node.kind === NodeKind.ParenExpr) parenCount++
+			}
+			assert.strictEqual(parenCount, 3) // outer + two inner
+		})
+
+		it('should parse deeply nested expression', () => {
+			const ctx = tokenizeAndParse('x:i32 = 1 + 2 * 3 - 4 / 5 + 6')
+			assert.strictEqual(ctx.hasErrors(), false)
+			let binaryCount = 0
+			for (const [, node] of ctx.nodes) {
+				if (node.kind === NodeKind.BinaryExpr) binaryCount++
+			}
+			assert.strictEqual(binaryCount, 5)
+		})
+	})
+
+	describe('expression associativity', () => {
+		it('should be left-associative for addition', () => {
+			const ctx = tokenizeAndParse('x:i32 = 1 + 2 + 3')
+			assert.strictEqual(ctx.hasErrors(), false)
+			// Structure: (1 + 2) + 3
+			let binaryCount = 0
+			for (const [, node] of ctx.nodes) {
+				if (node.kind === NodeKind.BinaryExpr) binaryCount++
+			}
+			assert.strictEqual(binaryCount, 2)
+		})
+
+		it('should be left-associative for subtraction', () => {
+			const ctx = tokenizeAndParse('x:i32 = 10 - 3 - 2')
+			assert.strictEqual(ctx.hasErrors(), false)
+			// Structure: (10 - 3) - 2, not 10 - (3 - 2)
+			let binaryCount = 0
+			for (const [, node] of ctx.nodes) {
+				if (node.kind === NodeKind.BinaryExpr) binaryCount++
+			}
+			assert.strictEqual(binaryCount, 2)
+		})
+
+		it('should be left-associative for multiplication', () => {
+			const ctx = tokenizeAndParse('x:i32 = 2 * 3 * 4')
+			assert.strictEqual(ctx.hasErrors(), false)
+			let binaryCount = 0
+			for (const [, node] of ctx.nodes) {
+				if (node.kind === NodeKind.BinaryExpr) binaryCount++
+			}
+			assert.strictEqual(binaryCount, 2)
+		})
+
+		it('should be left-associative for division', () => {
+			const ctx = tokenizeAndParse('x:i32 = 24 / 4 / 2')
+			assert.strictEqual(ctx.hasErrors(), false)
+			// Structure: (24 / 4) / 2 = 3, not 24 / (4 / 2) = 12
+			let binaryCount = 0
+			for (const [, node] of ctx.nodes) {
+				if (node.kind === NodeKind.BinaryExpr) binaryCount++
+			}
+			assert.strictEqual(binaryCount, 2)
+		})
+
+		it('should be left-associative for bitwise operators', () => {
+			const ctx = tokenizeAndParse('x:i32 = 1 & 2 & 3')
+			assert.strictEqual(ctx.hasErrors(), false)
+			let binaryCount = 0
+			for (const [, node] of ctx.nodes) {
+				if (node.kind === NodeKind.BinaryExpr) binaryCount++
+			}
+			assert.strictEqual(binaryCount, 2)
+		})
+
+		it('should be left-associative for shift operators', () => {
+			const ctx = tokenizeAndParse('x:i32 = 1 << 2 << 3')
+			assert.strictEqual(ctx.hasErrors(), false)
+			let binaryCount = 0
+			for (const [, node] of ctx.nodes) {
+				if (node.kind === NodeKind.BinaryExpr) binaryCount++
+			}
+			assert.strictEqual(binaryCount, 2)
+		})
+
+		it('should be left-associative for logical operators', () => {
+			const ctx = tokenizeAndParse('x:i32 = 1 && 2 && 3')
+			assert.strictEqual(ctx.hasErrors(), false)
+			let binaryCount = 0
+			for (const [, node] of ctx.nodes) {
+				if (node.kind === NodeKind.BinaryExpr) binaryCount++
+			}
+			assert.strictEqual(binaryCount, 2)
+		})
+
+		it('should be right-associative for chained unary', () => {
+			const ctx = tokenizeAndParse('x:i32 = - -1')
+			assert.strictEqual(ctx.hasErrors(), false)
+			// Structure: -(-1)
+			let unaryCount = 0
+			for (const [, node] of ctx.nodes) {
+				if (node.kind === NodeKind.UnaryExpr) unaryCount++
+			}
+			assert.strictEqual(unaryCount, 2)
+		})
+
+		it('should be right-associative for chained bitwise NOT', () => {
+			const ctx = tokenizeAndParse('x:i32 = ~~1')
+			assert.strictEqual(ctx.hasErrors(), false)
+			// Structure: ~(~1)
+			let unaryCount = 0
+			for (const [, node] of ctx.nodes) {
+				if (node.kind === NodeKind.UnaryExpr) unaryCount++
+			}
+			assert.strictEqual(unaryCount, 2)
+		})
+	})
+
+	describe('comparison chaining', () => {
+		it('should parse simple comparison chain', () => {
+			const ctx = tokenizeAndParse('x:i32 = 1 < 2 < 3')
+			assert.strictEqual(ctx.hasErrors(), false)
+			// CompareChain node wraps chained comparisons
+			let compareChainCount = 0
+			for (const [, node] of ctx.nodes) {
+				if (node.kind === NodeKind.CompareChain) compareChainCount++
+			}
+			assert.strictEqual(compareChainCount, 1)
+		})
+
+		it('should parse longer comparison chain', () => {
+			const ctx = tokenizeAndParse('x:i32 = 1 < 2 < 3 < 4')
+			assert.strictEqual(ctx.hasErrors(), false)
+			let compareChainCount = 0
+			for (const [, node] of ctx.nodes) {
+				if (node.kind === NodeKind.CompareChain) compareChainCount++
+			}
+			assert.strictEqual(compareChainCount, 1)
+		})
+
+		it('should parse mixed comparison operators in chain', () => {
+			const ctx = tokenizeAndParse('x:i32 = 1 <= 2 < 3')
+			assert.strictEqual(ctx.hasErrors(), false)
+			let compareChainCount = 0
+			for (const [, node] of ctx.nodes) {
+				if (node.kind === NodeKind.CompareChain) compareChainCount++
+			}
+			assert.strictEqual(compareChainCount, 1)
+		})
+
+		it('should parse equality in chain', () => {
+			const ctx = tokenizeAndParse('x:i32 = 1 == 2 == 3')
+			assert.strictEqual(ctx.hasErrors(), false)
+			let compareChainCount = 0
+			for (const [, node] of ctx.nodes) {
+				if (node.kind === NodeKind.CompareChain) compareChainCount++
+			}
+			assert.strictEqual(compareChainCount, 1)
+		})
+
+		it('should not create CompareChain for single comparison', () => {
+			const ctx = tokenizeAndParse('x:i32 = 1 < 2')
+			assert.strictEqual(ctx.hasErrors(), false)
+			let compareChainCount = 0
+			let binaryCount = 0
+			for (const [, node] of ctx.nodes) {
+				if (node.kind === NodeKind.CompareChain) compareChainCount++
+				if (node.kind === NodeKind.BinaryExpr) binaryCount++
+			}
+			assert.strictEqual(compareChainCount, 0)
+			assert.strictEqual(binaryCount, 1)
+		})
+	})
+
+	describe('complex expression edge cases', () => {
+		it('should parse all operator types together', () => {
+			const ctx = tokenizeAndParse('x:i32 = 1 + 2 * 3 & 4 | 5 ^ 6 && 7 || 8')
+			assert.strictEqual(ctx.hasErrors(), false)
+		})
+
+		it('should parse expression with all precedence levels', () => {
+			// || > && > | > ^ > & > compare > add > mul > unary
+			const ctx = tokenizeAndParse('x:i32 = ~1 * 2 + 3 < 4 & 5 ^ 6 | 7 && 8 || 9')
+			assert.strictEqual(ctx.hasErrors(), false)
+		})
+
+		it('should parse comparison with arithmetic on both sides', () => {
+			const ctx = tokenizeAndParse('x:i32 = 1 + 2 < 3 + 4')
+			assert.strictEqual(ctx.hasErrors(), false)
+			// Structure: (1 + 2) < (3 + 4)
+			let binaryCount = 0
+			for (const [, node] of ctx.nodes) {
+				if (node.kind === NodeKind.BinaryExpr) binaryCount++
+			}
+			assert.strictEqual(binaryCount, 3)
+		})
+
+		it('should parse unary in complex expression', () => {
+			const ctx = tokenizeAndParse('x:i32 = -1 + -2 * -3')
+			assert.strictEqual(ctx.hasErrors(), false)
+			let unaryCount = 0
+			for (const [, node] of ctx.nodes) {
+				if (node.kind === NodeKind.UnaryExpr) unaryCount++
+			}
+			assert.strictEqual(unaryCount, 3)
+		})
+
+		it('should parse parentheses at various positions', () => {
+			const ctx = tokenizeAndParse('x:i32 = (1 + 2) * (3 - 4) / (5 + 6)')
+			assert.strictEqual(ctx.hasErrors(), false)
+			let parenCount = 0
+			for (const [, node] of ctx.nodes) {
+				if (node.kind === NodeKind.ParenExpr) parenCount++
+			}
+			assert.strictEqual(parenCount, 3)
+		})
+
+		it('should parse expression starting with parenthesis', () => {
+			const ctx = tokenizeAndParse('x:i32 = (1 + 2)')
+			assert.strictEqual(ctx.hasErrors(), false)
+		})
+
+		it('should parse expression ending with parenthesis', () => {
+			const ctx = tokenizeAndParse('x:i32 = 1 * (2 + 3)')
+			assert.strictEqual(ctx.hasErrors(), false)
+		})
+
+		it('should parse triple operator expression', () => {
+			const ctx = tokenizeAndParse('x:i32 = 1 >>> 2 >> 3 << 4')
+			assert.strictEqual(ctx.hasErrors(), false)
+			let binaryCount = 0
+			for (const [, node] of ctx.nodes) {
+				if (node.kind === NodeKind.BinaryExpr) binaryCount++
+			}
+			assert.strictEqual(binaryCount, 3)
+		})
+
+		it('should parse modulo operators', () => {
+			const ctx = tokenizeAndParse('x:i32 = 10 % 3 %% 2')
+			assert.strictEqual(ctx.hasErrors(), false)
+			let binaryCount = 0
+			for (const [, node] of ctx.nodes) {
+				if (node.kind === NodeKind.BinaryExpr) binaryCount++
+			}
+			assert.strictEqual(binaryCount, 2)
+		})
+	})
+
+	describe('identifier edge cases', () => {
+		it('should parse identifier with keyword prefix', () => {
+			const ctx = tokenizeAndParse('panicMode:i32 = 1')
+			assert.strictEqual(ctx.hasErrors(), false)
+		})
+
+		it('should parse identifier starting with i32', () => {
+			const ctx = tokenizeAndParse('i32value:i32 = 42')
+			assert.strictEqual(ctx.hasErrors(), false)
+		})
+
+		it('should parse identifier starting with match', () => {
+			const ctx = tokenizeAndParse('matchmaking:i32 = 1')
+			assert.strictEqual(ctx.hasErrors(), false)
+		})
+
+		it('should parse identifier starting with f64', () => {
+			const ctx = tokenizeAndParse('f64data:f64 = 1.0')
+			assert.strictEqual(ctx.hasErrors(), false)
+		})
+
+		it('should parse identifier ending with keyword', () => {
+			const ctx = tokenizeAndParse('mypanic:i32 = 0')
+			assert.strictEqual(ctx.hasErrors(), false)
+		})
+
+		it('should parse identifier containing keyword', () => {
+			const ctx = tokenizeAndParse('dontpanicky:i32 = 1')
+			assert.strictEqual(ctx.hasErrors(), false)
+		})
+
+		it('should reject underscore-prefixed identifier', () => {
+			const ctx = tokenizeAndParse('_private:i32 = 1')
+			assert.strictEqual(ctx.hasErrors(), true)
+		})
+
+		it('should parse identifier with underscores', () => {
+			const ctx = tokenizeAndParse('foo_bar_baz:i32 = 1')
+			assert.strictEqual(ctx.hasErrors(), false)
+		})
+
+		it('should reject dunder identifier', () => {
+			const ctx = tokenizeAndParse('__init__:i32 = 1')
+			assert.strictEqual(ctx.hasErrors(), true)
+		})
+
+		it('should parse identifier with numbers', () => {
+			const ctx = tokenizeAndParse('x1y2z3:i32 = 1')
+			assert.strictEqual(ctx.hasErrors(), false)
+		})
+
+		it('should parse uppercase identifier', () => {
+			const ctx = tokenizeAndParse('CONSTANT:i32 = 42')
+			assert.strictEqual(ctx.hasErrors(), false)
+		})
+
+		it('should parse mixed case identifier', () => {
+			const ctx = tokenizeAndParse('myVariable:i32 = 1')
+			assert.strictEqual(ctx.hasErrors(), false)
+		})
+
+		it('should parse identifier similar to keyword but different case', () => {
+			const ctx = tokenizeAndParse('Panic:i32 = 1')
+			assert.strictEqual(ctx.hasErrors(), false)
+		})
+
+		it('should parse I32 as identifier not type', () => {
+			const ctx = tokenizeAndParse('I32:i32 = 1')
+			assert.strictEqual(ctx.hasErrors(), false)
+		})
+
+		it('should parse MATCH as identifier', () => {
+			const ctx = tokenizeAndParse('MATCH:i32 = 1')
+			assert.strictEqual(ctx.hasErrors(), false)
+		})
+
+		it('should parse single letter identifier', () => {
+			const ctx = tokenizeAndParse('x:i32 = 1')
+			assert.strictEqual(ctx.hasErrors(), false)
+		})
+
+		it('should parse identifier referencing keyword-prefixed name', () => {
+			const ctx = tokenizeAndParse('i32val:i32 = 1\ny:i32 = i32val')
+			assert.strictEqual(ctx.hasErrors(), false)
+		})
+
+		it('should parse multiple keyword-like identifiers', () => {
+			const ctx = tokenizeAndParse('panicLevel:i32 = 1\nmatchCount:i32 = panicLevel')
+			assert.strictEqual(ctx.hasErrors(), false)
+		})
+	})
 })
