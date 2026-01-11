@@ -1,0 +1,17 @@
+# Bitwise operators
+a:i32 = 5 & 3     # AND: 1 (0101 & 0011 = 0001)
+b:i32 = 5 | 3     # OR:  7 (0101 | 0011 = 0111)
+c:i32 = 5 ^ 3     # XOR: 6 (0101 ^ 0011 = 0110)
+d:i32 = ~5        # NOT: -6
+
+# Shift operators
+e:i32 = 1 << 4    # left shift: 16
+f:i32 = 16 >> 2   # signed right shift: 4
+g:i32 = 16 >>> 2  # unsigned right shift: 4
+
+# i64 bitwise
+h:i64 = 255
+j:i64 = 15
+i:i64 = h & j    # 15
+
+panic

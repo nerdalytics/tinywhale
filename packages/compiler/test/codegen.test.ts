@@ -156,4 +156,211 @@ describe('codegen', () => {
 			assert.ok(error instanceof Error)
 		})
 	})
+
+	describe('arithmetic operators', () => {
+		it('should emit i32.add for addition', () => {
+			const result = compileSource('x:i32 = 1 + 2\npanic\n')
+			assert.strictEqual(result.valid, true)
+			assert.ok(result.text.includes('i32.add'))
+		})
+
+		it('should emit i32.sub for subtraction', () => {
+			const result = compileSource('x:i32 = 5 - 3\npanic\n')
+			assert.strictEqual(result.valid, true)
+			assert.ok(result.text.includes('i32.sub'))
+		})
+
+		it('should emit i32.mul for multiplication', () => {
+			const result = compileSource('x:i32 = 3 * 4\npanic\n')
+			assert.strictEqual(result.valid, true)
+			assert.ok(result.text.includes('i32.mul'))
+		})
+
+		it('should emit i32.div_s for division', () => {
+			const result = compileSource('x:i32 = 10 / 2\npanic\n')
+			assert.strictEqual(result.valid, true)
+			assert.ok(result.text.includes('i32.div_s'))
+		})
+
+		it('should emit i32.rem_s for modulo', () => {
+			const result = compileSource('x:i32 = 10 % 3\npanic\n')
+			assert.strictEqual(result.valid, true)
+			assert.ok(result.text.includes('i32.rem_s'))
+		})
+
+		it('should emit i64.add for i64 addition', () => {
+			const result = compileSource('a:i64 = 100\nb:i64 = 50\nx:i64 = a + b\npanic\n')
+			assert.strictEqual(result.valid, true)
+			assert.ok(result.text.includes('i64.add'))
+		})
+
+		it('should emit f32.add for f32 addition', () => {
+			const result = compileSource('a:f32 = 1.5\nb:f32 = 2.5\nx:f32 = a + b\npanic\n')
+			assert.strictEqual(result.valid, true)
+			assert.ok(result.text.includes('f32.add'))
+		})
+
+		it('should emit f64.mul for f64 multiplication', () => {
+			const result = compileSource('a:f64 = 1.5\nb:f64 = 2.5\nx:f64 = a * b\npanic\n')
+			assert.strictEqual(result.valid, true)
+			assert.ok(result.text.includes('f64.mul'))
+		})
+
+		it('should emit f64.div for f64 division', () => {
+			const result = compileSource('a:f64 = 10.0\nb:f64 = 2.0\nx:f64 = a / b\npanic\n')
+			assert.strictEqual(result.valid, true)
+			assert.ok(result.text.includes('f64.div'))
+		})
+	})
+
+	describe('bitwise operators', () => {
+		it('should emit i32.and for bitwise AND', () => {
+			const result = compileSource('x:i32 = 5 & 3\npanic\n')
+			assert.strictEqual(result.valid, true)
+			assert.ok(result.text.includes('i32.and'))
+		})
+
+		it('should emit i32.or for bitwise OR', () => {
+			const result = compileSource('x:i32 = 5 | 3\npanic\n')
+			assert.strictEqual(result.valid, true)
+			assert.ok(result.text.includes('i32.or'))
+		})
+
+		it('should emit i32.xor for bitwise XOR', () => {
+			const result = compileSource('x:i32 = 5 ^ 3\npanic\n')
+			assert.strictEqual(result.valid, true)
+			assert.ok(result.text.includes('i32.xor'))
+		})
+
+		it('should emit i32.xor with -1 for bitwise NOT', () => {
+			const result = compileSource('x:i32 = ~5\npanic\n')
+			assert.strictEqual(result.valid, true)
+			assert.ok(result.text.includes('i32.xor'))
+		})
+
+		it('should emit i32.shl for left shift', () => {
+			const result = compileSource('x:i32 = 1 << 4\npanic\n')
+			assert.strictEqual(result.valid, true)
+			assert.ok(result.text.includes('i32.shl'))
+		})
+
+		it('should emit i32.shr_s for signed right shift', () => {
+			const result = compileSource('x:i32 = 16 >> 2\npanic\n')
+			assert.strictEqual(result.valid, true)
+			assert.ok(result.text.includes('i32.shr_s'))
+		})
+
+		it('should emit i32.shr_u for unsigned right shift', () => {
+			const result = compileSource('x:i32 = 16 >>> 2\npanic\n')
+			assert.strictEqual(result.valid, true)
+			assert.ok(result.text.includes('i32.shr_u'))
+		})
+
+		it('should emit i64.and for i64 bitwise AND', () => {
+			const result = compileSource('a:i64 = 100\nb:i64 = 50\nx:i64 = a & b\npanic\n')
+			assert.strictEqual(result.valid, true)
+			assert.ok(result.text.includes('i64.and'))
+		})
+
+		it('should emit i64.xor with -1 for i64 bitwise NOT', () => {
+			const result = compileSource('a:i64 = 100\nx:i64 = ~a\npanic\n')
+			assert.strictEqual(result.valid, true)
+			assert.ok(result.text.includes('i64.xor'))
+		})
+	})
+
+	describe('comparison operators', () => {
+		it('should emit i32.lt_s for less than', () => {
+			const result = compileSource('x:i32 = 1 < 2\npanic\n')
+			assert.strictEqual(result.valid, true)
+			assert.ok(result.text.includes('i32.lt_s'))
+		})
+
+		it('should emit i32.gt_s for greater than', () => {
+			const result = compileSource('x:i32 = 2 > 1\npanic\n')
+			assert.strictEqual(result.valid, true)
+			assert.ok(result.text.includes('i32.gt_s'))
+		})
+
+		it('should emit i32.le_s for less equal', () => {
+			const result = compileSource('x:i32 = 1 <= 2\npanic\n')
+			assert.strictEqual(result.valid, true)
+			assert.ok(result.text.includes('i32.le_s'))
+		})
+
+		it('should emit i32.ge_s for greater equal', () => {
+			const result = compileSource('x:i32 = 2 >= 1\npanic\n')
+			assert.strictEqual(result.valid, true)
+			assert.ok(result.text.includes('i32.ge_s'))
+		})
+
+		it('should emit i32.eq for equal equal', () => {
+			const result = compileSource('x:i32 = 1 == 1\npanic\n')
+			assert.strictEqual(result.valid, true)
+			assert.ok(result.text.includes('i32.eq'))
+		})
+
+		it('should emit i32.ne for not equal', () => {
+			const result = compileSource('x:i32 = 1 != 2\npanic\n')
+			assert.strictEqual(result.valid, true)
+			assert.ok(result.text.includes('i32.ne'))
+		})
+
+		it('should emit f64.lt for float less than', () => {
+			const result = compileSource('a:f64 = 1.5\nb:f64 = 2.5\nx:i32 = a < b\npanic\n')
+			assert.strictEqual(result.valid, true)
+			assert.ok(result.text.includes('f64.lt'))
+		})
+
+		it('should emit f32.eq for float equal', () => {
+			const result = compileSource('a:f32 = 1.5\nb:f32 = 1.5\nx:i32 = a == b\npanic\n')
+			assert.strictEqual(result.valid, true)
+			assert.ok(result.text.includes('f32.eq'))
+		})
+	})
+
+	describe('logical operators', () => {
+		it('should emit if for logical AND (short-circuit)', () => {
+			const result = compileSource('x:i32 = 1 && 2\npanic\n')
+			assert.strictEqual(result.valid, true)
+			assert.ok(result.text.includes('if'))
+		})
+
+		it('should emit if for logical OR (short-circuit)', () => {
+			const result = compileSource('x:i32 = 0 || 1\npanic\n')
+			assert.strictEqual(result.valid, true)
+			assert.ok(result.text.includes('if'))
+		})
+	})
+
+	describe('complex expressions', () => {
+		it('should compile chained arithmetic', () => {
+			const result = compileSource('x:i32 = 1 + 2 + 3 + 4\npanic\n')
+			assert.strictEqual(result.valid, true)
+			const addCount = (result.text.match(/i32\.add/g) || []).length
+			assert.strictEqual(addCount, 3)
+		})
+
+		it('should compile mixed operators with precedence', () => {
+			const result = compileSource('x:i32 = 1 + 2 * 3\npanic\n')
+			assert.strictEqual(result.valid, true)
+			assert.ok(result.text.includes('i32.mul'))
+			assert.ok(result.text.includes('i32.add'))
+		})
+
+		it('should compile parenthesized expressions', () => {
+			const result = compileSource('x:i32 = (1 + 2) * 3\npanic\n')
+			assert.strictEqual(result.valid, true)
+		})
+
+		it('should compile comparison chain', () => {
+			const result = compileSource('x:i32 = 1 < 2 < 3\npanic\n')
+			assert.strictEqual(result.valid, true)
+		})
+
+		it('should compile nested parentheses', () => {
+			const result = compileSource('x:i32 = ((1 + 2) * (3 + 4))\npanic\n')
+			assert.strictEqual(result.valid, true)
+		})
+	})
 })

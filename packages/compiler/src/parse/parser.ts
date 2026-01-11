@@ -48,6 +48,50 @@ function tokenToOhmString(token: Token, context: CompilationContext): string | n
 			return '_'
 		case TokenKind.Pipe:
 			return '|'
+		case TokenKind.Plus:
+			return '+'
+		case TokenKind.Star:
+			return '*'
+		case TokenKind.Slash:
+			return '/'
+		case TokenKind.Percent:
+			return '%'
+		case TokenKind.PercentPercent:
+			return '%%'
+		case TokenKind.Ampersand:
+			return '&'
+		case TokenKind.Caret:
+			return '^'
+		case TokenKind.Tilde:
+			return '~'
+		case TokenKind.LessThan:
+			return '<'
+		case TokenKind.GreaterThan:
+			return '>'
+		case TokenKind.LessEqual:
+			return '<='
+		case TokenKind.GreaterEqual:
+			return '>='
+		case TokenKind.EqualEqual:
+			return '=='
+		case TokenKind.BangEqual:
+			return '!='
+		case TokenKind.LessLess:
+			return '<<'
+		case TokenKind.GreaterGreater:
+			return '>>'
+		case TokenKind.GreaterGreaterGreater:
+			return '>>>'
+		case TokenKind.AmpersandAmpersand:
+			return '&&'
+		case TokenKind.PipePipe:
+			return '||'
+		case TokenKind.LParen:
+			return '('
+		case TokenKind.RParen:
+			return ')'
+		case TokenKind.Bang:
+			return '!'
 		default:
 			return null
 	}
@@ -157,8 +201,60 @@ function createNodeEmittingSemantics(
 		},
 	})
 
+	function emitBinaryNode(leftId: NodeId, opNode: Node, restNode: Node): NodeId {
+		const rightId = restNode['emitExpression']() as NodeId
+		const opTid = getTokenIdForOhmNode(opNode)
+		const leftSize = context.nodes.get(leftId).subtreeSize
+		const rightSize = context.nodes.get(rightId).subtreeSize
+		return context.nodes.add({
+			kind: NodeKind.BinaryExpr,
+			subtreeSize: 1 + leftSize + rightSize,
+			tokenId: opTid,
+		})
+	}
+
+	function emitBinaryChain(first: Node, ops: Node, rest: Node): NodeId {
+		let leftId = first['emitExpression']() as NodeId
+		for (let i = 0; i < ops.numChildren; i++) {
+			leftId = emitBinaryNode(leftId, ops.child(i), rest.child(i))
+		}
+		return leftId
+	}
+
+	function emitCompareChain(first: Node, ops: Node, rest: Node): NodeId {
+		const startCount = context.nodes.count()
+		first['emitExpression']()
+		for (let i = 0; i < rest.numChildren; i++) {
+			rest.child(i)['emitExpression']()
+		}
+		const childCount = context.nodes.count() - startCount
+		const opTid = getTokenIdForOhmNode(ops.child(0))
+		return context.nodes.add({
+			kind: NodeKind.CompareChain,
+			subtreeSize: 1 + childCount,
+			tokenId: opTid,
+		})
+	}
+
 	// Emit expression nodes (leaves in postorder)
 	semantics.addOperation<NodeId>('emitExpression', {
+		AddExpr(first: Node, ops: Node, rest: Node): NodeId {
+			return emitBinaryChain(first, ops, rest)
+		},
+		BitwiseAndExpr(first: Node, ops: Node, rest: Node): NodeId {
+			return emitBinaryChain(first, ops, rest)
+		},
+		BitwiseOrExpr(first: Node, ops: Node, rest: Node): NodeId {
+			return emitBinaryChain(first, ops, rest)
+		},
+		BitwiseXorExpr(first: Node, ops: Node, rest: Node): NodeId {
+			return emitBinaryChain(first, ops, rest)
+		},
+		CompareExpr(first: Node, ops: Node, rest: Node): NodeId {
+			if (ops.numChildren === 0) return first['emitExpression']()
+			if (ops.numChildren === 1) return emitBinaryChain(first, ops, rest)
+			return emitCompareChain(first, ops, rest)
+		},
 		Expression(expr: Node): NodeId {
 			return expr['emitExpression']()
 		},
@@ -193,16 +289,35 @@ function createNodeEmittingSemantics(
 				tokenId: tid,
 			})
 		},
-		PrimaryExpr(expr: Node): NodeId {
+		LogicalAndExpr(first: Node, ops: Node, rest: Node): NodeId {
+			return emitBinaryChain(first, ops, rest)
+		},
+		LogicalOrExpr(first: Node, ops: Node, rest: Node): NodeId {
+			return emitBinaryChain(first, ops, rest)
+		},
+		MulExpr(first: Node, ops: Node, rest: Node): NodeId {
+			return emitBinaryChain(first, ops, rest)
+		},
+		PrimaryExpr_paren(_lparen: Node, expr: Node, _rparen: Node): NodeId {
+			const childId = expr['emitExpression']() as NodeId
+			const tid = getTokenIdForOhmNode(this)
+			const childSize = context.nodes.get(childId).subtreeSize
+			return context.nodes.add({
+				kind: NodeKind.ParenExpr,
+				subtreeSize: 1 + childSize,
+				tokenId: tid,
+			})
+		},
+		UnaryExpr_primary(expr: Node): NodeId {
 			return expr['emitExpression']()
 		},
-		UnaryExpr(_minus: Node, expr: Node): NodeId {
-			// Emit child first (postorder)
-			expr['emitExpression']()
-			const tid = getTokenIdForOhmNode(this)
+		UnaryExpr_unary(op: Node, expr: Node): NodeId {
+			const childId = expr['emitExpression']() as NodeId
+			const tid = getTokenIdForOhmNode(op)
+			const childSize = context.nodes.get(childId).subtreeSize
 			return context.nodes.add({
 				kind: NodeKind.UnaryExpr,
-				subtreeSize: 2, // self + 1 child
+				subtreeSize: 1 + childSize,
 				tokenId: tid,
 			})
 		},

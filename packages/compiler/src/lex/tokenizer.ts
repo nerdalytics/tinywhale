@@ -189,8 +189,13 @@ const KEYWORDS: Record<string, (typeof TokenKind)[keyof typeof TokenKind]> = {
 
 const SIMPLE_OPERATORS: Record<string, TokenKind | undefined> = {
 	':': TokenKind.Colon,
-	'=': TokenKind.Equals,
-	'|': TokenKind.Pipe,
+	'(': TokenKind.LParen,
+	')': TokenKind.RParen,
+	'*': TokenKind.Star,
+	'/': TokenKind.Slash,
+	'^': TokenKind.Caret,
+	'+': TokenKind.Plus,
+	'~': TokenKind.Tilde,
 }
 
 function getTokenKindForText(text: string): TokenKind | null {
@@ -368,9 +373,46 @@ function tokenizeNumericLiteral(
 	return pos
 }
 
-function getMinusOrArrowToken(content: string, pos: number): { kind: TokenKind; advance: number } {
-	const isArrow = pos + 1 < content.length && content[pos + 1] === '>'
-	return isArrow ? { advance: 2, kind: TokenKind.Arrow } : { advance: 1, kind: TokenKind.Minus }
+function peek(content: string, pos: number, offset: number): string | undefined {
+	return content[pos + offset]
+}
+
+type OpResult = { kind: TokenKind; advance: number }
+
+const MULTI_CHAR_FALLBACKS: Record<string, OpResult> = {
+	'-': { advance: 1, kind: TokenKind.Minus },
+	'!': { advance: 1, kind: TokenKind.Bang },
+	'&': { advance: 1, kind: TokenKind.Ampersand },
+	'%': { advance: 1, kind: TokenKind.Percent },
+	'<': { advance: 1, kind: TokenKind.LessThan },
+	'=': { advance: 1, kind: TokenKind.Equals },
+	'>': { advance: 1, kind: TokenKind.GreaterThan },
+	'|': { advance: 1, kind: TokenKind.Pipe },
+}
+
+const TWO_CHAR_OPS: Record<string, OpResult> = {
+	'->': { advance: 2, kind: TokenKind.Arrow },
+	'!=': { advance: 2, kind: TokenKind.BangEqual },
+	'&&': { advance: 2, kind: TokenKind.AmpersandAmpersand },
+	'%%': { advance: 2, kind: TokenKind.PercentPercent },
+	'<<': { advance: 2, kind: TokenKind.LessLess },
+	'<=': { advance: 2, kind: TokenKind.LessEqual },
+	'==': { advance: 2, kind: TokenKind.EqualEqual },
+	'>=': { advance: 2, kind: TokenKind.GreaterEqual },
+	'>>': { advance: 2, kind: TokenKind.GreaterGreater },
+	'||': { advance: 2, kind: TokenKind.PipePipe },
+}
+
+function isTripleGreater(char: string, pos: number, content: string): boolean {
+	return char === '>' && peek(content, pos, 1) === '>' && peek(content, pos, 2) === '>'
+}
+
+function tokenizeMultiCharOperator(char: string, pos: number, content: string): OpResult | null {
+	if (isTripleGreater(char, pos, content)) {
+		return { advance: 3, kind: TokenKind.GreaterGreaterGreater }
+	}
+	const twoChar = TWO_CHAR_OPS[char + (peek(content, pos, 1) ?? '')]
+	return twoChar ?? MULTI_CHAR_FALLBACKS[char] ?? null
 }
 
 function tokenizeOperator(
@@ -389,11 +431,13 @@ function tokenizeOperator(
 		return pos + 1
 	}
 
-	if (char !== '-') return null
+	const multiChar = tokenizeMultiCharOperator(char, pos, content)
+	if (multiChar !== null) {
+		context.tokens.add({ column, kind: multiChar.kind, line: lineNumber, payload: 0 })
+		return pos + multiChar.advance
+	}
 
-	const { advance, kind } = getMinusOrArrowToken(content, pos)
-	context.tokens.add({ column, kind, line: lineNumber, payload: 0 })
-	return pos + advance
+	return null
 }
 
 interface TokenizeState {

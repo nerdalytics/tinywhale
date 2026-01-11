@@ -8,7 +8,9 @@ import type { TokenId } from './tokens.ts'
 
 /** Node kinds - one per grammar production. */
 export const NodeKind = {
+	BinaryExpr: 104,
 	BindingPattern: 202,
+	CompareChain: 106,
 	DedentLine: 1,
 	FloatLiteral: 103,
 
@@ -24,6 +26,7 @@ export const NodeKind = {
 
 	// Statements (10-99)
 	PanicStatement: 10,
+	ParenExpr: 105,
 
 	// Program root (255)
 	Program: 255,

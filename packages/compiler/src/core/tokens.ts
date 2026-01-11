@@ -5,16 +5,26 @@
 
 /** Token kinds - small integer discriminant. */
 export const TokenKind = {
+	Ampersand: 24,
+	AmpersandAmpersand: 38,
 	Arrow: 6,
+	Bang: 29,
+	BangEqual: 37,
+	Caret: 25,
 	Colon: 3,
 	Dedent: 1,
 
 	// Special (255)
 	Eof: 255,
+	EqualEqual: 36,
 	Equals: 4,
 	F32: 13,
 	F64: 14,
 	FloatLiteral: 102,
+	GreaterEqual: 35,
+	GreaterGreater: 32,
+	GreaterGreaterGreater: 33,
+	GreaterThan: 28,
 	I32: 11,
 	I64: 12,
 
@@ -23,13 +33,29 @@ export const TokenKind = {
 	// Structural tokens (0-9)
 	Indent: 0,
 	IntLiteral: 101,
+	LessEqual: 34,
+	LessLess: 31,
+	LessThan: 27,
+	LParen: 40,
 	Match: 15,
 	Minus: 5,
 	Newline: 2,
 
-	// Keywords (10-99)
+	// Keywords (10-19)
 	Panic: 10,
+	Percent: 23,
+
+	// Multi-char operators (30-49)
+	PercentPercent: 30,
 	Pipe: 8,
+	PipePipe: 39,
+
+	// Single-char operators (20-29)
+	Plus: 20,
+	RParen: 41,
+	Slash: 22,
+	Star: 21,
+	Tilde: 26,
 	Underscore: 7,
 } as const
 

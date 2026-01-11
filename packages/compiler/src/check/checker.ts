@@ -11,7 +11,14 @@
 
 import type { CompilationContext, StringId } from '../core/context.ts'
 import type { DiagnosticCode } from '../core/diagnostics.ts'
-import { type NodeId, NodeKind, nodeId, offsetNodeId, prevNodeId } from '../core/nodes.ts'
+import {
+	type NodeId,
+	NodeKind,
+	nodeId,
+	offsetNodeId,
+	type ParseNode,
+	prevNodeId,
+} from '../core/nodes.ts'
 import { TokenKind } from '../core/tokens.ts'
 import { InstStore, ScopeStore, SymbolStore, TypeStore } from './stores.ts'
 import {
@@ -163,6 +170,92 @@ function isValidF32(value: number): boolean {
 
 function isFloatType(typeId: TypeId): boolean {
 	return typeId === BuiltinTypeId.F32 || typeId === BuiltinTypeId.F64
+}
+
+function isIntegerType(typeId: TypeId): boolean {
+	return typeId === BuiltinTypeId.I32 || typeId === BuiltinTypeId.I64
+}
+
+/** Operators that only work with integer types */
+function isIntegerOnlyOperator(tokenKind: TokenKind): boolean {
+	switch (tokenKind) {
+		case TokenKind.Percent:
+		case TokenKind.PercentPercent:
+		case TokenKind.Ampersand:
+		case TokenKind.Pipe:
+		case TokenKind.Caret:
+		case TokenKind.Tilde:
+		case TokenKind.LessLess:
+		case TokenKind.GreaterGreater:
+		case TokenKind.GreaterGreaterGreater:
+			return true
+		default:
+			return false
+	}
+}
+
+/** Operators that are comparisons (result is i32 regardless of operand types) */
+function isComparisonOperator(tokenKind: TokenKind): boolean {
+	switch (tokenKind) {
+		case TokenKind.LessThan:
+		case TokenKind.LessEqual:
+		case TokenKind.GreaterThan:
+		case TokenKind.GreaterEqual:
+		case TokenKind.EqualEqual:
+		case TokenKind.BangEqual:
+			return true
+		default:
+			return false
+	}
+}
+
+function getOperatorName(tokenKind: TokenKind): string {
+	switch (tokenKind) {
+		case TokenKind.Plus:
+			return '+'
+		case TokenKind.Minus:
+			return '-'
+		case TokenKind.Star:
+			return '*'
+		case TokenKind.Slash:
+			return '/'
+		case TokenKind.Percent:
+			return '%'
+		case TokenKind.PercentPercent:
+			return '%%'
+		case TokenKind.Ampersand:
+			return '&'
+		case TokenKind.Pipe:
+			return '|'
+		case TokenKind.Caret:
+			return '^'
+		case TokenKind.Tilde:
+			return '~'
+		case TokenKind.LessLess:
+			return '<<'
+		case TokenKind.GreaterGreater:
+			return '>>'
+		case TokenKind.GreaterGreaterGreater:
+			return '>>>'
+		case TokenKind.LessThan:
+			return '<'
+		case TokenKind.LessEqual:
+			return '<='
+		case TokenKind.GreaterThan:
+			return '>'
+		case TokenKind.GreaterEqual:
+			return '>='
+		case TokenKind.EqualEqual:
+			return '=='
+		case TokenKind.BangEqual:
+			return '!='
+		case TokenKind.AmpersandAmpersand:
+			return '&&'
+		case TokenKind.PipePipe:
+			return '||'
+		default:
+			return '?'
+	}
 }
 
 function applyNegation(value: number, negate: boolean): number {
@@ -355,35 +448,64 @@ function checkFloatLiteral(
 }
 
 /**
- * Check a unary expression (currently only unary minus).
+ * Check a unary expression (negation or bitwise NOT).
  * In postorder, the child is at exprNodeId - 1.
+ * Operator is determined by the tokenId.
  */
-function checkUnaryExpr(
+function checkBitwiseNot(
 	exprNodeId: NodeId,
+	childId: NodeId,
 	expectedType: TypeId,
 	state: CheckerState,
 	context: CompilationContext
 ): ExprResult {
-	// In postorder storage, the child expression is immediately before the UnaryExpr
-	const childId = prevNodeId(exprNodeId)
-	const child = context.nodes.get(childId)
+	const childResult = checkExpressionInferred(childId, state, context)
+	if (!isValidExprResult(childResult)) return childResult
 
-	// Handle literal negation specially (compile-time constant folding)
-	if (child.kind === NodeKind.IntLiteral) {
-		return checkIntLiteral(childId, expectedType, state, context, true)
+	if (!isIntegerType(childResult.typeId)) {
+		context.emitAtNode('TWCHECK021' as DiagnosticCode, exprNodeId, {
+			op: '~',
+			type: state.types.typeName(childResult.typeId),
+		})
+		return { instId: null, typeId: BuiltinTypeId.Invalid }
 	}
 
-	if (child.kind === NodeKind.FloatLiteral) {
+	if (!state.types.areEqual(childResult.typeId, expectedType)) {
+		context.emitAtNode('TWCHECK012' as DiagnosticCode, exprNodeId, {
+			expected: state.types.typeName(expectedType),
+			found: state.types.typeName(childResult.typeId),
+		})
+		return { instId: null, typeId: BuiltinTypeId.Invalid }
+	}
+
+	const instId = state.insts.add({
+		arg0: childResult.instId as number,
+		arg1: 0,
+		kind: InstKind.BitwiseNot,
+		parseNodeId: exprNodeId,
+		typeId: childResult.typeId,
+	})
+	return { instId, typeId: childResult.typeId }
+}
+
+function checkUnaryNegate(
+	exprNodeId: NodeId,
+	childId: NodeId,
+	childKind: NodeKind,
+	expectedType: TypeId,
+	state: CheckerState,
+	context: CompilationContext
+): ExprResult {
+	if (childKind === NodeKind.IntLiteral) {
+		return checkIntLiteral(childId, expectedType, state, context, true)
+	}
+	if (childKind === NodeKind.FloatLiteral) {
 		return checkFloatLiteral(childId, expectedType, state, context, true)
 	}
 
-	// Runtime negation: check child expression first
 	const childResult = checkExpression(childId, expectedType, state, context)
-	if (!isValidExprResult(childResult)) {
-		return childResult
-	}
+	if (!isValidExprResult(childResult)) return childResult
 
-	// Emit Negate instruction
 	const instId = state.insts.add({
 		arg0: childResult.instId as number,
 		arg1: 0,
@@ -392,6 +514,484 @@ function checkUnaryExpr(
 		typeId: childResult.typeId,
 	})
 	return { instId, typeId: childResult.typeId }
+}
+
+function checkUnaryExpr(
+	exprNodeId: NodeId,
+	expectedType: TypeId,
+	state: CheckerState,
+	context: CompilationContext
+): ExprResult {
+	const node = context.nodes.get(exprNodeId)
+	const token = context.tokens.get(node.tokenId)
+	const childId = prevNodeId(exprNodeId)
+
+	if (token.kind === TokenKind.Tilde) {
+		return checkBitwiseNot(exprNodeId, childId, expectedType, state, context)
+	}
+
+	const child = context.nodes.get(childId)
+	return checkUnaryNegate(exprNodeId, childId, child.kind, expectedType, state, context)
+}
+
+/**
+ * Check a parenthesized expression.
+ * In postorder, the child is at exprNodeId - 1.
+ */
+function checkParenExpr(
+	exprNodeId: NodeId,
+	expectedType: TypeId,
+	state: CheckerState,
+	context: CompilationContext
+): ExprResult {
+	const childId = prevNodeId(exprNodeId)
+	return checkExpression(childId, expectedType, state, context)
+}
+
+/**
+ * Check a binary expression.
+ * In postorder: [left..., right..., BinaryExpr]
+ * The right operand's root is at exprId - 1.
+ * The left operand's root is at rightRootId - rightSubtreeSize.
+ */
+interface BinaryOperands {
+	leftResult: ExprResult
+	rightResult: ExprResult
+	operandType: TypeId
+}
+
+function getBinaryOperands(
+	exprNodeId: NodeId,
+	state: CheckerState,
+	context: CompilationContext
+): BinaryOperands | ExprResult {
+	const rightId = prevNodeId(exprNodeId)
+	const rightNode = context.nodes.get(rightId)
+	const leftId = offsetNodeId(rightId, -rightNode.subtreeSize)
+
+	const leftResult = checkExpressionInferred(leftId, state, context)
+	if (!isValidExprResult(leftResult)) return leftResult
+
+	const rightResult = checkExpressionInferred(rightId, state, context)
+	if (!isValidExprResult(rightResult)) return rightResult
+
+	if (!state.types.areEqual(leftResult.typeId, rightResult.typeId)) {
+		context.emitAtNode('TWCHECK022' as DiagnosticCode, exprNodeId, {
+			left: state.types.typeName(leftResult.typeId),
+			right: state.types.typeName(rightResult.typeId),
+		})
+		return { instId: null, typeId: BuiltinTypeId.Invalid }
+	}
+
+	return { leftResult, operandType: leftResult.typeId, rightResult }
+}
+
+function isBinaryOperands(result: BinaryOperands | ExprResult): result is BinaryOperands {
+	return 'leftResult' in result
+}
+
+function validateBinaryOperator(
+	exprNodeId: NodeId,
+	operatorKind: TokenKind,
+	operandType: TypeId,
+	expectedType: TypeId,
+	state: CheckerState,
+	context: CompilationContext
+): TypeId | null {
+	if (isIntegerOnlyOperator(operatorKind) && !isIntegerType(operandType)) {
+		context.emitAtNode('TWCHECK021' as DiagnosticCode, exprNodeId, {
+			op: getOperatorName(operatorKind),
+			type: state.types.typeName(operandType),
+		})
+		return null
+	}
+
+	const resultType = isComparisonOperator(operatorKind) ? BuiltinTypeId.I32 : operandType
+
+	if (!state.types.areEqual(resultType, expectedType)) {
+		context.emitAtNode('TWCHECK012' as DiagnosticCode, exprNodeId, {
+			expected: state.types.typeName(expectedType),
+			found: state.types.typeName(resultType),
+		})
+		return null
+	}
+
+	return resultType
+}
+
+function emitLogicalOp(
+	exprNodeId: NodeId,
+	operatorKind: TokenKind,
+	operands: BinaryOperands,
+	resultType: TypeId,
+	state: CheckerState,
+	context: CompilationContext
+): ExprResult {
+	if (!isIntegerType(operands.operandType)) {
+		const op = operatorKind === TokenKind.AmpersandAmpersand ? '&&' : '||'
+		context.emitAtNode('TWCHECK024' as DiagnosticCode, exprNodeId, {
+			op,
+			type: state.types.typeName(operands.operandType),
+		})
+		return { instId: null, typeId: BuiltinTypeId.Invalid }
+	}
+
+	const kind =
+		operatorKind === TokenKind.AmpersandAmpersand ? InstKind.LogicalAnd : InstKind.LogicalOr
+	const instId = state.insts.add({
+		arg0: operands.leftResult.instId as number,
+		arg1: operands.rightResult.instId as number,
+		kind,
+		parseNodeId: exprNodeId,
+		typeId: resultType,
+	})
+	return { instId, typeId: resultType }
+}
+
+function checkBinaryExpr(
+	exprNodeId: NodeId,
+	expectedType: TypeId,
+	state: CheckerState,
+	context: CompilationContext
+): ExprResult {
+	const node = context.nodes.get(exprNodeId)
+	const operatorKind = context.tokens.get(node.tokenId).kind
+
+	const operandsResult = getBinaryOperands(exprNodeId, state, context)
+	if (!isBinaryOperands(operandsResult)) return operandsResult
+
+	const resultType = validateBinaryOperator(
+		exprNodeId,
+		operatorKind,
+		operandsResult.operandType,
+		expectedType,
+		state,
+		context
+	)
+	if (resultType === null) return { instId: null, typeId: BuiltinTypeId.Invalid }
+
+	if (operatorKind === TokenKind.AmpersandAmpersand || operatorKind === TokenKind.PipePipe) {
+		return emitLogicalOp(exprNodeId, operatorKind, operandsResult, resultType, state, context)
+	}
+
+	const instId = state.insts.add({
+		arg0: operandsResult.leftResult.instId as number,
+		arg1: operandsResult.rightResult.instId as number,
+		kind: InstKind.BinaryOp,
+		parseNodeId: exprNodeId,
+		typeId: resultType,
+	})
+	return { instId, typeId: resultType }
+}
+
+function collectCompareChainOperands(exprNodeId: NodeId, context: CompilationContext): NodeId[] {
+	const operandNodes: NodeId[] = []
+	for (const [childId, child] of context.nodes.iterateChildren(exprNodeId)) {
+		if (isExpressionNode(child.kind)) operandNodes.push(childId)
+	}
+	operandNodes.reverse()
+	return operandNodes
+}
+
+function checkCompareChainOperands(
+	operandNodes: NodeId[],
+	state: CheckerState,
+	context: CompilationContext
+): ExprResult[] | null {
+	const results: ExprResult[] = []
+	for (const opId of operandNodes) {
+		const result = checkExpressionInferred(opId, state, context)
+		if (!isValidExprResult(result)) return null
+		results.push(result)
+	}
+	return results
+}
+
+function findTypeMismatch(
+	operandResults: ExprResult[],
+	operandNodes: NodeId[],
+	firstType: TypeId,
+	state: CheckerState
+): { nodeId: NodeId; resultType: TypeId } | null {
+	for (let i = 1; i < operandResults.length; i++) {
+		const result = operandResults[i]
+		const nodeId = operandNodes[i]
+		if (result && nodeId && !state.types.areEqual(result.typeId, firstType)) {
+			return { nodeId, resultType: result.typeId }
+		}
+	}
+	return null
+}
+
+function validateCompareChainTypes(
+	operandResults: ExprResult[],
+	operandNodes: NodeId[],
+	state: CheckerState,
+	context: CompilationContext
+): TypeId | null {
+	const firstResult = operandResults[0]
+	if (!firstResult) return null
+	const firstType = firstResult.typeId
+
+	const mismatch = findTypeMismatch(operandResults, operandNodes, firstType, state)
+	if (mismatch) {
+		context.emitAtNode('TWCHECK022' as DiagnosticCode, mismatch.nodeId, {
+			left: state.types.typeName(firstType),
+			right: state.types.typeName(mismatch.resultType),
+		})
+		return null
+	}
+	return firstType
+}
+
+interface ValidatedCompareChain {
+	firstResult: ExprResult
+	secondResult: ExprResult
+}
+
+function checkCompareChainPrereqs(
+	operandNodes: NodeId[],
+	state: CheckerState,
+	context: CompilationContext
+): ExprResult[] | null {
+	if (operandNodes.length < 2) return null
+	const operandResults = checkCompareChainOperands(operandNodes, state, context)
+	if (!operandResults) return null
+	const firstType = validateCompareChainTypes(operandResults, operandNodes, state, context)
+	return firstType !== null ? operandResults : null
+}
+
+function checkExpectedTypeI32(
+	exprNodeId: NodeId,
+	expectedType: TypeId,
+	state: CheckerState,
+	context: CompilationContext
+): boolean {
+	if (state.types.areEqual(BuiltinTypeId.I32, expectedType)) return true
+	context.emitAtNode('TWCHECK012' as DiagnosticCode, exprNodeId, {
+		expected: state.types.typeName(expectedType),
+		found: 'i32',
+	})
+	return false
+}
+
+function validateCompareChain(
+	exprNodeId: NodeId,
+	expectedType: TypeId,
+	state: CheckerState,
+	context: CompilationContext
+): ValidatedCompareChain | null {
+	const operandNodes = collectCompareChainOperands(exprNodeId, context)
+	const operandResults = checkCompareChainPrereqs(operandNodes, state, context)
+	if (!operandResults) return null
+	if (!checkExpectedTypeI32(exprNodeId, expectedType, state, context)) return null
+
+	const firstResult = operandResults[0]
+	const secondResult = operandResults[1]
+	return firstResult && secondResult ? { firstResult, secondResult } : null
+}
+
+function checkCompareChain(
+	exprNodeId: NodeId,
+	expectedType: TypeId,
+	state: CheckerState,
+	context: CompilationContext
+): ExprResult {
+	const validated = validateCompareChain(exprNodeId, expectedType, state, context)
+	if (!validated) return { instId: null, typeId: BuiltinTypeId.Invalid }
+
+	const instId = state.insts.add({
+		arg0: validated.firstResult.instId as number,
+		arg1: validated.secondResult.instId as number,
+		kind: InstKind.BinaryOp,
+		parseNodeId: exprNodeId,
+		typeId: BuiltinTypeId.I32,
+	})
+	return { instId, typeId: BuiltinTypeId.I32 }
+}
+
+function checkUnaryExprInferred(
+	exprId: NodeId,
+	node: ParseNode,
+	state: CheckerState,
+	context: CompilationContext
+): ExprResult {
+	const childId = prevNodeId(exprId)
+	const childResult = checkExpressionInferred(childId, state, context)
+	if (!isValidExprResult(childResult)) return childResult
+
+	const opToken = context.tokens.get(node.tokenId)
+	if (opToken.kind === TokenKind.Tilde) {
+		if (!isIntegerType(childResult.typeId)) {
+			context.emitAtNode('TWCHECK021' as DiagnosticCode, exprId, {
+				op: '~',
+				type: state.types.typeName(childResult.typeId),
+			})
+			return { instId: null, typeId: BuiltinTypeId.Invalid }
+		}
+		const instId = state.insts.add({
+			arg0: childResult.instId as number,
+			arg1: 0,
+			kind: InstKind.BitwiseNot,
+			parseNodeId: exprId,
+			typeId: childResult.typeId,
+		})
+		return { instId, typeId: childResult.typeId }
+	}
+	const instId = state.insts.add({
+		arg0: childResult.instId as number,
+		arg1: 0,
+		kind: InstKind.Negate,
+		parseNodeId: exprId,
+		typeId: childResult.typeId,
+	})
+	return { instId, typeId: childResult.typeId }
+}
+
+function checkIdentifierInferred(
+	exprId: NodeId,
+	node: ParseNode,
+	state: CheckerState,
+	context: CompilationContext
+): ExprResult {
+	const token = context.tokens.get(node.tokenId)
+	const nameId = token.payload as StringId
+	const name = context.strings.get(nameId)
+	const symId = state.symbols.lookupByName(nameId)
+	if (symId === undefined) {
+		context.emitAtNode('TWCHECK013' as DiagnosticCode, exprId, { name })
+		return { instId: null, typeId: BuiltinTypeId.Invalid }
+	}
+	const symbol = state.symbols.get(symId)
+	const instId = state.insts.add({
+		arg0: symId as number,
+		arg1: 0,
+		kind: InstKind.VarRef,
+		parseNodeId: exprId,
+		typeId: symbol.typeId,
+	})
+	return { instId, typeId: symbol.typeId }
+}
+
+function emitLogicalOpInferred(
+	exprId: NodeId,
+	opKind: TokenKind,
+	leftResult: ExprResult,
+	rightResult: ExprResult,
+	operandType: TypeId,
+	state: CheckerState,
+	context: CompilationContext
+): ExprResult {
+	if (!isIntegerType(operandType)) {
+		context.emitAtNode('TWCHECK024' as DiagnosticCode, exprId, {
+			op: getOperatorName(opKind),
+			type: state.types.typeName(operandType),
+		})
+		return { instId: null, typeId: BuiltinTypeId.Invalid }
+	}
+	const kind = opKind === TokenKind.AmpersandAmpersand ? InstKind.LogicalAnd : InstKind.LogicalOr
+	const instId = state.insts.add({
+		arg0: leftResult.instId as number,
+		arg1: rightResult.instId as number,
+		kind,
+		parseNodeId: exprId,
+		typeId: BuiltinTypeId.I32,
+	})
+	return { instId, typeId: BuiltinTypeId.I32 }
+}
+
+function validateIntegerOnlyOperator(
+	exprId: NodeId,
+	opKind: TokenKind,
+	operandType: TypeId,
+	state: CheckerState,
+	context: CompilationContext
+): boolean {
+	if (!isIntegerOnlyOperator(opKind) || isIntegerType(operandType)) return true
+	context.emitAtNode('TWCHECK021' as DiagnosticCode, exprId, {
+		op: getOperatorName(opKind),
+		type: state.types.typeName(operandType),
+	})
+	return false
+}
+
+function isLogicalOperator(kind: TokenKind): boolean {
+	return kind === TokenKind.AmpersandAmpersand || kind === TokenKind.PipePipe
+}
+
+function emitBinaryOpInferred(
+	exprId: NodeId,
+	opKind: TokenKind,
+	operands: BinaryOperands,
+	state: CheckerState
+): ExprResult {
+	const resultType = isComparisonOperator(opKind) ? BuiltinTypeId.I32 : operands.operandType
+	const instId = state.insts.add({
+		arg0: operands.leftResult.instId as number,
+		arg1: operands.rightResult.instId as number,
+		kind: InstKind.BinaryOp,
+		parseNodeId: exprId,
+		typeId: resultType,
+	})
+	return { instId, typeId: resultType }
+}
+
+function checkBinaryExprInferred(
+	exprId: NodeId,
+	node: ParseNode,
+	state: CheckerState,
+	context: CompilationContext
+): ExprResult {
+	const operandsResult = getBinaryOperands(exprId, state, context)
+	if (!isBinaryOperands(operandsResult)) return operandsResult
+
+	const opKind = context.tokens.get(node.tokenId).kind
+
+	if (isLogicalOperator(opKind)) {
+		const { leftResult, rightResult, operandType } = operandsResult
+		return emitLogicalOpInferred(
+			exprId,
+			opKind,
+			leftResult,
+			rightResult,
+			operandType,
+			state,
+			context
+		)
+	}
+
+	if (!validateIntegerOnlyOperator(exprId, opKind, operandsResult.operandType, state, context)) {
+		return { instId: null, typeId: BuiltinTypeId.Invalid }
+	}
+
+	return emitBinaryOpInferred(exprId, opKind, operandsResult, state)
+}
+
+function checkExpressionInferred(
+	exprId: NodeId,
+	state: CheckerState,
+	context: CompilationContext
+): ExprResult {
+	const node = context.nodes.get(exprId)
+
+	switch (node.kind) {
+		case NodeKind.IntLiteral:
+			return checkIntLiteral(exprId, BuiltinTypeId.I32, state, context)
+		case NodeKind.FloatLiteral:
+			return checkFloatLiteral(exprId, BuiltinTypeId.F64, state, context)
+		case NodeKind.UnaryExpr:
+			return checkUnaryExprInferred(exprId, node, state, context)
+		case NodeKind.Identifier:
+			return checkIdentifierInferred(exprId, node, state, context)
+		case NodeKind.ParenExpr:
+			return checkExpressionInferred(prevNodeId(exprId), state, context)
+		case NodeKind.BinaryExpr:
+			return checkBinaryExprInferred(exprId, node, state, context)
+		case NodeKind.CompareChain:
+			return checkCompareChain(exprId, BuiltinTypeId.I32, state, context)
+		default:
+			return { instId: null, typeId: BuiltinTypeId.Invalid }
+	}
 }
 
 function checkExpression(
@@ -411,6 +1011,12 @@ function checkExpression(
 			return checkUnaryExpr(exprId, expectedType, state, context)
 		case NodeKind.Identifier:
 			return checkVarRef(exprId, expectedType, state, context)
+		case NodeKind.ParenExpr:
+			return checkParenExpr(exprId, expectedType, state, context)
+		case NodeKind.BinaryExpr:
+			return checkBinaryExpr(exprId, expectedType, state, context)
+		case NodeKind.CompareChain:
+			return checkCompareChain(exprId, expectedType, state, context)
 		default:
 			// Should be unreachable - all expression kinds should be handled
 			console.assert(false, 'checkExpression: unhandled expression kind %d', node.kind)
@@ -509,10 +1115,6 @@ function getMatchArmFromLine(
 		}
 	}
 	return null
-}
-
-function isIntegerType(typeId: TypeId): boolean {
-	return typeId === BuiltinTypeId.I32 || typeId === BuiltinTypeId.I64
 }
 
 function validateLiteralPattern(
