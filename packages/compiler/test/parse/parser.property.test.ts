@@ -111,5 +111,25 @@ describe('parse/parser properties', () => {
 				{ numRuns: 1000 }
 			)
 		})
+
+		it('all node tokenIds reference valid tokens', () => {
+			fc.assert(
+				fc.property(fc.string(), (input) => {
+					const ctx = new CompilationContext(input)
+					tokenize(ctx)
+					const result = parse(ctx)
+					if (result.succeeded) {
+						const tokenCount = ctx.tokens.count()
+						for (const [, node] of ctx.nodes) {
+							if (node.tokenId < 0 || node.tokenId >= tokenCount) {
+								return false
+							}
+						}
+					}
+					return true
+				}),
+				{ numRuns: 1000 }
+			)
+		})
 	})
 })
