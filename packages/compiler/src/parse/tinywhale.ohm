@@ -33,10 +33,31 @@ TinyWhale {
   LiteralPattern = minus? intLiteral
   BindingPattern = ~keyword ~underscore identifier
 
-  // Expressions
-  Expression = UnaryExpr | identifier | floatLiteral | intLiteral
-  UnaryExpr = minus PrimaryExpr
-  PrimaryExpr = identifier | floatLiteral | intLiteral
+  // Expressions (precedence from lowest to highest)
+  Expression = LogicalOrExpr
+
+  LogicalOrExpr = LogicalAndExpr (pipePipe LogicalAndExpr)*
+  LogicalAndExpr = BitwiseOrExpr (ampAmp BitwiseOrExpr)*
+  BitwiseOrExpr = BitwiseXorExpr (bitwiseOr BitwiseXorExpr)*
+  BitwiseXorExpr = BitwiseAndExpr (caret BitwiseAndExpr)*
+  BitwiseAndExpr = CompareExpr (ampersand CompareExpr)*
+  CompareExpr = AddExpr (compareOp AddExpr)*
+  AddExpr = MulExpr (addOp MulExpr)*
+  MulExpr = UnaryExpr (mulOp UnaryExpr)*
+
+  UnaryExpr = unaryOp UnaryExpr  -- unary
+            | PrimaryExpr        -- primary
+
+  PrimaryExpr = lparen Expression rparen  -- paren
+              | identifier
+              | floatLiteral
+              | intLiteral
+
+  // Operator groups
+  compareOp = lessEqual | greaterEqual | lessThan | greaterThan | equalEqual | bangEqual
+  addOp = plus | minus
+  mulOp = star | slash | percentPercent | percent | greaterGreaterGreater | greaterGreater | lessLess
+  unaryOp = minus | tilde
 
   // Keywords
   keyword = panic | typeKeyword | matchKeyword
@@ -59,6 +80,40 @@ TinyWhale {
   arrow = "->"
   underscore = "_" ~identifierPart
   pipe = "|"
+
+  // Arithmetic operators
+  plus = "+"
+  star = "*"
+  slash = "/"
+  percent = "%"
+  percentPercent = "%%"
+  tilde = "~"
+
+  // Comparison operators (order matters: longer first)
+  lessEqual = "<="
+  greaterEqual = ">="
+  lessThan = "<"
+  greaterThan = ">"
+  equalEqual = "=="
+  bangEqual = "!="
+
+  // Shift operators (order matters: longer first)
+  greaterGreaterGreater = ">>>"
+  greaterGreater = ">>"
+  lessLess = "<<"
+
+  // Bitwise operators
+  ampersand = "&"
+  caret = "^"
+  bitwiseOr = "|" ~"|"
+
+  // Logical operators
+  ampAmp = "&&"
+  pipePipe = "||"
+
+  // Grouping
+  lparen = "("
+  rparen = ")"
 
   // Lexical token rules (marker followed by indent level)
   indentToken = "⇥" digit+

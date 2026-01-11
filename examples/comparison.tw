@@ -1,0 +1,17 @@
+# Comparison operators (result is always i32: 0 or 1)
+a:i32 = 1 < 2     # less than: 1
+b:i32 = 2 > 1     # greater than: 1
+c:i32 = 1 <= 1    # less equal: 1
+d:i32 = 2 >= 2    # greater equal: 1
+e:i32 = 1 == 1    # equal: 1
+f:i32 = 1 != 2    # not equal: 1
+
+# Float comparison
+g:f64 = 1.5
+h:f64 = 2.5
+i:i32 = g < h     # 1
+
+# Comparison chaining
+j:i32 = 1 < 2 < 3   # (1 < 2) && (2 < 3): 1
+
+panic

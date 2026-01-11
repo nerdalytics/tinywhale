@@ -1,0 +1,19 @@
+# Operator precedence demonstration
+# Higher precedence binds tighter
+
+# Multiplication before addition
+a:i32 = 1 + 2 * 3        # 7, not 9
+
+# Parentheses override precedence
+b:i32 = (1 + 2) * 3      # 9
+
+# Complex expression
+c:i32 = 1 + 2 * 3 + 4    # 11
+
+# Nested parentheses
+d:i32 = ((1 + 2) * (3 + 4))  # 21
+
+# Comparison before logical
+e:i32 = 1 < 2 && 3 < 4   # 1
+
+panic

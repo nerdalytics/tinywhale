@@ -2,11 +2,18 @@ import binaryen from 'binaryen'
 
 import {
 	BuiltinTypeId,
+	getBinaryOpLeftId,
+	getBinaryOpRightId,
 	getBindInitId,
 	getBindSymbolId,
+	getBitwiseNotOperandId,
 	getFloatConstId,
 	getIntConstHigh,
 	getIntConstLow,
+	getLogicalAndLeftId,
+	getLogicalAndRightId,
+	getLogicalOrLeftId,
+	getLogicalOrRightId,
 	getMatchArmBodyId,
 	getMatchArmCount,
 	getMatchArmPatternNodeId,
@@ -22,7 +29,7 @@ import {
 import { type CompilationContext, DiagnosticSeverity, type StringId } from '../core/context.ts'
 import type { DiagnosticCode } from '../core/diagnostics.ts'
 import { type NodeId, NodeKind } from '../core/nodes.ts'
-import { nextTokenId } from '../core/tokens.ts'
+import { nextTokenId, TokenKind } from '../core/tokens.ts'
 
 export class CompileError extends Error {
 	constructor(message: string) {
@@ -170,6 +177,241 @@ function emitNegate(
 		default:
 			return null
 	}
+}
+
+function emitBitwiseNot(
+	mod: binaryen.Module,
+	inst: Inst,
+	valueMap: Map<InstId, binaryen.ExpressionRef>,
+	context: CompilationContext
+): binaryen.ExpressionRef | null {
+	const operandId = getBitwiseNotOperandId(inst)
+	const operand = valueMap.get(operandId)
+	if (operand === undefined) return null
+
+	const binaryenType = toBinaryenType(inst.typeId, context)
+
+	switch (binaryenType) {
+		case binaryen.i32:
+			return mod.i32.xor(operand, mod.i32.const(-1))
+		case binaryen.i64:
+			return mod.i64.xor(operand, mod.i64.const(-1, -1))
+		default:
+			return null
+	}
+}
+
+/**
+ * Emit Euclidean modulo: ((a % b) + abs(b)) % abs(b)
+ * This handles negative divisors correctly.
+ */
+function emitEuclideanMod(
+	mod: binaryen.Module,
+	left: binaryen.ExpressionRef,
+	right: binaryen.ExpressionRef,
+	binaryenType: binaryen.Type
+): binaryen.ExpressionRef | null {
+	if (binaryenType === binaryen.i32) {
+		// abs(b) for i32: ((b >> 31) ^ b) - (b >> 31)
+		// But simpler: use select based on sign
+		// Actually, for WASM we can use: if b < 0 then -b else b
+		const absB = mod.select(
+			mod.i32.lt_s(right, mod.i32.const(0)),
+			mod.i32.sub(mod.i32.const(0), right),
+			right
+		)
+		// ((a % b) + abs(b)) % abs(b)
+		const remainder = mod.i32.rem_s(left, right)
+		const adjusted = mod.i32.add(remainder, absB)
+		return mod.i32.rem_s(adjusted, absB)
+	}
+	if (binaryenType === binaryen.i64) {
+		const absB = mod.select(
+			mod.i64.lt_s(right, mod.i64.const(0, 0)),
+			mod.i64.sub(mod.i64.const(0, 0), right),
+			right
+		)
+		const remainder = mod.i64.rem_s(left, right)
+		const adjusted = mod.i64.add(remainder, absB)
+		return mod.i64.rem_s(adjusted, absB)
+	}
+	return null
+}
+
+type BinaryEmitter = (
+	left: binaryen.ExpressionRef,
+	right: binaryen.ExpressionRef
+) => binaryen.ExpressionRef
+
+type TypeOps = {
+	i32: (l: binaryen.ExpressionRef, r: binaryen.ExpressionRef) => binaryen.ExpressionRef
+	i64: (l: binaryen.ExpressionRef, r: binaryen.ExpressionRef) => binaryen.ExpressionRef
+	f32?: (l: binaryen.ExpressionRef, r: binaryen.ExpressionRef) => binaryen.ExpressionRef
+	f64?: (l: binaryen.ExpressionRef, r: binaryen.ExpressionRef) => binaryen.ExpressionRef
+}
+
+function createArithmeticOps(mod: binaryen.Module): Map<TokenKind, TypeOps> {
+	return new Map([
+		[TokenKind.Plus, { f32: mod.f32.add, f64: mod.f64.add, i32: mod.i32.add, i64: mod.i64.add }],
+		[TokenKind.Minus, { f32: mod.f32.sub, f64: mod.f64.sub, i32: mod.i32.sub, i64: mod.i64.sub }],
+		[TokenKind.Star, { f32: mod.f32.mul, f64: mod.f64.mul, i32: mod.i32.mul, i64: mod.i64.mul }],
+		[
+			TokenKind.Slash,
+			{ f32: mod.f32.div, f64: mod.f64.div, i32: mod.i32.div_s, i64: mod.i64.div_s },
+		],
+		[TokenKind.Percent, { i32: mod.i32.rem_s, i64: mod.i64.rem_s }],
+	])
+}
+
+function createBitwiseOps(mod: binaryen.Module): Map<TokenKind, TypeOps> {
+	return new Map([
+		[TokenKind.Ampersand, { i32: mod.i32.and, i64: mod.i64.and }],
+		[TokenKind.Pipe, { i32: mod.i32.or, i64: mod.i64.or }],
+		[TokenKind.Caret, { i32: mod.i32.xor, i64: mod.i64.xor }],
+		[TokenKind.LessLess, { i32: mod.i32.shl, i64: mod.i64.shl }],
+		[TokenKind.GreaterGreater, { i32: mod.i32.shr_s, i64: mod.i64.shr_s }],
+		[TokenKind.GreaterGreaterGreater, { i32: mod.i32.shr_u, i64: mod.i64.shr_u }],
+	])
+}
+
+function createComparisonOps(mod: binaryen.Module): Map<TokenKind, TypeOps> {
+	return new Map([
+		[
+			TokenKind.LessThan,
+			{ f32: mod.f32.lt, f64: mod.f64.lt, i32: mod.i32.lt_s, i64: mod.i64.lt_s },
+		],
+		[
+			TokenKind.LessEqual,
+			{ f32: mod.f32.le, f64: mod.f64.le, i32: mod.i32.le_s, i64: mod.i64.le_s },
+		],
+		[
+			TokenKind.GreaterThan,
+			{ f32: mod.f32.gt, f64: mod.f64.gt, i32: mod.i32.gt_s, i64: mod.i64.gt_s },
+		],
+		[
+			TokenKind.GreaterEqual,
+			{ f32: mod.f32.ge, f64: mod.f64.ge, i32: mod.i32.ge_s, i64: mod.i64.ge_s },
+		],
+		[TokenKind.EqualEqual, { f32: mod.f32.eq, f64: mod.f64.eq, i32: mod.i32.eq, i64: mod.i64.eq }],
+		[TokenKind.BangEqual, { f32: mod.f32.ne, f64: mod.f64.ne, i32: mod.i32.ne, i64: mod.i64.ne }],
+	])
+}
+
+type TypeKey = 'i32' | 'i64' | 'f32' | 'f64'
+
+const BINARYEN_TYPE_KEYS: Map<number, TypeKey> = new Map([
+	[binaryen.i32, 'i32'],
+	[binaryen.i64, 'i64'],
+	[binaryen.f32, 'f32'],
+	[binaryen.f64, 'f64'],
+])
+
+function getEmitterFromTypeOps(
+	typeOps: TypeOps,
+	binaryenType: binaryen.Type
+): BinaryEmitter | null {
+	const key = BINARYEN_TYPE_KEYS.get(binaryenType)
+	if (!key) return null
+	return typeOps[key] ?? null
+}
+
+function lookupEmitter(
+	ops: Map<TokenKind, TypeOps>,
+	opKind: TokenKind,
+	binaryenType: binaryen.Type
+): BinaryEmitter | null {
+	const typeOps = ops.get(opKind)
+	return typeOps ? getEmitterFromTypeOps(typeOps, binaryenType) : null
+}
+
+function findBinaryEmitter(
+	mod: binaryen.Module,
+	opKind: TokenKind,
+	binaryenType: binaryen.Type,
+	operandType: binaryen.Type
+): BinaryEmitter | null {
+	return (
+		lookupEmitter(createArithmeticOps(mod), opKind, binaryenType) ??
+		lookupEmitter(createBitwiseOps(mod), opKind, binaryenType) ??
+		lookupEmitter(createComparisonOps(mod), opKind, operandType)
+	)
+}
+
+interface BinaryOpValues {
+	left: binaryen.ExpressionRef
+	right: binaryen.ExpressionRef
+	leftId: InstId
+}
+
+function getBinaryOpValues(
+	inst: Inst,
+	valueMap: Map<InstId, binaryen.ExpressionRef>
+): BinaryOpValues | null {
+	const leftId = getBinaryOpLeftId(inst)
+	const rightId = getBinaryOpRightId(inst)
+	const left = valueMap.get(leftId)
+	const right = valueMap.get(rightId)
+	if (left === undefined || right === undefined) return null
+	return { left, leftId, right }
+}
+
+function emitBinaryOp(
+	mod: binaryen.Module,
+	inst: Inst,
+	valueMap: Map<InstId, binaryen.ExpressionRef>,
+	context: CompilationContext
+): binaryen.ExpressionRef | null {
+	const values = getBinaryOpValues(inst, valueMap)
+	if (!values) return null
+
+	const parseNode = context.nodes.get(inst.parseNodeId)
+	const opKind = context.tokens.get(parseNode.tokenId).kind
+	const binaryenType = toBinaryenType(inst.typeId, context)
+
+	if (opKind === TokenKind.PercentPercent) {
+		return emitEuclideanMod(mod, values.left, values.right, binaryenType)
+	}
+
+	const leftInst = context.insts?.get(values.leftId)
+	const operandType = leftInst ? toBinaryenType(leftInst.typeId, context) : binaryenType
+	const emitter = findBinaryEmitter(mod, opKind, binaryenType, operandType)
+	return emitter ? emitter(values.left, values.right) : null
+}
+
+/**
+ * Emit short-circuit logical AND: if (left) { right } else { 0 }
+ */
+function emitLogicalAnd(
+	mod: binaryen.Module,
+	inst: Inst,
+	valueMap: Map<InstId, binaryen.ExpressionRef>
+): binaryen.ExpressionRef | null {
+	const leftId = getLogicalAndLeftId(inst)
+	const rightId = getLogicalAndRightId(inst)
+	const left = valueMap.get(leftId)
+	const right = valueMap.get(rightId)
+	if (left === undefined || right === undefined) return null
+
+	// Short-circuit: if left is 0, return 0; otherwise return right
+	return mod.if(left, right, mod.i32.const(0))
+}
+
+/**
+ * Emit short-circuit logical OR: if (left) { 1 } else { right }
+ */
+function emitLogicalOr(
+	mod: binaryen.Module,
+	inst: Inst,
+	valueMap: Map<InstId, binaryen.ExpressionRef>
+): binaryen.ExpressionRef | null {
+	const leftId = getLogicalOrLeftId(inst)
+	const rightId = getLogicalOrRightId(inst)
+	const left = valueMap.get(leftId)
+	const right = valueMap.get(rightId)
+	if (left === undefined || right === undefined) return null
+
+	// Short-circuit: if left is non-zero, return 1; otherwise return right
+	return mod.if(left, mod.i32.const(1), right)
 }
 
 /**
@@ -432,6 +674,14 @@ function emitInstruction(
 			return emitBind(mod, inst, valueMap, context)
 		case InstKind.Negate:
 			return emitNegate(mod, inst, valueMap, context)
+		case InstKind.BitwiseNot:
+			return emitBitwiseNot(mod, inst, valueMap, context)
+		case InstKind.BinaryOp:
+			return emitBinaryOp(mod, inst, valueMap, context)
+		case InstKind.LogicalAnd:
+			return emitLogicalAnd(mod, inst, valueMap)
+		case InstKind.LogicalOr:
+			return emitLogicalOr(mod, inst, valueMap)
 		case InstKind.Match:
 			return emitMatch(mod, inst, currentInstId, valueMap, context)
 		case InstKind.MatchArm:
@@ -448,6 +698,10 @@ function isValueProducer(kind: InstKind): boolean {
 		kind === InstKind.FloatConst ||
 		kind === InstKind.VarRef ||
 		kind === InstKind.Negate ||
+		kind === InstKind.BitwiseNot ||
+		kind === InstKind.BinaryOp ||
+		kind === InstKind.LogicalAnd ||
+		kind === InstKind.LogicalOr ||
 		kind === InstKind.Match
 	)
 }

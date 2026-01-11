@@ -4,6 +4,14 @@ import { CompilationContext } from '../../src/core/context.ts'
 import { TokenKind } from '../../src/core/tokens.ts'
 import { tokenize } from '../../src/lex/tokenizer.ts'
 
+function getTokenKinds(ctx: CompilationContext): TokenKind[] {
+	const kinds: TokenKind[] = []
+	for (const [, token] of ctx.tokens) {
+		kinds.push(token.kind)
+	}
+	return kinds
+}
+
 describe('lex/tokenizer', () => {
 	describe('basic tokenization', () => {
 		it('should tokenize empty input', () => {
@@ -256,6 +264,196 @@ describe('lex/tokenizer', () => {
 				}
 			}
 			assert.deepStrictEqual(panicTokens, [1, 3])
+		})
+	})
+
+	describe('arithmetic operators', () => {
+		it('should tokenize plus', () => {
+			const ctx = new CompilationContext('x:i32 = 1 + 2')
+			tokenize(ctx)
+			assert.ok(getTokenKinds(ctx).includes(TokenKind.Plus))
+		})
+
+		it('should tokenize minus', () => {
+			const ctx = new CompilationContext('x:i32 = 1 - 2')
+			tokenize(ctx)
+			assert.ok(getTokenKinds(ctx).includes(TokenKind.Minus))
+		})
+
+		it('should tokenize star', () => {
+			const ctx = new CompilationContext('x:i32 = 1 * 2')
+			tokenize(ctx)
+			assert.ok(getTokenKinds(ctx).includes(TokenKind.Star))
+		})
+
+		it('should tokenize slash', () => {
+			const ctx = new CompilationContext('x:i32 = 1 / 2')
+			tokenize(ctx)
+			assert.ok(getTokenKinds(ctx).includes(TokenKind.Slash))
+		})
+
+		it('should tokenize percent', () => {
+			const ctx = new CompilationContext('x:i32 = 5 % 3')
+			tokenize(ctx)
+			assert.ok(getTokenKinds(ctx).includes(TokenKind.Percent))
+		})
+
+		it('should tokenize percent percent', () => {
+			const ctx = new CompilationContext('x:i32 = 5 %% 3')
+			tokenize(ctx)
+			assert.ok(getTokenKinds(ctx).includes(TokenKind.PercentPercent))
+		})
+	})
+
+	describe('bitwise operators', () => {
+		it('should tokenize ampersand', () => {
+			const ctx = new CompilationContext('x:i32 = 1 & 2')
+			tokenize(ctx)
+			assert.ok(getTokenKinds(ctx).includes(TokenKind.Ampersand))
+		})
+
+		it('should tokenize pipe', () => {
+			const ctx = new CompilationContext('x:i32 = 1 | 2')
+			tokenize(ctx)
+			assert.ok(getTokenKinds(ctx).includes(TokenKind.Pipe))
+		})
+
+		it('should tokenize caret', () => {
+			const ctx = new CompilationContext('x:i32 = 1 ^ 2')
+			tokenize(ctx)
+			assert.ok(getTokenKinds(ctx).includes(TokenKind.Caret))
+		})
+
+		it('should tokenize tilde', () => {
+			const ctx = new CompilationContext('x:i32 = ~1')
+			tokenize(ctx)
+			assert.ok(getTokenKinds(ctx).includes(TokenKind.Tilde))
+		})
+
+		it('should tokenize less less (left shift)', () => {
+			const ctx = new CompilationContext('x:i32 = 1 << 2')
+			tokenize(ctx)
+			assert.ok(getTokenKinds(ctx).includes(TokenKind.LessLess))
+		})
+
+		it('should tokenize greater greater (right shift)', () => {
+			const ctx = new CompilationContext('x:i32 = 4 >> 1')
+			tokenize(ctx)
+			assert.ok(getTokenKinds(ctx).includes(TokenKind.GreaterGreater))
+		})
+
+		it('should tokenize greater greater greater (unsigned right shift)', () => {
+			const ctx = new CompilationContext('x:i32 = 4 >>> 1')
+			tokenize(ctx)
+			assert.ok(getTokenKinds(ctx).includes(TokenKind.GreaterGreaterGreater))
+		})
+
+		it('should not confuse >> with >>>', () => {
+			const ctx = new CompilationContext('x:i32 = 4 >> 1')
+			tokenize(ctx)
+			const kinds = getTokenKinds(ctx)
+			assert.ok(kinds.includes(TokenKind.GreaterGreater))
+			assert.ok(!kinds.includes(TokenKind.GreaterGreaterGreater))
+		})
+	})
+
+	describe('comparison operators', () => {
+		it('should tokenize less than', () => {
+			const ctx = new CompilationContext('x:i32 = 1 < 2')
+			tokenize(ctx)
+			assert.ok(getTokenKinds(ctx).includes(TokenKind.LessThan))
+		})
+
+		it('should tokenize greater than', () => {
+			const ctx = new CompilationContext('x:i32 = 2 > 1')
+			tokenize(ctx)
+			assert.ok(getTokenKinds(ctx).includes(TokenKind.GreaterThan))
+		})
+
+		it('should tokenize less equal', () => {
+			const ctx = new CompilationContext('x:i32 = 1 <= 2')
+			tokenize(ctx)
+			assert.ok(getTokenKinds(ctx).includes(TokenKind.LessEqual))
+		})
+
+		it('should tokenize greater equal', () => {
+			const ctx = new CompilationContext('x:i32 = 2 >= 1')
+			tokenize(ctx)
+			assert.ok(getTokenKinds(ctx).includes(TokenKind.GreaterEqual))
+		})
+
+		it('should tokenize equal equal', () => {
+			const ctx = new CompilationContext('x:i32 = 1 == 1')
+			tokenize(ctx)
+			assert.ok(getTokenKinds(ctx).includes(TokenKind.EqualEqual))
+		})
+
+		it('should tokenize bang equal', () => {
+			const ctx = new CompilationContext('x:i32 = 1 != 2')
+			tokenize(ctx)
+			assert.ok(getTokenKinds(ctx).includes(TokenKind.BangEqual))
+		})
+
+		it('should not confuse = with ==', () => {
+			const ctx = new CompilationContext('x:i32 = 1 == 2')
+			tokenize(ctx)
+			const kinds = getTokenKinds(ctx)
+			assert.ok(kinds.includes(TokenKind.Equals))
+			assert.ok(kinds.includes(TokenKind.EqualEqual))
+		})
+	})
+
+	describe('logical operators', () => {
+		it('should tokenize ampersand ampersand', () => {
+			const ctx = new CompilationContext('x:i32 = 1 && 2')
+			tokenize(ctx)
+			assert.ok(getTokenKinds(ctx).includes(TokenKind.AmpersandAmpersand))
+		})
+
+		it('should tokenize pipe pipe', () => {
+			const ctx = new CompilationContext('x:i32 = 1 || 2')
+			tokenize(ctx)
+			assert.ok(getTokenKinds(ctx).includes(TokenKind.PipePipe))
+		})
+
+		it('should not confuse & with &&', () => {
+			const ctx = new CompilationContext('x:i32 = 1 & 2')
+			tokenize(ctx)
+			const kinds = getTokenKinds(ctx)
+			assert.ok(kinds.includes(TokenKind.Ampersand))
+			assert.ok(!kinds.includes(TokenKind.AmpersandAmpersand))
+		})
+
+		it('should not confuse | with ||', () => {
+			const ctx = new CompilationContext('x:i32 = 1 | 2')
+			tokenize(ctx)
+			const kinds = getTokenKinds(ctx)
+			assert.ok(kinds.includes(TokenKind.Pipe))
+			assert.ok(!kinds.includes(TokenKind.PipePipe))
+		})
+	})
+
+	describe('parentheses', () => {
+		it('should tokenize left paren', () => {
+			const ctx = new CompilationContext('x:i32 = (1)')
+			tokenize(ctx)
+			assert.ok(getTokenKinds(ctx).includes(TokenKind.LParen))
+		})
+
+		it('should tokenize right paren', () => {
+			const ctx = new CompilationContext('x:i32 = (1)')
+			tokenize(ctx)
+			assert.ok(getTokenKinds(ctx).includes(TokenKind.RParen))
+		})
+
+		it('should tokenize nested parentheses', () => {
+			const ctx = new CompilationContext('x:i32 = ((1 + 2) * 3)')
+			tokenize(ctx)
+			const kinds = getTokenKinds(ctx)
+			const lparenCount = kinds.filter((k) => k === TokenKind.LParen).length
+			const rparenCount = kinds.filter((k) => k === TokenKind.RParen).length
+			assert.strictEqual(lparenCount, 2)
+			assert.strictEqual(rparenCount, 2)
 		})
 	})
 })

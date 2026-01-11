@@ -1,0 +1,13 @@
+# Arithmetic operators
+a:i32 = 10 + 5    # addition: 15
+b:i32 = 10 - 3    # subtraction: 7
+c:i32 = 4 * 3     # multiplication: 12
+d:i32 = 20 / 4    # division: 5
+e:i32 = 10 % 3    # modulo: 1
+f:i32 = -7 %% 3   # euclidean modulo: 2
+
+# Float arithmetic
+g:f64 = 3.14 + 2.86  # 6.0
+h:f64 = 10.0 / 4.0   # 2.5
+
+panic

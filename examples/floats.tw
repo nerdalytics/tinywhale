@@ -1,4 +1,0 @@
-# Variable bindings with type annotations
-x: f32 = 0.1
-y: f64 = -0.2
-panic

@@ -1,0 +1,11 @@
+# Logical operators (short-circuit evaluation)
+a:i32 = 1 && 2    # logical AND: 2 (truthy, returns right)
+b:i32 = 0 && 2    # logical AND: 0 (falsy, returns left)
+c:i32 = 0 || 1    # logical OR: 1 (first truthy)
+d:i32 = 0 || 0    # logical OR: 0 (both falsy)
+
+# Combined with comparison
+e:i32 = (1 < 2) && (3 < 4)   # 1
+f:i32 = (1 > 2) || (3 < 4)   # 1
+
+panic

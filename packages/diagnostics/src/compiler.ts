@@ -164,6 +164,47 @@ export const TWCHECK020: DiagnosticDef = {
 	suggestion: 'Add a wildcard pattern `_` or binding pattern as the last arm.',
 }
 
+export const TWCHECK021: DiagnosticDef = {
+	code: 'TWCHECK021',
+	description:
+		'This operator only works with integer types (i32, i64), but got a floating-point type.',
+	message: 'integer-only operator `{op}` used with `{type}`',
+	severity: DiagnosticSeverity.Error,
+	suggestion: 'Use an integer type or a different operator.',
+}
+
+export const TWCHECK022: DiagnosticDef = {
+	code: 'TWCHECK022',
+	description: 'Binary operators require both operands to have the same type.',
+	message: 'operand type mismatch: `{left}` vs `{right}`',
+	severity: DiagnosticSeverity.Error,
+	suggestion: 'Ensure both operands have the same type.',
+}
+
+export const TWCHECK023: DiagnosticDef = {
+	code: 'TWCHECK023',
+	description: 'Adjacent != operators in a comparison chain are ambiguous.',
+	message: 'adjacent != operators in comparison chain',
+	severity: DiagnosticSeverity.Error,
+	suggestion: 'Break this into separate comparisons joined with &&.',
+}
+
+export const TWCHECK024: DiagnosticDef = {
+	code: 'TWCHECK024',
+	description: 'Logical operators require integer operands (i32 or i64).',
+	message: 'logical operator `{op}` used with `{type}`',
+	severity: DiagnosticSeverity.Error,
+	suggestion: 'Convert to an integer type before using logical operators.',
+}
+
+export const TWCHECK025: DiagnosticDef = {
+	code: 'TWCHECK025',
+	description: 'Division by zero is undefined behavior.',
+	message: 'division by zero',
+	severity: DiagnosticSeverity.Error,
+	suggestion: 'Use a non-zero divisor.',
+}
+
 // =============================================================================
 // CHECKER WARNINGS (TWCHECK050-099)
 // =============================================================================
@@ -205,6 +246,11 @@ export const COMPILER_DIAGNOSTICS = {
 	TWCHECK018,
 	TWCHECK019,
 	TWCHECK020,
+	TWCHECK021,
+	TWCHECK022,
+	TWCHECK023,
+	TWCHECK024,
+	TWCHECK025,
 	TWCHECK050,
 	TWGEN001,
 	TWLEX001,

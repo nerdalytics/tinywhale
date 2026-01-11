@@ -42,12 +42,20 @@ export function symbolId(n: number): SymbolId {
  * - Control flow: 40-49
  */
 export const InstKind = {
+	/** Binary operation: arg0 = left InstId, arg1 = right InstId. Operator from parseNodeId. */
+	BinaryOp: 32,
 	/** Variable binding: arg0 = SymbolId, arg1 = initializer InstId */
 	Bind: 20,
+	/** Bitwise NOT: arg0 = operand InstId */
+	BitwiseNot: 31,
 	/** Float constant: arg0 = FloatId (index into FloatStore) */
 	FloatConst: 11,
 	/** Integer constant: arg0 = low 32 bits, arg1 = high 32 bits (for i64) */
 	IntConst: 10,
+	/** Logical AND (short-circuit): arg0 = left InstId, arg1 = right InstId */
+	LogicalAnd: 33,
+	/** Logical OR (short-circuit): arg0 = left InstId, arg1 = right InstId */
+	LogicalOr: 34,
 	/** Match expression: arg0 = scrutinee InstId, arg1 = arm count */
 	Match: 40,
 	/** Match arm: arg0 = pattern InstId, arg1 = body InstId */
@@ -230,5 +238,33 @@ export function getPatternBindSymbolId(inst: Inst): SymbolId {
 }
 
 export function getPatternBindScrutineeId(inst: Inst): InstId {
+	return inst.arg1 as InstId
+}
+
+export function getBinaryOpLeftId(inst: Inst): InstId {
+	return inst.arg0 as InstId
+}
+
+export function getBinaryOpRightId(inst: Inst): InstId {
+	return inst.arg1 as InstId
+}
+
+export function getBitwiseNotOperandId(inst: Inst): InstId {
+	return inst.arg0 as InstId
+}
+
+export function getLogicalAndLeftId(inst: Inst): InstId {
+	return inst.arg0 as InstId
+}
+
+export function getLogicalAndRightId(inst: Inst): InstId {
+	return inst.arg1 as InstId
+}
+
+export function getLogicalOrLeftId(inst: Inst): InstId {
+	return inst.arg0 as InstId
+}
+
+export function getLogicalOrRightId(inst: Inst): InstId {
 	return inst.arg1 as InstId
 }
