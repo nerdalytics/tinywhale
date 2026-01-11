@@ -66,4 +66,22 @@ describe('lex/tokenizer properties', () => {
 			)
 		})
 	})
+
+	describe('structural properties', () => {
+		it('every token has valid line and column (>= 1)', () => {
+			fc.assert(
+				fc.property(fc.string(), (input) => {
+					const ctx = new CompilationContext(input)
+					tokenize(ctx)
+					for (const [, token] of ctx.tokens) {
+						if (token.line < 1 || token.column < 1) {
+							return false
+						}
+					}
+					return true
+				}),
+				{ numRuns: 1000 }
+			)
+		})
+	})
 })
