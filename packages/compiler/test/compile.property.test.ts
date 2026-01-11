@@ -114,4 +114,48 @@ describe('compile/pipeline properties', () => {
 			)
 		})
 	})
+
+	describe('consistency properties', () => {
+		it('same source always produces identical binary', () => {
+			fc.assert(
+				fc.property(validProgramArb, (source) => {
+					const result1 = compile(source)
+					const result2 = compile(source)
+					if (result1.binary.length !== result2.binary.length) return false
+					for (let i = 0; i < result1.binary.length; i++) {
+						if (result1.binary[i] !== result2.binary[i]) return false
+					}
+					return true
+				}),
+				{ numRuns: 100 }
+			)
+		})
+
+		it('same source always produces identical WAT text', () => {
+			fc.assert(
+				fc.property(validProgramArb, (source) => {
+					const result1 = compile(source)
+					const result2 = compile(source)
+					return result1.text === result2.text
+				}),
+				{ numRuns: 100 }
+			)
+		})
+
+		it('optimized and non-optimized both produce valid WASM magic', () => {
+			fc.assert(
+				fc.property(validProgramArb, (source) => {
+					const normal = compile(source, { optimize: false })
+					const optimized = compile(source, { optimize: true })
+					const checkMagic = (binary: Uint8Array) =>
+						binary[0] === 0x00 &&
+						binary[1] === 0x61 &&
+						binary[2] === 0x73 &&
+						binary[3] === 0x6d
+					return checkMagic(normal.binary) && checkMagic(optimized.binary)
+				}),
+				{ numRuns: 100 }
+			)
+		})
+	})
 })
