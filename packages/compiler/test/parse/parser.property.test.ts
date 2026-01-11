@@ -145,6 +145,36 @@ describe('parse/parser properties', () => {
 				{ numRuns: 1000 }
 			)
 		})
+
+		it('postorder invariant: children precede parent (subtreeSize consistency)', () => {
+			fc.assert(
+				fc.property(fc.string(), (input) => {
+					const ctx = new CompilationContext(input)
+					tokenize(ctx)
+					const result = parse(ctx)
+					if (result.succeeded) {
+						for (const [id, node] of ctx.nodes) {
+							// Children are the (subtreeSize - 1) nodes immediately preceding
+							const childRangeStart = id - node.subtreeSize + 1
+							// Child range must be valid (non-negative start)
+							if (childRangeStart < 0) return false
+							// Verify children's subtreeSizes sum correctly
+							let childSizeSum = 0
+							let pos = childRangeStart
+							while (pos < id) {
+								const child = ctx.nodes.get(pos as never)
+								childSizeSum += child.subtreeSize
+								pos += child.subtreeSize
+							}
+							// childSizeSum should equal subtreeSize - 1
+							if (childSizeSum !== node.subtreeSize - 1) return false
+						}
+					}
+					return true
+				}),
+				{ numRuns: 1000 }
+			)
+		})
 	})
 
 	describe('determinism properties', () => {
