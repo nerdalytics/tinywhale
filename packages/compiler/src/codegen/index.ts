@@ -687,6 +687,12 @@ function emitInstruction(
 		case InstKind.MatchArm:
 			// MatchArm is handled by emitMatch - skip here
 			return null
+		case InstKind.FieldAccess:
+			// Field access on flattened records is resolved to VarRef by the checker.
+			// This case handles non-flattened field access (e.g., nested records or
+			// future heap-allocated records). Currently returns null since all record
+			// fields are flattened to locals.
+			return null
 		default:
 			return null
 	}

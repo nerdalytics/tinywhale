@@ -450,6 +450,32 @@ panic`
 		assert.ok(localMatches && localMatches.length >= 2, 'should have at least 2 i32 locals')
 	})
 
+	it('emits field access as local.get', () => {
+		const source = `type Point
+    x: i32
+    y: i32
+p: Point =
+    x: 5
+    y: 10
+result: i32 = p.x + p.y
+panic`
+		const ctx = createContext(source)
+		tokenize(ctx)
+		parse(ctx)
+		check(ctx)
+		const result = emit(ctx)
+
+		assert.ok(result.valid)
+		// Should have local.get for both p.x and p.y (reading flattened locals)
+		assert.ok(result.text.includes('local.get'), 'should emit local.get for field access')
+		// The result variable (p.x + p.y) should be stored, requiring local.get to read the fields
+		const localGetCount = (result.text.match(/local\.get/g) || []).length
+		assert.ok(
+			localGetCount >= 2,
+			`should have at least 2 local.get instructions, found ${localGetCount}`
+		)
+	})
+
 	it('emits local.set for each record field initializer', () => {
 		const source = `type Point
     x: i32
