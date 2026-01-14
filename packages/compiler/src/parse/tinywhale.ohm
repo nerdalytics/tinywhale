@@ -2,20 +2,35 @@ TinyWhale {
   Program (a program) = Line*
   Line (a line) = IndentedLine | DedentLine | RootLine
 
-  // IndentedLine can contain a MatchArm or Statement
+  // IndentedLine can contain a MatchArm, Statement, or FieldDecl
   IndentedLine = indentToken IndentedContent?
-  IndentedContent = MatchArm | Statement
+  IndentedContent = MatchArm | FieldDecl | Statement
   DedentLine = dedentToken+ Statement?
   RootLine = Statement
 
   // Statements
-  Statement = MatchBinding | MatchExpr | VariableBinding | PanicStatement
+  Statement = TypeDecl | MatchBinding | MatchExpr | VariableBinding | PanicStatement
   PanicStatement = panic
+
+  // Type declaration: type Point
+  TypeDecl = typeKeywordToken upperIdentifier
 
   // Variable binding: x:i32 = expr (with optional spaces)
   VariableBinding = identifier TypeAnnotation equals Expression
   TypeAnnotation = colon TypeName
   TypeName = typeKeyword
+
+  // Field declaration inside type (on indented line)
+  FieldDecl = lowerIdentifier colon TypeRef
+
+  // Type reference (primitives or user-defined)
+  TypeRef = upperIdentifier | typeKeyword
+
+  // Upper-case identifier for type names
+  upperIdentifier = upper (alnum | "_")*
+
+  // Lower-case identifier for field/variable names
+  lowerIdentifier = ~keyword lower (alnum | "_")*
 
   // Match expression: result: Type = match scrutinee
   MatchBinding = identifier TypeAnnotation equals MatchExpr
@@ -60,10 +75,11 @@ TinyWhale {
   unaryOp = minus | tilde
 
   // Keywords
-  keyword = panic | typeKeyword | matchKeyword
+  keyword = panic | typeKeyword | matchKeyword | typeKeywordToken
   typeKeyword = i32 | i64 | f32 | f64
   panic = "panic" ~identifierPart
   matchKeyword = "match" ~identifierPart
+  typeKeywordToken = "type" ~identifierPart
   i32 = "i32" ~identifierPart
   i64 = "i64" ~identifierPart
   f32 = "f32" ~identifierPart

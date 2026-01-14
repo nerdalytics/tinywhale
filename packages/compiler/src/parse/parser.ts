@@ -21,6 +21,8 @@ function tokenToOhmString(token: Token, context: CompilationContext): string | n
 			return 'panic'
 		case TokenKind.Match:
 			return 'match'
+		case TokenKind.Type:
+			return 'type'
 		case TokenKind.I32:
 			return 'i32'
 		case TokenKind.I64:

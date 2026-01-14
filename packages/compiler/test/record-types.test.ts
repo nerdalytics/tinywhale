@@ -4,6 +4,7 @@ import { CompilationContext } from '../src/core/context.ts'
 import { NodeKind } from '../src/core/nodes.ts'
 import { TokenKind } from '../src/core/tokens.ts'
 import { tokenize } from '../src/lex/tokenizer.ts'
+import { matchOnly } from '../src/parse/parser.ts'
 
 describe('record types tokenization', () => {
 	it('tokenizes type keyword', () => {
@@ -30,5 +31,18 @@ describe('record types node kinds', () => {
 	})
 	it('has FieldAccess node kind', () => {
 		assert.ok(NodeKind.FieldAccess !== undefined)
+	})
+})
+
+describe('record types parsing', () => {
+	it('parses type declaration', () => {
+		const source = `type Point
+    x: i32
+    y: i32
+panic`
+		const ctx = new CompilationContext(source)
+		tokenize(ctx)
+		const result = matchOnly(ctx)
+		assert.ok(result, 'should match type declaration')
 	})
 })
