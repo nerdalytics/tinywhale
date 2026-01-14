@@ -1,6 +1,5 @@
 # TinyWhale: Record initialization from field access
 # Demonstrates using field access in record initializers
-# Note: Multiple type declarations not yet supported
 
 type Point
     x: i32
