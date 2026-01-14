@@ -56,6 +56,7 @@ export const TokenKind = {
 	Slash: 22,
 	Star: 21,
 	Tilde: 26,
+	Type: 16,
 	Underscore: 7,
 } as const
 
