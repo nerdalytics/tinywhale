@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { CompilationContext } from '../src/core/context.ts'
+import { NodeKind } from '../src/core/nodes.ts'
 import { TokenKind } from '../src/core/tokens.ts'
 import { tokenize } from '../src/lex/tokenizer.ts'
 
@@ -11,5 +12,23 @@ describe('record types tokenization', () => {
 		const tokens = [...ctx.tokens]
 		const typeToken = tokens.find(([, t]) => t.kind === TokenKind.Type)
 		assert.ok(typeToken, 'should have Type token')
+	})
+})
+
+describe('record types node kinds', () => {
+	it('has TypeDecl node kind', () => {
+		assert.ok(NodeKind.TypeDecl !== undefined)
+	})
+	it('has FieldDecl node kind', () => {
+		assert.ok(NodeKind.FieldDecl !== undefined)
+	})
+	it('has RecordLiteral node kind', () => {
+		assert.ok(NodeKind.RecordLiteral !== undefined)
+	})
+	it('has FieldInit node kind', () => {
+		assert.ok(NodeKind.FieldInit !== undefined)
+	})
+	it('has FieldAccess node kind', () => {
+		assert.ok(NodeKind.FieldAccess !== undefined)
 	})
 })

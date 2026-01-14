@@ -12,6 +12,13 @@ export const NodeKind = {
 	BindingPattern: 202,
 	CompareChain: 106,
 	DedentLine: 1,
+
+	// Record expressions (107-109)
+	FieldAccess: 109,
+
+	// Type declarations (50-59)
+	FieldDecl: 51,
+	FieldInit: 108,
 	FloatLiteral: 103,
 
 	// Expressions (100-149)
@@ -30,10 +37,12 @@ export const NodeKind = {
 
 	// Program root (255)
 	Program: 255,
+	RecordLiteral: 107,
 	RootLine: 2,
 
 	// Type annotations (150-199)
 	TypeAnnotation: 150,
+	TypeDecl: 50,
 	UnaryExpr: 102,
 	VariableBinding: 11,
 
