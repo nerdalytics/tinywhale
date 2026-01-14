@@ -4,7 +4,7 @@ import { CompilationContext } from '../src/core/context.ts'
 import { NodeKind } from '../src/core/nodes.ts'
 import { TokenKind } from '../src/core/tokens.ts'
 import { tokenize } from '../src/lex/tokenizer.ts'
-import { matchOnly } from '../src/parse/parser.ts'
+import { matchOnly, parse } from '../src/parse/parser.ts'
 
 describe('record types tokenization', () => {
 	it('tokenizes type keyword', () => {
@@ -80,5 +80,20 @@ panic`
 		tokenize(ctx)
 		const result = matchOnly(ctx)
 		assert.ok(result, 'should match nested field access')
+	})
+})
+
+describe('parser semantic actions', () => {
+	it('creates TypeDecl node', () => {
+		// Use simple source without field declarations (FieldDecl semantic action comes in a later task)
+		const source = `type Point
+panic`
+		const ctx = new CompilationContext(source)
+		tokenize(ctx)
+		parse(ctx)
+
+		const nodes = [...ctx.nodes]
+		const typeDecl = nodes.find(([, n]) => n.kind === NodeKind.TypeDecl)
+		assert.ok(typeDecl, 'should create TypeDecl node')
 	})
 })

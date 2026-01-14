@@ -479,6 +479,14 @@ function createNodeEmittingSemantics(
 		Statement(stmt: Node): NodeId {
 			return stmt['emitStatement']()
 		},
+		TypeDecl(_typeKeyword: Node, _typeName: Node): NodeId {
+			const tid = getTokenIdForOhmNode(this)
+			return context.nodes.add({
+				kind: NodeKind.TypeDecl,
+				subtreeSize: 1, // Will be updated when fields are processed
+				tokenId: tid,
+			})
+		},
 		VariableBinding(ident: Node, typeAnnotation: Node, _equals: Node, optExpr: Node): NodeId {
 			const startCount = context.nodes.count()
 			// Emit children first (postorder: children before parent)
