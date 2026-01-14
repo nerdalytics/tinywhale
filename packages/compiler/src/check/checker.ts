@@ -24,9 +24,11 @@ import { InstStore, ScopeStore, SymbolStore, TypeStore } from './stores.ts'
 import {
 	BuiltinTypeId,
 	type CheckResult,
+	type FieldInfo,
 	type InstId,
 	InstKind,
 	type Scope,
+	type SymbolId,
 	type TypeId,
 } from './types.ts'
 
@@ -1034,10 +1036,106 @@ function checkBinaryExprInferred(
 }
 
 /**
+ * Try to resolve a flattened record field symbol.
+ * For p.x where p is a record, returns the symbol for p_x if it exists.
+ */
+function tryResolveFlattenedSymbol(
+	baseId: NodeId,
+	fieldName: string,
+	state: CheckerState,
+	context: CompilationContext
+): { symId: SymbolId; baseName: string } | null {
+	const baseNode = context.nodes.get(baseId)
+	if (baseNode.kind !== NodeKind.Identifier) return null
+
+	const baseToken = context.tokens.get(baseNode.tokenId)
+	const baseName = context.strings.get(baseToken.payload as StringId)
+	const flattenedName = `${baseName}_${fieldName}`
+	const flattenedNameId = context.strings.intern(flattenedName)
+	const symId = state.symbols.lookupByName(flattenedNameId)
+
+	return symId !== undefined ? { baseName, symId } : null
+}
+
+/**
+ * Emit a VarRef instruction for a flattened symbol.
+ */
+function emitFlattenedVarRef(exprId: NodeId, symId: SymbolId, state: CheckerState): ExprResult {
+	const symbol = state.symbols.get(symId)
+	const instId = state.insts.add({
+		arg0: symId as number,
+		arg1: 0,
+		kind: InstKind.VarRef,
+		parseNodeId: exprId,
+		typeId: symbol.typeId,
+	})
+	return { instId, typeId: symbol.typeId }
+}
+
+/**
+ * Check for unknown identifier in flattened field access.
+ */
+function checkFlattenedBaseExists(
+	baseId: NodeId,
+	state: CheckerState,
+	context: CompilationContext
+): boolean {
+	const baseNode = context.nodes.get(baseId)
+	if (baseNode.kind !== NodeKind.Identifier) return true
+
+	const baseToken = context.tokens.get(baseNode.tokenId)
+	const baseName = context.strings.get(baseToken.payload as StringId)
+	const baseNameId = baseToken.payload as StringId
+	const baseSymId = state.symbols.lookupByName(baseNameId)
+
+	if (baseSymId === undefined) {
+		context.emitAtNode('TWCHECK013' as DiagnosticCode, baseId, { name: baseName })
+		return false
+	}
+	return true
+}
+
+/**
+ * Emit standard field access instruction.
+ */
+function emitFieldAccessInst(
+	exprId: NodeId,
+	fieldName: string,
+	baseResult: { typeId: TypeId; instId: InstId },
+	state: CheckerState,
+	context: CompilationContext
+): ExprResult {
+	if (!state.types.isRecordType(baseResult.typeId)) {
+		const typeName = state.types.typeName(baseResult.typeId)
+		context.emitAtNode('TWCHECK031' as DiagnosticCode, exprId, { name: fieldName, typeName })
+		return { instId: null, typeId: BuiltinTypeId.Invalid }
+	}
+
+	const fieldInfo = state.types.getField(baseResult.typeId, fieldName)
+	if (!fieldInfo) {
+		const typeName = state.types.typeName(baseResult.typeId)
+		context.emitAtNode('TWCHECK030' as DiagnosticCode, exprId, { name: fieldName, typeName })
+		return { instId: null, typeId: BuiltinTypeId.Invalid }
+	}
+
+	const instId = state.insts.add({
+		arg0: baseResult.instId as number,
+		arg1: fieldInfo.index,
+		kind: InstKind.FieldAccess,
+		parseNodeId: exprId,
+		typeId: fieldInfo.typeId,
+	})
+	return { instId, typeId: fieldInfo.typeId }
+}
+
+/**
  * Check a field access expression with type inference.
  * In postorder: [base..., FieldAccess]
  * The base expression is at exprId - 1 (accounting for subtreeSize - 1).
  * The tokenId points to the field name identifier.
+ *
+ * For flattened record bindings (p: Point → $p_x, $p_y), this resolves
+ * p.x directly to the flattened symbol $p_x.
  */
 function checkFieldAccessInferred(
 	exprId: NodeId,
@@ -1046,40 +1144,23 @@ function checkFieldAccessInferred(
 ): ExprResult {
 	const node = context.nodes.get(exprId)
 	const baseId = prevNodeId(exprId)
-
-	// Check the base expression to get its type
-	const baseResult = checkExpressionInferred(baseId, state, context)
-	if (!isValidExprResult(baseResult)) return baseResult
-
-	// Get the field name from the token
 	const fieldToken = context.tokens.get(node.tokenId)
 	const fieldName = context.strings.get(fieldToken.payload as StringId)
 
-	// Check if base is a record type
-	if (!state.types.isRecordType(baseResult.typeId)) {
-		const typeName = state.types.typeName(baseResult.typeId)
-		context.emitAtNode('TWCHECK031' as DiagnosticCode, exprId, { name: fieldName, typeName })
+	// Try flattened symbol resolution first (p.x → p_x)
+	const flattened = tryResolveFlattenedSymbol(baseId, fieldName, state, context)
+	if (flattened) return emitFlattenedVarRef(exprId, flattened.symId, state)
+
+	// Check for unknown base identifier
+	if (!checkFlattenedBaseExists(baseId, state, context)) {
 		return { instId: null, typeId: BuiltinTypeId.Invalid }
 	}
 
-	// Look up the field on the record type
-	const fieldInfo = state.types.getField(baseResult.typeId, fieldName)
-	if (!fieldInfo) {
-		const typeName = state.types.typeName(baseResult.typeId)
-		context.emitAtNode('TWCHECK030' as DiagnosticCode, exprId, { name: fieldName, typeName })
-		return { instId: null, typeId: BuiltinTypeId.Invalid }
-	}
+	// Standard field access handling
+	const baseResult = checkExpressionInferred(baseId, state, context)
+	if (!isValidExprResult(baseResult)) return baseResult
 
-	// Emit FieldAccess instruction
-	const instId = state.insts.add({
-		arg0: baseResult.instId as number,
-		arg1: fieldInfo.index,
-		kind: InstKind.FieldAccess,
-		parseNodeId: exprId,
-		typeId: fieldInfo.typeId,
-	})
-
-	return { instId, typeId: fieldInfo.typeId }
+	return emitFieldAccessInst(exprId, fieldName, baseResult, state, context)
 }
 
 /**
@@ -1536,8 +1617,37 @@ function checkMissingRecordFields(
 }
 
 /**
+ * Emit Bind instructions for flattened record field symbols.
+ */
+function emitRecordFieldBindings(
+	fieldSymbolIds: SymbolId[],
+	fields: readonly FieldInfo[],
+	fieldInits: RecordLiteralContext['fieldInits'],
+	bindingNodeId: NodeId,
+	state: CheckerState
+): void {
+	for (let i = 0; i < fieldSymbolIds.length; i++) {
+		const symId = fieldSymbolIds[i]
+		const field = fields[i]
+		const fieldInit = fieldInits.find((fi) => fi.name === field?.name)
+
+		if (symId !== undefined && fieldInit?.exprResult.instId !== undefined && field) {
+			state.insts.add({
+				arg0: symId as number,
+				arg1: fieldInit.exprResult.instId as number,
+				kind: InstKind.Bind,
+				parseNodeId: bindingNodeId,
+				typeId: field.typeId,
+			})
+		}
+	}
+}
+
+/**
  * Finalize a record literal by validating all required fields are present
  * and emitting the binding instruction.
+ *
+ * Creates flattened symbols for each field: p: Point → $p_x, $p_y locals.
  */
 function finalizeRecordLiteral(state: CheckerState, context: CompilationContext): void {
 	if (!state.recordLiteralContext) return
@@ -1547,23 +1657,16 @@ function finalizeRecordLiteral(state: CheckerState, context: CompilationContext)
 
 	checkMissingRecordFields(recordTypeId, fieldNames, bindingNodeId, typeName, state, context)
 
-	// Only emit binding if no errors
 	if (!context.hasErrors()) {
-		const symId = state.symbols.add({
-			nameId: bindingNameId,
-			parseNodeId: bindingNodeId,
-			typeId: recordTypeId,
-		})
-
-		// TODO: In the future, emit RecordLiteral instruction
-		// For now, emit a placeholder Bind with no value instruction
-		state.insts.add({
-			arg0: symId as number,
-			arg1: fieldInits.length,
-			kind: InstKind.Bind,
-			parseNodeId: bindingNodeId,
-			typeId: recordTypeId,
-		})
+		const baseName = context.strings.get(bindingNameId)
+		const fields = state.types.getFields(recordTypeId)
+		const fieldSymbolIds = state.symbols.declareRecordBinding(
+			baseName,
+			fields,
+			bindingNodeId,
+			(name) => context.strings.intern(name)
+		)
+		emitRecordFieldBindings(fieldSymbolIds, fields, fieldInits, bindingNodeId, state)
 	}
 
 	state.recordLiteralContext = null

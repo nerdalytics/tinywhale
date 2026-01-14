@@ -161,6 +161,36 @@ export class SymbolStore {
 		return this.nextLocalIndex
 	}
 
+	/**
+	 * Create flattened symbols for a record binding.
+	 * For p: Point with fields x, y creates $p_x, $p_y locals.
+	 *
+	 * @param baseName - The variable name (e.g., "p")
+	 * @param fields - Field definitions from the record type
+	 * @param parseNodeId - Parse node of the binding for diagnostics
+	 * @param intern - Function to intern strings (e.g., context.strings.intern)
+	 * @returns Array of SymbolIds for the flattened locals
+	 */
+	declareRecordBinding(
+		baseName: string,
+		fields: readonly FieldInfo[],
+		parseNodeId: NodeId,
+		intern: (name: string) => StringId
+	): SymbolId[] {
+		const symbolIds: SymbolId[] = []
+		for (const field of fields) {
+			const flatName = `${baseName}_${field.name}`
+			const nameId = intern(flatName)
+			const symId = this.add({
+				nameId,
+				parseNodeId,
+				typeId: field.typeId,
+			})
+			symbolIds.push(symId)
+		}
+		return symbolIds
+	}
+
 	*[Symbol.iterator](): Generator<[SymbolId, SymbolEntry]> {
 		for (let i = 0; i < this.symbols.length; i++) {
 			const entry = this.symbols[i]

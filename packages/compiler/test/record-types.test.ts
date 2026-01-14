@@ -402,3 +402,24 @@ panic`
 		// The field access should work once supported, but we test the principle
 	})
 })
+
+describe('SymbolStore record bindings', () => {
+	it('creates flattened locals for record fields', () => {
+		// When binding p: Point, should create $p_x and $p_y locals
+		const source = `type Point
+    x: i32
+    y: i32
+p: Point =
+    x: 5
+    y: 10
+panic`
+		const ctx = createContext(source)
+		tokenize(ctx)
+		parse(ctx)
+		check(ctx)
+
+		// Check that we have locals for p.x and p.y
+		assert.ok(ctx.symbols !== null && ctx.symbols !== undefined)
+		assert.ok(ctx.symbols.localCount() >= 2)
+	})
+})
