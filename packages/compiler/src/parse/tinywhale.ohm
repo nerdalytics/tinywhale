@@ -63,10 +63,17 @@ TinyWhale {
   UnaryExpr = unaryOp UnaryExpr  -- unary
             | PrimaryExpr        -- primary
 
-  PrimaryExpr = lparen Expression rparen  -- paren
+  PrimaryExpr = FieldAccess
+              | lparen Expression rparen  -- paren
               | identifier
               | floatLiteral
               | intLiteral
+
+  FieldAccess = PrimaryExprBase (dot lowerIdentifier)+
+  PrimaryExprBase = lparen Expression rparen  -- paren
+                  | identifier
+                  | floatLiteral
+                  | intLiteral
 
   // Operator groups
   compareOp = lessEqual | greaterEqual | lessThan | greaterThan | equalEqual | bangEqual
@@ -130,6 +137,9 @@ TinyWhale {
   // Grouping
   lparen = "("
   rparen = ")"
+
+  // Field access
+  dot = "."
 
   // Lexical token rules (marker followed by indent level)
   indentToken = "⇥" digit+

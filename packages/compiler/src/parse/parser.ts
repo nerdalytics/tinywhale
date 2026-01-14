@@ -92,6 +92,8 @@ function tokenToOhmString(token: Token, context: CompilationContext): string | n
 			return '('
 		case TokenKind.RParen:
 			return ')'
+		case TokenKind.Dot:
+			return '.'
 		case TokenKind.Bang:
 			return '!'
 		default:

@@ -13,6 +13,7 @@ export const TokenKind = {
 	Caret: 25,
 	Colon: 3,
 	Dedent: 1,
+	Dot: 42,
 
 	// Special (255)
 	Eof: 255,

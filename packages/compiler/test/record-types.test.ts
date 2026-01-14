@@ -46,3 +46,23 @@ panic`
 		assert.ok(result, 'should match type declaration')
 	})
 })
+
+describe('field access parsing', () => {
+	it('parses dot notation', () => {
+		const source = `x:i32 = p.x
+panic`
+		const ctx = new CompilationContext(source)
+		tokenize(ctx)
+		const result = matchOnly(ctx)
+		assert.ok(result, 'should match field access')
+	})
+
+	it('parses nested dot notation', () => {
+		const source = `x:i32 = person.home.zip
+panic`
+		const ctx = new CompilationContext(source)
+		tokenize(ctx)
+		const result = matchOnly(ctx)
+		assert.ok(result, 'should match nested field access')
+	})
+})
