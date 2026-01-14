@@ -262,6 +262,23 @@ function createNodeEmittingSemantics(
 		Expression(expr: Node): NodeId {
 			return expr['emitExpression']()
 		},
+		FieldAccess(base: Node, _dots: Node, fields: Node): NodeId {
+			// Emit base expression first
+			let currentId = base['emitExpression']() as NodeId
+
+			// For each .field, create a FieldAccess node
+			for (let i = 0; i < fields.numChildren; i++) {
+				const fieldNode = fields.child(i)
+				const tid = getTokenIdForOhmNode(fieldNode)
+				const baseSize = context.nodes.get(currentId).subtreeSize
+				currentId = context.nodes.add({
+					kind: NodeKind.FieldAccess,
+					subtreeSize: 1 + baseSize,
+					tokenId: tid,
+				})
+			}
+			return currentId
+		},
 		floatLiteral(
 			_intPart: Node,
 			_dot: Node,

@@ -124,4 +124,16 @@ panic`
 		const fieldInits = nodes.filter(([, n]) => n.kind === NodeKind.FieldInit)
 		assert.equal(fieldInits.length, 2, 'should create 2 FieldInit nodes')
 	})
+
+	it('creates FieldAccess node', () => {
+		const source = `x:i32 = p.x
+panic`
+		const ctx = new CompilationContext(source)
+		tokenize(ctx)
+		parse(ctx)
+
+		const nodes = [...ctx.nodes]
+		const fieldAccess = nodes.find(([, n]) => n.kind === NodeKind.FieldAccess)
+		assert.ok(fieldAccess, 'should create FieldAccess node')
+	})
 })
