@@ -12,8 +12,8 @@ importers:
         specifier: 2.3.11
         version: 2.3.11
       '@types/node':
-        specifier: 25.0.6
-        version: 25.0.6
+        specifier: 25.0.8
+        version: 25.0.8
       fast-check:
         specifier: 4.5.3
         version: 4.5.3
@@ -34,8 +34,8 @@ importers:
         version: link:../diagnostics
     devDependencies:
       '@types/node':
-        specifier: 25.0.6
-        version: 25.0.6
+        specifier: 25.0.8
+        version: 25.0.8
       typescript:
         specifier: 5.9.3
         version: 5.9.3
@@ -56,8 +56,8 @@ importers:
         specifier: 2.0.1
         version: 2.0.1(ohm-js@17.3.0)
       '@types/node':
-        specifier: 25.0.6
-        version: 25.0.6
+        specifier: 25.0.8
+        version: 25.0.8
       typescript:
         specifier: 5.9.3
         version: 5.9.3
@@ -187,8 +187,8 @@ packages:
   '@types/bytes@3.1.5':
     resolution: {integrity: sha512-VgZkrJckypj85YxEsEavcMmmSOIzkUHqWmM4CCyia5dc54YwsXzJ5uT4fYxBQNEXx+oF1krlhgCbvfubXqZYsQ==}
 
-  '@types/node@25.0.6':
-    resolution: {integrity: sha512-NNu0sjyNxpoiW3YuVFfNz7mxSQ+S4X2G28uqg2s+CzoqoQjLPsWSbsFFyztIAqt2vb8kfEAsJNepMGPTxFDx3Q==}
+  '@types/node@25.0.8':
+    resolution: {integrity: sha512-powIePYMmC3ibL0UJ2i2s0WIbq6cg6UyVFQxSCpaPxxzAaziRfimGivjdF943sSGV6RADVbk0Nvlm5P/FB44Zg==}
 
   '@types/pluralize@0.0.33':
     resolution: {integrity: sha512-JOqsl+ZoCpP4e8TDke9W79FDcSgPAR0l6pixx2JHkhnRjvShyYiAYw2LVsnA7K08Y6DeOnaU6ujmENO4os/cYg==}
@@ -608,7 +608,7 @@ snapshots:
 
   '@types/bytes@3.1.5': {}
 
-  '@types/node@25.0.6':
+  '@types/node@25.0.8':
     dependencies:
       undici-types: 7.16.0
 
