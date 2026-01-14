@@ -516,3 +516,42 @@ panic`
 		assert.ok(result.text.includes('i64'), 'should have i64 type')
 	})
 })
+
+describe('multiple type declarations', () => {
+	it('supports multiple type declarations in one file', () => {
+		const source = `type Point
+    x: i32
+    y: i32
+type Line
+    start: i32
+    end: i32
+panic`
+		const ctx = createContext(source)
+		tokenize(ctx)
+		parse(ctx)
+		const result = check(ctx)
+
+		assert.ok(result.succeeded, 'should succeed with multiple types')
+		assert.ok(ctx.types?.lookup('Point') !== undefined, 'Point should be registered')
+		assert.ok(ctx.types?.lookup('Line') !== undefined, 'Line should be registered')
+	})
+
+	it('allows using fields from both types', () => {
+		const source = `type Point
+    x: i32
+type Line
+    len: i32
+p: Point =
+    x: 5
+l: Line =
+    len: 10
+sum: i32 = p.x + l.len
+panic`
+		const ctx = createContext(source)
+		tokenize(ctx)
+		parse(ctx)
+		const result = check(ctx)
+
+		assert.ok(result.succeeded)
+	})
+})
