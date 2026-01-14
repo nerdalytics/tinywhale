@@ -110,4 +110,18 @@ panic`
 		const fieldDecls = nodes.filter(([, n]) => n.kind === NodeKind.FieldDecl)
 		assert.equal(fieldDecls.length, 2, 'should create 2 FieldDecl nodes')
 	})
+
+	it('creates FieldInit nodes', () => {
+		const source = `p: Point =
+    x: 5
+    y: 10
+panic`
+		const ctx = new CompilationContext(source)
+		tokenize(ctx)
+		parse(ctx)
+
+		const nodes = [...ctx.nodes]
+		const fieldInits = nodes.filter(([, n]) => n.kind === NodeKind.FieldInit)
+		assert.equal(fieldInits.length, 2, 'should create 2 FieldInit nodes')
+	})
 })

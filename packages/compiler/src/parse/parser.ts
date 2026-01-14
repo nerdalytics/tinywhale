@@ -422,15 +422,27 @@ function createNodeEmittingSemantics(
 				tokenId: tid,
 			})
 		},
+		FieldInit(fieldName: Node, _colon: Node, expression: Node): NodeId {
+			const startCount = context.nodes.count()
+			expression['emitExpression']()
+			const childCount = context.nodes.count() - startCount
+
+			const tid = getTokenIdForOhmNode(fieldName)
+			return context.nodes.add({
+				kind: NodeKind.FieldInit,
+				subtreeSize: 1 + childCount,
+				tokenId: tid,
+			})
+		},
 		IndentedContent(content: Node): NodeId {
-			// Route based on content type
-			if (content.ctorName === 'MatchArm') {
-				return content['emitMatchArm']()
+			// Route based on content type using lookup table
+			const routeMap: Record<string, string> = {
+				FieldDecl: 'emitIndentedContent',
+				FieldInit: 'emitIndentedContent',
+				MatchArm: 'emitMatchArm',
 			}
-			if (content.ctorName === 'FieldDecl') {
-				return content['emitIndentedContent']()
-			}
-			return content['emitStatement']()
+			const operation = routeMap[content.ctorName] ?? 'emitStatement'
+			return content[operation]()
 		},
 		MatchArm(pattern: Node, _arrow: Node, expr: Node): NodeId {
 			const startCount = context.nodes.count()
