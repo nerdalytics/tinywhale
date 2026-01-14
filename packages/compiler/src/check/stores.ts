@@ -7,6 +7,7 @@ import type { StringId } from '../core/context.ts'
 import type { NodeId } from '../core/nodes.ts'
 import {
 	BuiltinTypeId,
+	type FieldInfo,
 	type Inst,
 	type InstId,
 	instId,
@@ -300,6 +301,47 @@ export class TypeStore {
 
 	isValid(id: TypeId): boolean {
 		return id >= 0 && id < this.types.length
+	}
+
+	/**
+	 * Register a record type with fields.
+	 */
+	registerRecordType(name: string, fields: FieldInfo[], parseNodeId: NodeId | null): TypeId {
+		const id = typeId(this.types.length)
+		const info: TypeInfo = {
+			fields,
+			kind: TypeKind.Record,
+			name,
+			parseNodeId,
+			underlying: id, // Records reference themselves
+		}
+		this.types.push(info)
+		this.nameToId.set(name, id)
+		return id
+	}
+
+	/**
+	 * Check if a type is a record type.
+	 */
+	isRecordType(id: TypeId): boolean {
+		const info = this.types[id]
+		return info?.kind === TypeKind.Record
+	}
+
+	/**
+	 * Get all fields of a record type.
+	 */
+	getFields(id: TypeId): readonly FieldInfo[] {
+		const info = this.types[id]
+		return info?.fields ?? []
+	}
+
+	/**
+	 * Get a specific field by name.
+	 */
+	getField(id: TypeId, fieldName: string): FieldInfo | undefined {
+		const fields = this.getFields(id)
+		return fields.find((f) => f.name === fieldName)
 	}
 
 	*[Symbol.iterator](): Generator<[TypeId, TypeInfo]> {

@@ -1,10 +1,65 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
+import { TypeStore } from '../src/check/stores.ts'
+import { BuiltinTypeId } from '../src/check/types.ts'
 import { CompilationContext } from '../src/core/context.ts'
 import { NodeKind } from '../src/core/nodes.ts'
 import { TokenKind } from '../src/core/tokens.ts'
 import { tokenize } from '../src/lex/tokenizer.ts'
 import { matchOnly, parse } from '../src/parse/parser.ts'
+
+describe('TypeStore record types', () => {
+	it('registers record type with fields', () => {
+		const types = new TypeStore()
+		const fields = [
+			{ index: 0, name: 'x', typeId: BuiltinTypeId.I32 },
+			{ index: 1, name: 'y', typeId: BuiltinTypeId.I32 },
+		]
+		const pointId = types.registerRecordType('Point', fields, null)
+
+		assert.ok(types.isRecordType(pointId))
+		assert.equal(types.getFields(pointId).length, 2)
+	})
+
+	it('looks up field by name', () => {
+		const types = new TypeStore()
+		const fields = [{ index: 0, name: 'x', typeId: BuiltinTypeId.I32 }]
+		const pointId = types.registerRecordType('Point', fields, null)
+
+		const field = types.getField(pointId, 'x')
+		assert.ok(field)
+		assert.equal(field.typeId, BuiltinTypeId.I32)
+	})
+
+	it('returns undefined for non-existent field', () => {
+		const types = new TypeStore()
+		const fields = [{ index: 0, name: 'x', typeId: BuiltinTypeId.I32 }]
+		const pointId = types.registerRecordType('Point', fields, null)
+
+		const field = types.getField(pointId, 'nonexistent')
+		assert.equal(field, undefined)
+	})
+
+	it('returns false for isRecordType on non-record types', () => {
+		const types = new TypeStore()
+		assert.equal(types.isRecordType(BuiltinTypeId.I32), false)
+	})
+
+	it('returns empty array for getFields on non-record types', () => {
+		const types = new TypeStore()
+		assert.deepEqual(types.getFields(BuiltinTypeId.I32), [])
+	})
+
+	it('can look up record type by name', () => {
+		const types = new TypeStore()
+		const fields = [{ index: 0, name: 'x', typeId: BuiltinTypeId.I32 }]
+		types.registerRecordType('Point', fields, null)
+
+		const lookedUp = types.lookup('Point')
+		assert.ok(lookedUp !== undefined)
+		assert.ok(types.isRecordType(lookedUp))
+	})
+})
 
 describe('record types tokenization', () => {
 	it('tokenizes type keyword', () => {

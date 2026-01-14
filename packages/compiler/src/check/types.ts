@@ -95,6 +95,8 @@ export const TypeKind = {
 	I64: 2,
 	/** No value (for instructions that don't produce a result) */
 	None: 0,
+	/** Record type with named fields */
+	Record: 6,
 } as const
 
 export type TypeKind = (typeof TypeKind)[keyof typeof TypeKind]
@@ -119,6 +121,15 @@ export const BuiltinTypeId = {
 } as const
 
 /**
+ * Information about a record field.
+ */
+export interface FieldInfo {
+	readonly name: string
+	readonly typeId: TypeId
+	readonly index: number
+}
+
+/**
  * Information about a type stored in TypeStore.
  */
 export interface TypeInfo {
@@ -130,6 +141,8 @@ export interface TypeInfo {
 	readonly underlying: TypeId
 	/** Parse node that declared this type (null for builtins) */
 	readonly parseNodeId: NodeId | null
+	/** For Record types: field definitions */
+	readonly fields?: readonly FieldInfo[]
 }
 
 /**
