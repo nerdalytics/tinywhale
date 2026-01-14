@@ -205,6 +205,14 @@ export const TWCHECK025: DiagnosticDef = {
 	suggestion: 'Use a non-zero divisor.',
 }
 
+export const TWCHECK026: DiagnosticDef = {
+	code: 'TWCHECK026',
+	description: 'A record type cannot have two fields with the same name.',
+	message: 'duplicate field `{name}` in type `{typeName}`',
+	severity: DiagnosticSeverity.Error,
+	suggestion: 'Rename one of the fields to have a unique name.',
+}
+
 // =============================================================================
 // CHECKER WARNINGS (TWCHECK050-099)
 // =============================================================================
@@ -251,6 +259,7 @@ export const COMPILER_DIAGNOSTICS = {
 	TWCHECK023,
 	TWCHECK024,
 	TWCHECK025,
+	TWCHECK026,
 	TWCHECK050,
 	TWGEN001,
 	TWLEX001,

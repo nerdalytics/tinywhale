@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
+import { check } from '../src/check/checker.ts'
 import { TypeStore } from '../src/check/stores.ts'
 import { BuiltinTypeId } from '../src/check/types.ts'
 import { CompilationContext } from '../src/core/context.ts'
@@ -190,5 +191,69 @@ panic`
 		const nodes = [...ctx.nodes]
 		const fieldAccess = nodes.find(([, n]) => n.kind === NodeKind.FieldAccess)
 		assert.ok(fieldAccess, 'should create FieldAccess node')
+	})
+})
+
+describe('checker type declarations', () => {
+	it('registers type in TypeStore', () => {
+		const source = `type Point
+    x: i32
+    y: i32
+panic`
+		const ctx = new CompilationContext(source)
+		tokenize(ctx)
+		parse(ctx)
+		check(ctx)
+
+		const pointId = ctx.types?.lookup('Point')
+		assert.ok(pointId !== undefined, 'Point type should be registered')
+		assert.ok(ctx.types?.isRecordType(pointId))
+	})
+
+	it('reports error for duplicate field names', () => {
+		const source = `type Point
+    x: i32
+    x: i32
+panic`
+		const ctx = new CompilationContext(source)
+		tokenize(ctx)
+		parse(ctx)
+		check(ctx)
+
+		assert.ok(ctx.hasErrors(), 'should report duplicate field error')
+	})
+
+	it('registers fields with correct types', () => {
+		const source = `type Point
+    x: i32
+    y: i64
+panic`
+		const ctx = new CompilationContext(source)
+		tokenize(ctx)
+		parse(ctx)
+		check(ctx)
+
+		const pointId = ctx.types?.lookup('Point')
+		assert.ok(pointId !== undefined)
+		const fields = ctx.types?.getFields(pointId)
+		assert.equal(fields?.length, 2)
+		assert.equal(fields?.[0]?.name, 'x')
+		assert.equal(fields?.[0]?.typeId, BuiltinTypeId.I32)
+		assert.equal(fields?.[1]?.name, 'y')
+		assert.equal(fields?.[1]?.typeId, BuiltinTypeId.I64)
+	})
+
+	it('handles type with no fields', () => {
+		const source = `type Empty
+panic`
+		const ctx = new CompilationContext(source)
+		tokenize(ctx)
+		parse(ctx)
+		check(ctx)
+
+		const emptyId = ctx.types?.lookup('Empty')
+		assert.ok(emptyId !== undefined, 'Empty type should be registered')
+		assert.ok(ctx.types?.isRecordType(emptyId))
+		assert.equal(ctx.types?.getFields(emptyId).length, 0)
 	})
 })

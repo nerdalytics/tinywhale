@@ -56,6 +56,20 @@ interface MatchContext {
 	bindingNodeId: NodeId
 }
 
+/**
+ * Context for collecting type declaration fields.
+ */
+interface TypeDeclContext {
+	/** Type name */
+	typeName: string
+	/** Parse node ID of the TypeDecl (for diagnostics) */
+	typeDeclNodeId: NodeId
+	/** Collected fields */
+	fields: Array<{ name: string; typeId: TypeId; nodeId: NodeId }>
+	/** Track field names for duplicate detection */
+	fieldNames: Set<string>
+}
+
 interface CheckerState {
 	readonly insts: InstStore
 	readonly scopes: ScopeStore
@@ -64,6 +78,7 @@ interface CheckerState {
 	currentScope: Scope
 	unreachableRange: UnreachableRange | null
 	matchContext: MatchContext | null
+	typeDeclContext: TypeDeclContext | null
 }
 
 interface ExprResult {
@@ -1105,6 +1120,120 @@ function processVariableBinding(
 	})
 }
 
+/**
+ * Get TypeDecl node from a line (if present).
+ */
+function getTypeDeclFromLine(
+	lineId: NodeId,
+	context: CompilationContext
+): { id: NodeId; kind: NodeKind } | null {
+	for (const [childId, child] of context.nodes.iterateChildren(lineId)) {
+		if (child.kind === NodeKind.TypeDecl) {
+			return { id: childId, kind: child.kind }
+		}
+	}
+	return null
+}
+
+/**
+ * Get FieldDecl node from a line (if present).
+ */
+function getFieldDeclFromLine(
+	lineId: NodeId,
+	context: CompilationContext
+): { id: NodeId; kind: NodeKind } | null {
+	for (const [childId, child] of context.nodes.iterateChildren(lineId)) {
+		if (child.kind === NodeKind.FieldDecl) {
+			return { id: childId, kind: child.kind }
+		}
+	}
+	return null
+}
+
+/**
+ * Start processing a type declaration.
+ * Extracts the type name and initializes the context for collecting fields.
+ */
+function startTypeDecl(typeDeclId: NodeId, state: CheckerState, context: CompilationContext): void {
+	const typeDeclNode = context.nodes.get(typeDeclId)
+	const token = context.tokens.get(typeDeclNode.tokenId)
+	const typeName = context.strings.get(token.payload as StringId)
+
+	state.typeDeclContext = {
+		fieldNames: new Set(),
+		fields: [],
+		typeDeclNodeId: typeDeclId,
+		typeName,
+	}
+}
+
+/**
+ * Process a FieldDecl node within a type declaration.
+ * Extracts field name and type, checking for duplicates.
+ */
+function processFieldDecl(
+	fieldDeclId: NodeId,
+	state: CheckerState,
+	context: CompilationContext
+): void {
+	if (!state.typeDeclContext) {
+		// FieldDecl outside type declaration - should not happen if parser is correct
+		return
+	}
+
+	const fieldDeclNode = context.nodes.get(fieldDeclId)
+	const fieldToken = context.tokens.get(fieldDeclNode.tokenId)
+	const fieldName = context.strings.get(fieldToken.payload as StringId)
+
+	// Get the type token (field token + 2: skip colon)
+	// Token layout: Identifier, Colon, TypeKeyword
+	const typeTokenId = (fieldDeclNode.tokenId as number) + 2
+	const typeToken = context.tokens.get(typeTokenId as typeof fieldDeclNode.tokenId)
+	const typeInfo = getTypeNameFromToken(typeToken.kind)
+
+	// Check for duplicate field names
+	if (state.typeDeclContext.fieldNames.has(fieldName)) {
+		context.emitAtNode('TWCHECK026' as DiagnosticCode, fieldDeclId, {
+			name: fieldName,
+			typeName: state.typeDeclContext.typeName,
+		})
+		return
+	}
+
+	if (!typeInfo) {
+		context.emitAtNode('TWCHECK010' as DiagnosticCode, fieldDeclId, {
+			found: 'unknown',
+		})
+		return
+	}
+
+	state.typeDeclContext.fieldNames.add(fieldName)
+	state.typeDeclContext.fields.push({
+		name: fieldName,
+		nodeId: fieldDeclId,
+		typeId: typeInfo.typeId,
+	})
+}
+
+/**
+ * Finalize a type declaration by registering it with the TypeStore.
+ */
+function finalizeTypeDecl(state: CheckerState, _context: CompilationContext): void {
+	if (!state.typeDeclContext) return
+
+	const { fields, typeDeclNodeId, typeName } = state.typeDeclContext
+
+	// Convert to FieldInfo format
+	const fieldInfos = fields.map((f, index) => ({
+		index,
+		name: f.name,
+		typeId: f.typeId,
+	}))
+
+	state.types.registerRecordType(typeName, fieldInfos, typeDeclNodeId)
+	state.typeDeclContext = null
+}
+
 function getMatchArmFromLine(
 	lineId: NodeId,
 	context: CompilationContext
@@ -1489,28 +1618,72 @@ function processIndentedLineAsMatchArm(
 	return true
 }
 
+function processIndentedLineAsFieldDecl(
+	lineId: NodeId,
+	state: CheckerState,
+	context: CompilationContext
+): boolean {
+	if (!state.typeDeclContext) return false
+
+	const fieldDecl = getFieldDeclFromLine(lineId, context)
+	if (!fieldDecl) return false
+
+	processFieldDecl(fieldDecl.id, state, context)
+	return true
+}
+
 function handleIndentedLine(
 	lineId: NodeId,
 	state: CheckerState,
 	context: CompilationContext
 ): void {
-	if (!processIndentedLineAsMatchArm(lineId, state, context)) {
-		context.emitAtNode('TWCHECK001' as DiagnosticCode, lineId)
-	}
+	if (processIndentedLineAsMatchArm(lineId, state, context)) return
+	if (processIndentedLineAsFieldDecl(lineId, state, context)) return
+	context.emitAtNode('TWCHECK001' as DiagnosticCode, lineId)
 }
 
-function handleDedentLine(lineId: NodeId, state: CheckerState, context: CompilationContext): void {
-	if (!state.matchContext) {
-		context.emitAtNode('TWCHECK001' as DiagnosticCode, lineId)
-		return
-	}
-	finalizeMatch(state, context)
+function processDedentLineStatement(
+	lineId: NodeId,
+	state: CheckerState,
+	context: CompilationContext
+): void {
 	const stmt = getStatementFromLine(lineId, context)
 	if (stmt) emitStatement(stmt.id, stmt.kind, state, context)
 }
 
+function handleDedentLine(lineId: NodeId, state: CheckerState, context: CompilationContext): void {
+	// Finalize pending type declaration and process statement
+	if (state.typeDeclContext) {
+		finalizeTypeDecl(state, context)
+		processDedentLineStatement(lineId, state, context)
+		return
+	}
+
+	// Finalize pending match context and process statement
+	if (state.matchContext) {
+		finalizeMatch(state, context)
+		processDedentLineStatement(lineId, state, context)
+		return
+	}
+
+	// No context - error
+	context.emitAtNode('TWCHECK001' as DiagnosticCode, lineId)
+}
+
 function handleRootLine(lineId: NodeId, state: CheckerState, context: CompilationContext): void {
+	// Finalize any pending type declaration
+	if (state.typeDeclContext) finalizeTypeDecl(state, context)
+
+	// Finalize any pending match context
 	if (state.matchContext) finalizeMatch(state, context)
+
+	// Check if this line contains a type declaration
+	const typeDecl = getTypeDeclFromLine(lineId, context)
+	if (typeDecl) {
+		startTypeDecl(typeDecl.id, state, context)
+		return
+	}
+
 	processRootLineStatement(lineId, state, context)
 }
 
@@ -1553,6 +1726,22 @@ function getLineChildrenInSourceOrder(
 	return lines.reverse()
 }
 
+function assignCheckResultsToContext(
+	context: CompilationContext,
+	insts: InstStore,
+	symbols: SymbolStore,
+	types: TypeStore
+): void {
+	context.insts = insts
+	context.symbols = symbols
+	context.types = types
+}
+
+function finalizePendingContexts(state: CheckerState, context: CompilationContext): void {
+	if (state.typeDeclContext) finalizeTypeDecl(state, context)
+	if (state.matchContext) finalizeMatch(state, context)
+}
+
 /**
  * Perform semantic checking on a parsed program.
  *
@@ -1581,6 +1770,7 @@ export function check(context: CompilationContext): CheckResult {
 		matchContext: null,
 		scopes,
 		symbols,
+		typeDeclContext: null,
 		types,
 		unreachableRange: null,
 	}
@@ -1588,9 +1778,7 @@ export function check(context: CompilationContext): CheckResult {
 	// Find Program node (last node in postorder storage)
 	const nodeCount = context.nodes.count()
 	if (nodeCount === 0) {
-		context.insts = insts
-		context.symbols = symbols
-		context.types = types
+		assignCheckResultsToContext(context, insts, symbols, types)
 		return { succeeded: true }
 	}
 
@@ -1599,9 +1787,7 @@ export function check(context: CompilationContext): CheckResult {
 
 	if (program.kind !== NodeKind.Program) {
 		// No valid Program node - might be a parse error
-		context.insts = insts
-		context.symbols = symbols
-		context.types = types
+		assignCheckResultsToContext(context, insts, symbols, types)
 		return { succeeded: !context.hasErrors() }
 	}
 
@@ -1611,15 +1797,9 @@ export function check(context: CompilationContext): CheckResult {
 		processLine(lineId, line, state, context)
 	}
 
-	// Finalize any pending match at end of program
-	if (state.matchContext) {
-		finalizeMatch(state, context)
-	}
-
+	finalizePendingContexts(state, context)
 	flushUnreachableWarning(state, context)
-	context.insts = insts
-	context.symbols = symbols
-	context.types = types
+	assignCheckResultsToContext(context, insts, symbols, types)
 
 	return { succeeded: !context.hasErrors() }
 }
