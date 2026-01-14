@@ -237,6 +237,22 @@ export const TWCHECK029: DiagnosticDef = {
 	suggestion: 'Remove the duplicate field initialization.',
 }
 
+export const TWCHECK030: DiagnosticDef = {
+	code: 'TWCHECK030',
+	description: 'The field does not exist on the record type being accessed.',
+	message: 'unknown field `{name}` in type `{typeName}`',
+	severity: DiagnosticSeverity.Error,
+	suggestion: 'Check the type definition for valid field names.',
+}
+
+export const TWCHECK031: DiagnosticDef = {
+	code: 'TWCHECK031',
+	description: 'Field access requires a record type, but got a primitive type.',
+	message: 'cannot access field `{name}` on non-record type `{typeName}`',
+	severity: DiagnosticSeverity.Error,
+	suggestion: 'Only record types have fields. Use a record type or remove the field access.',
+}
+
 // =============================================================================
 // CHECKER WARNINGS (TWCHECK050-099)
 // =============================================================================
@@ -287,6 +303,8 @@ export const COMPILER_DIAGNOSTICS = {
 	TWCHECK027,
 	TWCHECK028,
 	TWCHECK029,
+	TWCHECK030,
+	TWCHECK031,
 	TWCHECK050,
 	TWGEN001,
 	TWLEX001,

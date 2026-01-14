@@ -1033,6 +1033,79 @@ function checkBinaryExprInferred(
 	return emitBinaryOpInferred(exprId, opKind, operandsResult, state)
 }
 
+/**
+ * Check a field access expression with type inference.
+ * In postorder: [base..., FieldAccess]
+ * The base expression is at exprId - 1 (accounting for subtreeSize - 1).
+ * The tokenId points to the field name identifier.
+ */
+function checkFieldAccessInferred(
+	exprId: NodeId,
+	state: CheckerState,
+	context: CompilationContext
+): ExprResult {
+	const node = context.nodes.get(exprId)
+	const baseId = prevNodeId(exprId)
+
+	// Check the base expression to get its type
+	const baseResult = checkExpressionInferred(baseId, state, context)
+	if (!isValidExprResult(baseResult)) return baseResult
+
+	// Get the field name from the token
+	const fieldToken = context.tokens.get(node.tokenId)
+	const fieldName = context.strings.get(fieldToken.payload as StringId)
+
+	// Check if base is a record type
+	if (!state.types.isRecordType(baseResult.typeId)) {
+		const typeName = state.types.typeName(baseResult.typeId)
+		context.emitAtNode('TWCHECK031' as DiagnosticCode, exprId, { name: fieldName, typeName })
+		return { instId: null, typeId: BuiltinTypeId.Invalid }
+	}
+
+	// Look up the field on the record type
+	const fieldInfo = state.types.getField(baseResult.typeId, fieldName)
+	if (!fieldInfo) {
+		const typeName = state.types.typeName(baseResult.typeId)
+		context.emitAtNode('TWCHECK030' as DiagnosticCode, exprId, { name: fieldName, typeName })
+		return { instId: null, typeId: BuiltinTypeId.Invalid }
+	}
+
+	// Emit FieldAccess instruction
+	const instId = state.insts.add({
+		arg0: baseResult.instId as number,
+		arg1: fieldInfo.index,
+		kind: InstKind.FieldAccess,
+		parseNodeId: exprId,
+		typeId: fieldInfo.typeId,
+	})
+
+	return { instId, typeId: fieldInfo.typeId }
+}
+
+/**
+ * Check a field access expression with expected type.
+ * Validates that the field type matches the expected type.
+ */
+function checkFieldAccess(
+	exprId: NodeId,
+	expectedType: TypeId,
+	state: CheckerState,
+	context: CompilationContext
+): ExprResult {
+	const result = checkFieldAccessInferred(exprId, state, context)
+	if (!isValidExprResult(result)) return result
+
+	// Check that the field type matches the expected type
+	if (!state.types.areEqual(result.typeId, expectedType)) {
+		const expected = state.types.typeName(expectedType)
+		const found = state.types.typeName(result.typeId)
+		context.emitAtNode('TWCHECK012' as DiagnosticCode, exprId, { expected, found })
+		return { instId: null, typeId: BuiltinTypeId.Invalid }
+	}
+
+	return result
+}
+
 function checkExpressionInferred(
 	exprId: NodeId,
 	state: CheckerState,
@@ -1055,6 +1128,8 @@ function checkExpressionInferred(
 			return checkBinaryExprInferred(exprId, node, state, context)
 		case NodeKind.CompareChain:
 			return checkCompareChain(exprId, BuiltinTypeId.I32, state, context)
+		case NodeKind.FieldAccess:
+			return checkFieldAccessInferred(exprId, state, context)
 		default:
 			return { instId: null, typeId: BuiltinTypeId.Invalid }
 	}
@@ -1083,6 +1158,8 @@ function checkExpression(
 			return checkBinaryExpr(exprId, expectedType, state, context)
 		case NodeKind.CompareChain:
 			return checkCompareChain(exprId, expectedType, state, context)
+		case NodeKind.FieldAccess:
+			return checkFieldAccess(exprId, expectedType, state, context)
 		default:
 			// Should be unreachable - all expression kinds should be handled
 			console.assert(false, 'checkExpression: unhandled expression kind %d', node.kind)

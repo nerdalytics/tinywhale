@@ -48,6 +48,8 @@ export const InstKind = {
 	Bind: 20,
 	/** Bitwise NOT: arg0 = operand InstId */
 	BitwiseNot: 31,
+	/** Field access: arg0 = base InstId, arg1 = field index */
+	FieldAccess: 22,
 	/** Float constant: arg0 = FloatId (index into FloatStore) */
 	FloatConst: 11,
 	/** Integer constant: arg0 = low 32 bits, arg1 = high 32 bits (for i64) */
