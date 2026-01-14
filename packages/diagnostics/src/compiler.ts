@@ -213,6 +213,30 @@ export const TWCHECK026: DiagnosticDef = {
 	suggestion: 'Rename one of the fields to have a unique name.',
 }
 
+export const TWCHECK027: DiagnosticDef = {
+	code: 'TWCHECK027',
+	description: 'A required field is missing from the record initializer.',
+	message: 'missing field `{name}` in record `{typeName}`',
+	severity: DiagnosticSeverity.Error,
+	suggestion: 'Add the missing field to the initializer.',
+}
+
+export const TWCHECK028: DiagnosticDef = {
+	code: 'TWCHECK028',
+	description: 'The field does not exist on the record type.',
+	message: 'unknown field `{name}` in record `{typeName}`',
+	severity: DiagnosticSeverity.Error,
+	suggestion: 'Check the type definition for valid field names.',
+}
+
+export const TWCHECK029: DiagnosticDef = {
+	code: 'TWCHECK029',
+	description: 'A field cannot be initialized more than once in a record literal.',
+	message: 'duplicate field `{name}` in record initializer',
+	severity: DiagnosticSeverity.Error,
+	suggestion: 'Remove the duplicate field initialization.',
+}
+
 // =============================================================================
 // CHECKER WARNINGS (TWCHECK050-099)
 // =============================================================================
@@ -260,6 +284,9 @@ export const COMPILER_DIAGNOSTICS = {
 	TWCHECK024,
 	TWCHECK025,
 	TWCHECK026,
+	TWCHECK027,
+	TWCHECK028,
+	TWCHECK029,
 	TWCHECK050,
 	TWGEN001,
 	TWLEX001,

@@ -70,6 +70,24 @@ interface TypeDeclContext {
 	fieldNames: Set<string>
 }
 
+/**
+ * Context for collecting record literal field initializers.
+ */
+interface RecordLiteralContext {
+	/** Record type ID */
+	recordTypeId: TypeId
+	/** Record type name (for diagnostics) */
+	typeName: string
+	/** Parse node ID of the VariableBinding (for diagnostics) */
+	bindingNodeId: NodeId
+	/** Variable name string ID */
+	bindingNameId: StringId
+	/** Collected field initializers */
+	fieldInits: Array<{ name: string; nodeId: NodeId; exprResult: ExprResult }>
+	/** Track field names for duplicate detection */
+	fieldNames: Set<string>
+}
+
 interface CheckerState {
 	readonly insts: InstStore
 	readonly scopes: ScopeStore
@@ -79,6 +97,7 @@ interface CheckerState {
 	unreachableRange: UnreachableRange | null
 	matchContext: MatchContext | null
 	typeDeclContext: TypeDeclContext | null
+	recordLiteralContext: RecordLiteralContext | null
 }
 
 interface ExprResult {
@@ -143,6 +162,38 @@ function getTypeNameFromToken(tokenKind: TokenKind): { name: string; typeId: Typ
 		default:
 			return null
 	}
+}
+
+/**
+ * Resolve type from a TypeAnnotation node.
+ * Handles both primitive types (i32, i64, f32, f64) and user-defined record types.
+ * Returns null if the type is unknown.
+ */
+function resolveTypeFromAnnotation(
+	typeAnnotationId: NodeId,
+	state: CheckerState,
+	context: CompilationContext
+): { name: string; typeId: TypeId } | null {
+	const typeAnnotationNode = context.nodes.get(typeAnnotationId)
+	const typeToken = context.tokens.get(typeAnnotationNode.tokenId)
+
+	// Try primitive type first
+	const primitiveType = getTypeNameFromToken(typeToken.kind)
+	if (primitiveType) {
+		return primitiveType
+	}
+
+	// Try user-defined type (identifier)
+	if (typeToken.kind === TokenKind.Identifier) {
+		const typeName = context.strings.get(typeToken.payload as StringId)
+		const typeId = state.types.lookup(typeName)
+		if (typeId !== undefined) {
+			return { name: typeName, typeId }
+		}
+		// Type not found - return null (caller will emit error)
+	}
+
+	return null
 }
 
 /**
@@ -1040,39 +1091,102 @@ function checkExpression(
 }
 
 /**
+ * Result of extracting binding nodes from a VariableBinding.
+ */
+interface BindingNodes {
+	identId: NodeId
+	typeAnnotationId: NodeId
+	exprId: NodeId | null
+	hasExpression: boolean
+}
+
+/**
+ * Extract the node positions for identifier, type annotation, and optional expression
+ * from a VariableBinding node in postorder storage.
+ */
+function extractBindingNodes(bindingId: NodeId, context: CompilationContext): BindingNodes | null {
+	const prevId = prevNodeId(bindingId)
+	const prevNode = context.nodes.get(prevId)
+
+	if (prevNode.kind === NodeKind.TypeAnnotation) {
+		// No expression - record literal mode
+		const typeAnnotationId = prevId
+		const identId = offsetNodeId(typeAnnotationId, -prevNode.subtreeSize)
+		return { exprId: null, hasExpression: false, identId, typeAnnotationId }
+	}
+
+	if (isExpressionNode(prevNode.kind)) {
+		// Has expression - normal variable binding
+		const typeAnnotationId = offsetNodeId(prevId, -prevNode.subtreeSize)
+		const typeAnnotationNode = context.nodes.get(typeAnnotationId)
+		const identId = offsetNodeId(typeAnnotationId, -typeAnnotationNode.subtreeSize)
+		return { exprId: prevId, hasExpression: true, identId, typeAnnotationId }
+	}
+
+	// Unexpected node kind
+	console.assert(
+		false,
+		'VariableBinding: expected TypeAnnotation or expression, found %d',
+		prevNode.kind
+	)
+	return null
+}
+
+/**
+ * Emit unknown type error with the type name from the annotation.
+ */
+function emitUnknownTypeError(typeAnnotationId: NodeId, context: CompilationContext): void {
+	const typeAnnotationNode = context.nodes.get(typeAnnotationId)
+	const typeToken = context.tokens.get(typeAnnotationNode.tokenId)
+	const typeName =
+		typeToken.kind === TokenKind.Identifier
+			? context.strings.get(typeToken.payload as StringId)
+			: 'unknown'
+	context.emitAtNode('TWCHECK010' as DiagnosticCode, typeAnnotationId, {
+		found: typeName,
+	})
+}
+
+/**
+ * Handle record literal binding (no expression, record type).
+ */
+function processRecordLiteralBinding(
+	bindingId: NodeId,
+	typeAnnotationId: NodeId,
+	declaredType: TypeId,
+	typeInfo: { name: string; typeId: TypeId },
+	nameId: StringId,
+	state: CheckerState,
+	context: CompilationContext
+): void {
+	if (state.types.isRecordType(declaredType)) {
+		startRecordLiteral(bindingId, declaredType, typeInfo.name, nameId, state, context)
+	} else {
+		// Non-record type without expression - error
+		context.emitAtNode('TWCHECK010' as DiagnosticCode, typeAnnotationId, {
+			found: typeInfo.name,
+		})
+	}
+}
+
+/**
  * Process a VariableBinding statement.
- * Syntax: identifier TypeAnnotation = Expression
- * In postorder: [Identifier, TypeAnnotation, Expression..., VariableBinding]
+ * Syntax: identifier TypeAnnotation = Expression?
+ * In postorder with expression: [Identifier, TypeAnnotation, Expression..., VariableBinding]
+ * In postorder without expression: [Identifier, TypeAnnotation, VariableBinding]
  *
- * Note: Expression may have subtreeSize > 1 (e.g., UnaryExpr has subtreeSize=2).
- * We must use subtreeSize to correctly navigate the postorder storage.
+ * When Expression is absent (record literal mode), the indented lines contain FieldInit nodes.
  */
 function processVariableBinding(
 	bindingId: NodeId,
 	state: CheckerState,
 	context: CompilationContext
 ): void {
-	// In postorder, expression root is immediately before VariableBinding
-	// Then we work backwards using subtreeSize to find TypeAnnotation and Identifier
-	const exprId = prevNodeId(bindingId)
-	const exprNode = context.nodes.get(exprId)
-	console.assert(
-		isExpressionNode(exprNode.kind),
-		'VariableBinding: expected expression at offset -1, found %d',
-		exprNode.kind
-	)
+	const nodes = extractBindingNodes(bindingId, context)
+	if (!nodes) return
 
-	// TypeAnnotation is before the expression's entire subtree
-	const typeAnnotationId = offsetNodeId(exprId, -exprNode.subtreeSize)
-	const typeAnnotationNode = context.nodes.get(typeAnnotationId)
-	console.assert(
-		typeAnnotationNode.kind === NodeKind.TypeAnnotation,
-		'VariableBinding: expected TypeAnnotation, found %d',
-		typeAnnotationNode.kind
-	)
+	const { exprId, hasExpression, identId, typeAnnotationId } = nodes
 
-	// Identifier is before the TypeAnnotation's subtree (subtreeSize=1)
-	const identId = offsetNodeId(typeAnnotationId, -typeAnnotationNode.subtreeSize)
 	const identNode = context.nodes.get(identId)
 	console.assert(
 		identNode.kind === NodeKind.Identifier,
@@ -1080,37 +1194,40 @@ function processVariableBinding(
 		identNode.kind
 	)
 
-	// 1. Get identifier name
 	const identToken = context.tokens.get(identNode.tokenId)
 	const nameId = identToken.payload as StringId
 
-	// 2. Resolve declared type from TypeAnnotation
-	const typeToken = context.tokens.get(typeAnnotationNode.tokenId)
-	const typeInfo = getTypeNameFromToken(typeToken.kind)
-
+	const typeInfo = resolveTypeFromAnnotation(typeAnnotationId, state, context)
 	if (!typeInfo) {
-		context.emitAtNode('TWCHECK010' as DiagnosticCode, typeAnnotationId, {
-			found: 'unknown',
-		})
+		emitUnknownTypeError(typeAnnotationId, context)
 		return
 	}
 
 	const declaredType = typeInfo.typeId
 
-	// 3. Check expression with expected type
-	const exprResult = checkExpression(exprId, declaredType, state, context)
-	if (!isValidExprResult(exprResult)) {
-		return // Error already reported
+	if (!hasExpression) {
+		processRecordLiteralBinding(
+			bindingId,
+			typeAnnotationId,
+			declaredType,
+			typeInfo,
+			nameId,
+			state,
+			context
+		)
+		return
 	}
 
-	// 4. Add symbol to table (allocates fresh local, supports shadowing)
+	// Normal variable binding with expression
+	const exprResult = checkExpression(exprId as NodeId, declaredType, state, context)
+	if (!isValidExprResult(exprResult)) return
+
 	const symId = state.symbols.add({
 		nameId,
 		parseNodeId: bindingId,
 		typeId: declaredType,
 	})
 
-	// 5. Emit Bind instruction
 	state.insts.add({
 		arg0: symId as number,
 		arg1: exprResult.instId as number,
@@ -1232,6 +1349,147 @@ function finalizeTypeDecl(state: CheckerState, _context: CompilationContext): vo
 
 	state.types.registerRecordType(typeName, fieldInfos, typeDeclNodeId)
 	state.typeDeclContext = null
+}
+
+/**
+ * Get FieldInit node from a line (if present).
+ */
+function getFieldInitFromLine(
+	lineId: NodeId,
+	context: CompilationContext
+): { id: NodeId; kind: NodeKind } | null {
+	for (const [childId, child] of context.nodes.iterateChildren(lineId)) {
+		if (child.kind === NodeKind.FieldInit) {
+			return { id: childId, kind: child.kind }
+		}
+	}
+	return null
+}
+
+/**
+ * Start processing a record literal.
+ * Called when we detect a VariableBinding with a record type and no direct expression.
+ */
+function startRecordLiteral(
+	bindingId: NodeId,
+	recordTypeId: TypeId,
+	typeName: string,
+	bindingNameId: StringId,
+	state: CheckerState,
+	_context: CompilationContext
+): void {
+	state.recordLiteralContext = {
+		bindingNameId,
+		bindingNodeId: bindingId,
+		fieldInits: [],
+		fieldNames: new Set(),
+		recordTypeId,
+		typeName,
+	}
+}
+
+/**
+ * Process a FieldInit node within a record literal.
+ * Extracts field name and expression, checking for duplicates and unknown fields.
+ */
+function processFieldInit(
+	fieldInitId: NodeId,
+	state: CheckerState,
+	context: CompilationContext
+): void {
+	if (!state.recordLiteralContext) {
+		// FieldInit outside record literal - should not happen if parser is correct
+		return
+	}
+
+	const fieldInitNode = context.nodes.get(fieldInitId)
+	const fieldToken = context.tokens.get(fieldInitNode.tokenId)
+	const fieldName = context.strings.get(fieldToken.payload as StringId)
+
+	// Check for duplicate field in initializer
+	if (state.recordLiteralContext.fieldNames.has(fieldName)) {
+		context.emitAtNode('TWCHECK029' as DiagnosticCode, fieldInitId, {
+			name: fieldName,
+		})
+		return
+	}
+
+	// Check if field exists in the record type
+	const fieldInfo = state.types.getField(state.recordLiteralContext.recordTypeId, fieldName)
+	if (!fieldInfo) {
+		context.emitAtNode('TWCHECK028' as DiagnosticCode, fieldInitId, {
+			name: fieldName,
+			typeName: state.recordLiteralContext.typeName,
+		})
+		return
+	}
+
+	// Get the expression (in postorder, expression is before FieldInit node)
+	const exprId = prevNodeId(fieldInitId)
+	const exprResult = checkExpression(exprId, fieldInfo.typeId, state, context)
+
+	state.recordLiteralContext.fieldNames.add(fieldName)
+	state.recordLiteralContext.fieldInits.push({
+		exprResult,
+		name: fieldName,
+		nodeId: fieldInitId,
+	})
+}
+
+/**
+ * Check for missing fields in record literal and emit errors.
+ */
+function checkMissingRecordFields(
+	recordTypeId: TypeId,
+	fieldNames: Set<string>,
+	bindingNodeId: NodeId,
+	typeName: string,
+	state: CheckerState,
+	context: CompilationContext
+): void {
+	const requiredFields = state.types.getFields(recordTypeId)
+	for (const field of requiredFields) {
+		if (!fieldNames.has(field.name)) {
+			context.emitAtNode('TWCHECK027' as DiagnosticCode, bindingNodeId, {
+				name: field.name,
+				typeName,
+			})
+		}
+	}
+}
+
+/**
+ * Finalize a record literal by validating all required fields are present
+ * and emitting the binding instruction.
+ */
+function finalizeRecordLiteral(state: CheckerState, context: CompilationContext): void {
+	if (!state.recordLiteralContext) return
+
+	const { bindingNameId, bindingNodeId, fieldInits, fieldNames, recordTypeId, typeName } =
+		state.recordLiteralContext
+
+	checkMissingRecordFields(recordTypeId, fieldNames, bindingNodeId, typeName, state, context)
+
+	// Only emit binding if no errors
+	if (!context.hasErrors()) {
+		const symId = state.symbols.add({
+			nameId: bindingNameId,
+			parseNodeId: bindingNodeId,
+			typeId: recordTypeId,
+		})
+
+		// TODO: In the future, emit RecordLiteral instruction
+		// For now, emit a placeholder Bind with no value instruction
+		state.insts.add({
+			arg0: symId as number,
+			arg1: fieldInits.length,
+			kind: InstKind.Bind,
+			parseNodeId: bindingNodeId,
+			typeId: recordTypeId,
+		})
+	}
+
+	state.recordLiteralContext = null
 }
 
 function getMatchArmFromLine(
@@ -1632,6 +1890,20 @@ function processIndentedLineAsFieldDecl(
 	return true
 }
 
+function processIndentedLineAsFieldInit(
+	lineId: NodeId,
+	state: CheckerState,
+	context: CompilationContext
+): boolean {
+	if (!state.recordLiteralContext) return false
+
+	const fieldInit = getFieldInitFromLine(lineId, context)
+	if (!fieldInit) return false
+
+	processFieldInit(fieldInit.id, state, context)
+	return true
+}
+
 function handleIndentedLine(
 	lineId: NodeId,
 	state: CheckerState,
@@ -1639,6 +1911,7 @@ function handleIndentedLine(
 ): void {
 	if (processIndentedLineAsMatchArm(lineId, state, context)) return
 	if (processIndentedLineAsFieldDecl(lineId, state, context)) return
+	if (processIndentedLineAsFieldInit(lineId, state, context)) return
 	context.emitAtNode('TWCHECK001' as DiagnosticCode, lineId)
 }
 
@@ -1666,6 +1939,13 @@ function handleDedentLine(lineId: NodeId, state: CheckerState, context: Compilat
 		return
 	}
 
+	// Finalize pending record literal and process statement
+	if (state.recordLiteralContext) {
+		finalizeRecordLiteral(state, context)
+		processDedentLineStatement(lineId, state, context)
+		return
+	}
+
 	// No context - error
 	context.emitAtNode('TWCHECK001' as DiagnosticCode, lineId)
 }
@@ -1676,6 +1956,9 @@ function handleRootLine(lineId: NodeId, state: CheckerState, context: Compilatio
 
 	// Finalize any pending match context
 	if (state.matchContext) finalizeMatch(state, context)
+
+	// Finalize any pending record literal
+	if (state.recordLiteralContext) finalizeRecordLiteral(state, context)
 
 	// Check if this line contains a type declaration
 	const typeDecl = getTypeDeclFromLine(lineId, context)
@@ -1740,6 +2023,7 @@ function assignCheckResultsToContext(
 function finalizePendingContexts(state: CheckerState, context: CompilationContext): void {
 	if (state.typeDeclContext) finalizeTypeDecl(state, context)
 	if (state.matchContext) finalizeMatch(state, context)
+	if (state.recordLiteralContext) finalizeRecordLiteral(state, context)
 }
 
 /**
@@ -1768,6 +2052,7 @@ export function check(context: CompilationContext): CheckResult {
 		currentScope: mainScope,
 		insts,
 		matchContext: null,
+		recordLiteralContext: null,
 		scopes,
 		symbols,
 		typeDeclContext: null,

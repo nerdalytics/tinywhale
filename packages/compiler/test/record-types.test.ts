@@ -257,3 +257,85 @@ panic`
 		assert.equal(ctx.types?.getFields(emptyId).length, 0)
 	})
 })
+
+function createContext(source: string): CompilationContext {
+	return new CompilationContext(source)
+}
+
+describe('checker record instantiation', () => {
+	it('validates all fields provided', () => {
+		const source = `type Point
+    x: i32
+    y: i32
+p: Point =
+    x: 5
+    y: 10
+panic`
+		const ctx = createContext(source)
+		tokenize(ctx)
+		parse(ctx)
+		const result = check(ctx)
+
+		assert.ok(result.succeeded, 'should succeed with all fields')
+	})
+
+	it('reports error for missing field', () => {
+		const source = `type Point
+    x: i32
+    y: i32
+p: Point =
+    x: 5
+panic`
+		const ctx = createContext(source)
+		tokenize(ctx)
+		parse(ctx)
+		check(ctx)
+
+		assert.ok(ctx.hasErrors(), 'should report missing field error')
+	})
+
+	it('reports error for unknown field', () => {
+		const source = `type Point
+    x: i32
+    y: i32
+p: Point =
+    x: 5
+    y: 10
+    z: 15
+panic`
+		const ctx = createContext(source)
+		tokenize(ctx)
+		parse(ctx)
+		check(ctx)
+
+		assert.ok(ctx.hasErrors(), 'should report unknown field error')
+	})
+
+	it('reports error for duplicate field in initializer', () => {
+		const source = `type Point
+    x: i32
+    y: i32
+p: Point =
+    x: 5
+    x: 10
+panic`
+		const ctx = createContext(source)
+		tokenize(ctx)
+		parse(ctx)
+		check(ctx)
+
+		assert.ok(ctx.hasErrors(), 'should report duplicate field error')
+	})
+
+	it('allows record instantiation without type declaration (error expected)', () => {
+		const source = `p: UnknownType =
+    x: 5
+panic`
+		const ctx = createContext(source)
+		tokenize(ctx)
+		parse(ctx)
+		check(ctx)
+
+		assert.ok(ctx.hasErrors(), 'should report unknown type error')
+	})
+})
