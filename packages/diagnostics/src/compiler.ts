@@ -205,6 +205,54 @@ export const TWCHECK025: DiagnosticDef = {
 	suggestion: 'Use a non-zero divisor.',
 }
 
+export const TWCHECK026: DiagnosticDef = {
+	code: 'TWCHECK026',
+	description: 'A record type cannot have two fields with the same name.',
+	message: 'duplicate field `{name}` in type `{typeName}`',
+	severity: DiagnosticSeverity.Error,
+	suggestion: 'Rename one of the fields to have a unique name.',
+}
+
+export const TWCHECK027: DiagnosticDef = {
+	code: 'TWCHECK027',
+	description: 'A required field is missing from the record initializer.',
+	message: 'missing field `{name}` in record `{typeName}`',
+	severity: DiagnosticSeverity.Error,
+	suggestion: 'Add the missing field to the initializer.',
+}
+
+export const TWCHECK028: DiagnosticDef = {
+	code: 'TWCHECK028',
+	description: 'The field does not exist on the record type.',
+	message: 'unknown field `{name}` in record `{typeName}`',
+	severity: DiagnosticSeverity.Error,
+	suggestion: 'Check the type definition for valid field names.',
+}
+
+export const TWCHECK029: DiagnosticDef = {
+	code: 'TWCHECK029',
+	description: 'A field cannot be initialized more than once in a record literal.',
+	message: 'duplicate field `{name}` in record initializer',
+	severity: DiagnosticSeverity.Error,
+	suggestion: 'Remove the duplicate field initialization.',
+}
+
+export const TWCHECK030: DiagnosticDef = {
+	code: 'TWCHECK030',
+	description: 'The field does not exist on the record type being accessed.',
+	message: 'unknown field `{name}` in type `{typeName}`',
+	severity: DiagnosticSeverity.Error,
+	suggestion: 'Check the type definition for valid field names.',
+}
+
+export const TWCHECK031: DiagnosticDef = {
+	code: 'TWCHECK031',
+	description: 'Field access requires a record type, but got a primitive type.',
+	message: 'cannot access field `{name}` on non-record type `{typeName}`',
+	severity: DiagnosticSeverity.Error,
+	suggestion: 'Only record types have fields. Use a record type or remove the field access.',
+}
+
 // =============================================================================
 // CHECKER WARNINGS (TWCHECK050-099)
 // =============================================================================
@@ -251,6 +299,12 @@ export const COMPILER_DIAGNOSTICS = {
 	TWCHECK023,
 	TWCHECK024,
 	TWCHECK025,
+	TWCHECK026,
+	TWCHECK027,
+	TWCHECK028,
+	TWCHECK029,
+	TWCHECK030,
+	TWCHECK031,
 	TWCHECK050,
 	TWGEN001,
 	TWLEX001,

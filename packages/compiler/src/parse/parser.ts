@@ -21,6 +21,8 @@ function tokenToOhmString(token: Token, context: CompilationContext): string | n
 			return 'panic'
 		case TokenKind.Match:
 			return 'match'
+		case TokenKind.Type:
+			return 'type'
 		case TokenKind.I32:
 			return 'i32'
 		case TokenKind.I64:
@@ -90,6 +92,8 @@ function tokenToOhmString(token: Token, context: CompilationContext): string | n
 			return '('
 		case TokenKind.RParen:
 			return ')'
+		case TokenKind.Dot:
+			return '.'
 		case TokenKind.Bang:
 			return '!'
 		default:
@@ -258,6 +262,23 @@ function createNodeEmittingSemantics(
 		Expression(expr: Node): NodeId {
 			return expr['emitExpression']()
 		},
+		FieldAccess(base: Node, _dots: Node, fields: Node): NodeId {
+			// Emit base expression first
+			let currentId = base['emitExpression']() as NodeId
+
+			// For each .field, create a FieldAccess node
+			for (let i = 0; i < fields.numChildren; i++) {
+				const fieldNode = fields.child(i)
+				const tid = getTokenIdForOhmNode(fieldNode)
+				const baseSize = context.nodes.get(currentId).subtreeSize
+				currentId = context.nodes.add({
+					kind: NodeKind.FieldAccess,
+					subtreeSize: 1 + baseSize,
+					tokenId: tid,
+				})
+			}
+			return currentId
+		},
 		floatLiteral(
 			_intPart: Node,
 			_dot: Node,
@@ -408,14 +429,37 @@ function createNodeEmittingSemantics(
 		},
 	})
 
-	// Emit indented content (MatchArm or Statement)
+	// Emit indented content (MatchArm, FieldDecl, FieldInit, or Statement)
 	semantics.addOperation<NodeId>('emitIndentedContent', {
+		FieldDecl(fieldName: Node, _colon: Node, _typeRef: Node): NodeId {
+			const tid = getTokenIdForOhmNode(fieldName)
+			return context.nodes.add({
+				kind: NodeKind.FieldDecl,
+				subtreeSize: 1,
+				tokenId: tid,
+			})
+		},
+		FieldInit(fieldName: Node, _colon: Node, expression: Node): NodeId {
+			const startCount = context.nodes.count()
+			expression['emitExpression']()
+			const childCount = context.nodes.count() - startCount
+
+			const tid = getTokenIdForOhmNode(fieldName)
+			return context.nodes.add({
+				kind: NodeKind.FieldInit,
+				subtreeSize: 1 + childCount,
+				tokenId: tid,
+			})
+		},
 		IndentedContent(content: Node): NodeId {
-			// Try to emit as MatchArm first, otherwise as Statement
-			if (content.ctorName === 'MatchArm') {
-				return content['emitMatchArm']()
+			// Route based on content type using lookup table
+			const routeMap: Record<string, string> = {
+				FieldDecl: 'emitIndentedContent',
+				FieldInit: 'emitIndentedContent',
+				MatchArm: 'emitMatchArm',
 			}
-			return content['emitStatement']()
+			const operation = routeMap[content.ctorName] ?? 'emitStatement'
+			return content[operation]()
 		},
 		MatchArm(pattern: Node, _arrow: Node, expr: Node): NodeId {
 			const startCount = context.nodes.count()
@@ -475,19 +519,34 @@ function createNodeEmittingSemantics(
 		Statement(stmt: Node): NodeId {
 			return stmt['emitStatement']()
 		},
-		VariableBinding(ident: Node, typeAnnotation: Node, _equals: Node, expr: Node): NodeId {
+		TypeDecl(_typeKeyword: Node, _typeName: Node): NodeId {
+			const tid = getTokenIdForOhmNode(this)
+			return context.nodes.add({
+				kind: NodeKind.TypeDecl,
+				subtreeSize: 1, // Will be updated when fields are processed
+				tokenId: tid,
+			})
+		},
+		VariableBinding(ident: Node, typeAnnotation: Node, _equals: Node, optExpr: Node): NodeId {
+			const startCount = context.nodes.count()
 			// Emit children first (postorder: children before parent)
 			ident['emitExpression']()
 			typeAnnotation['emitTypeAnnotation']()
-			expr['emitExpression']()
+
+			// Expression is optional (for record literals where value is indented block)
+			const exprNode = optExpr.children[0]
+			if (exprNode !== undefined) {
+				exprNode['emitExpression']()
+			}
+
+			const childCount = context.nodes.count() - startCount
 
 			const lineNumber = getLineNumber(this)
 			const tid = getTokenIdForLine(lineNumber)
 
-			// subtreeSize = 1 (self) + 3 children
 			return context.nodes.add({
 				kind: NodeKind.VariableBinding,
-				subtreeSize: 4,
+				subtreeSize: 1 + childCount,
 				tokenId: tid,
 			})
 		},
