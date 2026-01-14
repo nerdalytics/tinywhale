@@ -3,6 +3,7 @@ import { describe, it } from 'node:test'
 import { check } from '../src/check/checker.ts'
 import { TypeStore } from '../src/check/stores.ts'
 import { BuiltinTypeId } from '../src/check/types.ts'
+import { emit } from '../src/codegen/index.ts'
 import { CompilationContext } from '../src/core/context.ts'
 import { NodeKind } from '../src/core/nodes.ts'
 import { TokenKind } from '../src/core/tokens.ts'
@@ -421,5 +422,71 @@ panic`
 		// Check that we have locals for p.x and p.y
 		assert.ok(ctx.symbols !== null && ctx.symbols !== undefined)
 		assert.ok(ctx.symbols.localCount() >= 2)
+	})
+})
+
+describe('codegen record types', () => {
+	it('emits flattened locals', () => {
+		const source = `type Point
+    x: i32
+    y: i32
+p: Point =
+    x: 5
+    y: 10
+panic`
+		const ctx = createContext(source)
+		tokenize(ctx)
+		parse(ctx)
+		check(ctx)
+		const result = emit(ctx)
+
+		assert.ok(result.valid)
+		// WAT should contain locals for p_x and p_y
+		assert.ok(result.text.includes('local'), 'should have local declarations')
+		// Should emit local.set instructions for each field
+		assert.ok(result.text.includes('local.set'), 'should have local.set instructions')
+		// Should have 2 i32 locals for the 2 fields
+		const localMatches = result.text.match(/\(local \$\d+ i32\)/g)
+		assert.ok(localMatches && localMatches.length >= 2, 'should have at least 2 i32 locals')
+	})
+
+	it('emits local.set for each record field initializer', () => {
+		const source = `type Point
+    x: i32
+    y: i32
+p: Point =
+    x: 42
+    y: 99
+panic`
+		const ctx = createContext(source)
+		tokenize(ctx)
+		parse(ctx)
+		check(ctx)
+		const result = emit(ctx)
+
+		assert.ok(result.valid)
+		// Should emit local.set with the specific values
+		assert.ok(result.text.includes('i32.const 42'), 'should have const 42 for x field')
+		assert.ok(result.text.includes('i32.const 99'), 'should have const 99 for y field')
+	})
+
+	it('emits correct types for mixed-type record fields', () => {
+		const source = `type Mixed
+    a: i32
+    b: i64
+m: Mixed =
+    a: 1
+    b: 2
+panic`
+		const ctx = createContext(source)
+		tokenize(ctx)
+		parse(ctx)
+		check(ctx)
+		const result = emit(ctx)
+
+		assert.ok(result.valid)
+		// Should have both i32 and i64 locals
+		assert.ok(result.text.includes('i32'), 'should have i32 type')
+		assert.ok(result.text.includes('i64'), 'should have i64 type')
 	})
 })
