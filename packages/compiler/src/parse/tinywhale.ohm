@@ -2,9 +2,9 @@ TinyWhale {
   Program (a program) = Line*
   Line (a line) = IndentedLine | DedentLine | RootLine
 
-  // IndentedLine can contain a MatchArm, Statement, or FieldDecl
+  // IndentedLine can contain a MatchArm, Statement, FieldDecl, or FieldInit
   IndentedLine = indentToken IndentedContent?
-  IndentedContent = MatchArm | FieldDecl | Statement
+  IndentedContent = MatchArm | FieldDecl | FieldInit | Statement
   DedentLine = dedentToken+ Statement?
   RootLine = Statement
 
@@ -15,13 +15,15 @@ TinyWhale {
   // Type declaration: type Point
   TypeDecl = typeKeywordToken upperIdentifier
 
-  // Variable binding: x:i32 = expr (with optional spaces)
-  VariableBinding = identifier TypeAnnotation equals Expression
-  TypeAnnotation = colon TypeName
-  TypeName = typeKeyword
+  // Variable binding: x:i32 = expr or x:Point = (with block initializer)
+  VariableBinding = identifier TypeAnnotation equals Expression?
+  TypeAnnotation = colon TypeRef
 
   // Field declaration inside type (on indented line)
   FieldDecl = lowerIdentifier colon TypeRef
+
+  // Field initialization: x: 5 or nested: home: \n    zip: 123
+  FieldInit = lowerIdentifier colon Expression
 
   // Type reference (primitives or user-defined)
   TypeRef = upperIdentifier | typeKeyword
