@@ -96,4 +96,18 @@ panic`
 		const typeDecl = nodes.find(([, n]) => n.kind === NodeKind.TypeDecl)
 		assert.ok(typeDecl, 'should create TypeDecl node')
 	})
+
+	it('creates FieldDecl nodes', () => {
+		const source = `type Point
+    x: i32
+    y: i32
+panic`
+		const ctx = new CompilationContext(source)
+		tokenize(ctx)
+		parse(ctx)
+
+		const nodes = [...ctx.nodes]
+		const fieldDecls = nodes.filter(([, n]) => n.kind === NodeKind.FieldDecl)
+		assert.equal(fieldDecls.length, 2, 'should create 2 FieldDecl nodes')
+	})
 })

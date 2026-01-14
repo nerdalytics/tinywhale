@@ -412,12 +412,23 @@ function createNodeEmittingSemantics(
 		},
 	})
 
-	// Emit indented content (MatchArm or Statement)
+	// Emit indented content (MatchArm, FieldDecl, FieldInit, or Statement)
 	semantics.addOperation<NodeId>('emitIndentedContent', {
+		FieldDecl(fieldName: Node, _colon: Node, _typeRef: Node): NodeId {
+			const tid = getTokenIdForOhmNode(fieldName)
+			return context.nodes.add({
+				kind: NodeKind.FieldDecl,
+				subtreeSize: 1,
+				tokenId: tid,
+			})
+		},
 		IndentedContent(content: Node): NodeId {
-			// Try to emit as MatchArm first, otherwise as Statement
+			// Route based on content type
 			if (content.ctorName === 'MatchArm') {
 				return content['emitMatchArm']()
+			}
+			if (content.ctorName === 'FieldDecl') {
+				return content['emitIndentedContent']()
 			}
 			return content['emitStatement']()
 		},
