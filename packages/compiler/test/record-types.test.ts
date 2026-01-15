@@ -601,4 +601,20 @@ panic`
 
 		assert.ok(ctx.hasErrors(), 'should error: Inner not yet defined')
 	})
+
+	describe('recursive type detection', () => {
+		it('detects direct self-reference cycle', () => {
+			const source = `type Node
+    next: Node
+panic`
+			const ctx = createContext(source)
+			tokenize(ctx)
+			parse(ctx)
+			check(ctx)
+
+			assert.ok(ctx.hasErrors(), 'should detect recursive type')
+			const diags = ctx.getDiagnostics()
+			assert.ok(diags.some((d) => d.def.code === 'TWCHECK032'), 'should emit TWCHECK032')
+		})
+	})
 })

@@ -1474,6 +1474,16 @@ function processFieldDecl(
 	if (typeToken.kind === TokenKind.Identifier) {
 		// User-defined type - look up in TypeStore
 		fieldTypeName = context.strings.get(typeToken.payload as StringId)
+
+		// Add cycle detection (check before lookup to catch self-reference)
+		if (fieldTypeName === state.typeDeclContext?.typeName) {
+			context.emitAtNode('TWCHECK032' as DiagnosticCode, fieldDeclId, {
+				field: fieldName,
+				type: fieldTypeName,
+			})
+			return
+		}
+
 		const lookedUpTypeId = state.types.lookup(fieldTypeName)
 		if (lookedUpTypeId === undefined) {
 			context.emitAtNode('TWCHECK010' as DiagnosticCode, fieldDeclId, {
