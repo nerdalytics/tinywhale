@@ -19,7 +19,7 @@ import {
 	type ParseNode,
 	prevNodeId,
 } from '../core/nodes.ts'
-import { nextTokenId, TokenKind, type Token } from '../core/tokens.ts'
+import { nextTokenId, type Token, TokenKind } from '../core/tokens.ts'
 import { InstStore, ScopeStore, SymbolStore, TypeStore } from './stores.ts'
 import {
 	BuiltinTypeId,
