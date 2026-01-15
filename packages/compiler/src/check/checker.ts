@@ -2592,7 +2592,8 @@ function processIndentedLineAsFieldInit(
 	// Get the indent level of this line to pass to nested record init
 	const currentIndentLevel = getIndentLevelFromLine(lineId, context) ?? undefined
 
-	if (tryStartNestedRecordFromFieldInit(fieldInit.id, state, context, currentIndentLevel)) return true
+	if (tryStartNestedRecordFromFieldInit(fieldInit.id, state, context, currentIndentLevel))
+		return true
 
 	processFieldInitInNestedContext(fieldInit.id, state, context)
 	return true
@@ -2621,28 +2622,40 @@ function processFieldInitInNestedContext(
 	ctx.fieldInits?.push({ exprResult, name: fieldName, nodeId: fieldInitId })
 }
 
+/**
+ * Check if we should finalize a nested record context based on indent level.
+ * Returns true if the context should be finalized.
+ */
+function shouldFinalizeNestedForIndent(state: CheckerState, lineIndentLevel: number): boolean {
+	const ctx = currentBlockContext(state)
+	return ctx?.childIndentLevel !== undefined && lineIndentLevel < ctx.childIndentLevel
+}
+
+/**
+ * Finalize nested record contexts when returning to a lower indent level.
+ * This handles dedenting from nested blocks while still on an IndentedLine.
+ */
+function finalizeNestedContextsForIndent(
+	state: CheckerState,
+	context: CompilationContext,
+	lineIndentLevel: number | null
+): void {
+	if (lineIndentLevel === null) return
+	while (
+		isInNestedRecordInitContext(state) &&
+		shouldFinalizeNestedForIndent(state, lineIndentLevel)
+	) {
+		finalizeNestedRecordInit(state, context)
+	}
+}
+
 function handleIndentedLine(
 	lineId: NodeId,
 	state: CheckerState,
 	context: CompilationContext
 ): void {
-	// Get the indent level of this line
 	const lineIndentLevel = getIndentLevelFromLine(lineId, context)
-
-	// Finalize nested contexts if this line's indent level is less than expected.
-	// This handles the case where we dedent from a nested block (e.g., from Inner back to Outer)
-	// but the line is still processed as an IndentedLine (due to tokenizer emitting both indent and dedent).
-	if (lineIndentLevel !== null) {
-		while (isInNestedRecordInitContext(state)) {
-			const ctx = currentBlockContext(state)
-			// If context has a known child indent level and this line is at a lower level, finalize
-			if (ctx?.childIndentLevel !== undefined && lineIndentLevel < ctx.childIndentLevel) {
-				finalizeNestedRecordInit(state, context)
-			} else {
-				break
-			}
-		}
-	}
+	finalizeNestedContextsForIndent(state, context, lineIndentLevel)
 
 	if (processIndentedLineAsMatchArm(lineId, state, context)) return
 	if (processIndentedLineAsFieldDecl(lineId, state, context)) return

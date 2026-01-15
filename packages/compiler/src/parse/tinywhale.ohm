@@ -8,9 +8,7 @@ TinyWhale {
   // anyDedent* handles the dedent tokens that follow the indent marker.
   IndentedLine = indentToken anyDedent* IndentedContent?
   IndentedContent = MatchArm | FieldInit | FieldDecl | Statement
-  DedentLine = DedentToNested | DedentToRoot
-  DedentToNested = dedentNonZero+ IndentedContent?
-  DedentToRoot = dedentNonZero* dedentZero Statement?
+  DedentLine = anyDedent+ Statement?
   RootLine = Statement
 
   // Statements

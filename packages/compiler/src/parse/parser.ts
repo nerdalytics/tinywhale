@@ -578,29 +578,7 @@ function createNodeEmittingSemantics(
 	})
 
 	semantics.addOperation<NodeId | null>('emitLine', {
-		DedentLine(dedentVariant: Node) {
-			return dedentVariant['emitLine']()
-		},
-		DedentToNested(_dedentNonZeros: Node, optionalContent: Node) {
-			const lineNumber = getLineNumber(this)
-			const startCount = context.nodes.count()
-
-			const contentNode = optionalContent.children[0]
-			if (contentNode !== undefined) {
-				contentNode['emitIndentedContent']()
-			}
-
-			const childCount = context.nodes.count() - startCount
-			const subtreeSize = 1 + childCount
-
-			const tid = getTokenIdForLine(lineNumber)
-			return context.nodes.add({
-				kind: NodeKind.DedentLine,
-				subtreeSize,
-				tokenId: tid,
-			})
-		},
-		DedentToRoot(_dedentNonZeros: Node, _dedentZero: Node, optionalStatement: Node) {
+		DedentLine(_anyDedents: Node, optionalStatement: Node) {
 			const lineNumber = getLineNumber(this)
 			const startCount = context.nodes.count()
 
