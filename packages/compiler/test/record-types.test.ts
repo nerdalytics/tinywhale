@@ -859,4 +859,40 @@ panic`
 		assert.ok(result.text.includes('i32.const 2'), 'should have x')
 		assert.ok(result.text.includes('i32.const 3'), 'should have y')
 	})
+
+	it('compiles deeply nested with siblings at each level', () => {
+		const source = `type L3
+    val: i32
+type L2
+    l3: L3
+    b: i32
+type L1
+    l2: L2
+    a: i32
+root: L1 =
+    l2: L2
+        l3: L3
+            val: 100
+        b: 20
+    a: 10
+panic`
+		const ctx = createContext(source)
+		tokenize(ctx)
+		parse(ctx)
+		const checkResult = check(ctx)
+
+		assert.ok(
+			checkResult.succeeded,
+			`check failed: ${ctx
+				.getErrors()
+				.map((e) => ctx.formatDiagnostic(e))
+				.join(', ')}`
+		)
+
+		const result = emit(ctx)
+		assert.ok(result.valid, 'should emit valid WASM')
+		assert.ok(result.text.includes('i32.const 100'), 'should have l3.val')
+		assert.ok(result.text.includes('i32.const 20'), 'should have l2.b')
+		assert.ok(result.text.includes('i32.const 10'), 'should have l1.a')
+	})
 })
