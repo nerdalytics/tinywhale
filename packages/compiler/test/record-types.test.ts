@@ -559,6 +559,37 @@ panic`
 	})
 })
 
+describe('nested record instantiation parsing', () => {
+	it('parses nested record init syntax', () => {
+		const source = `type Inner
+    val: i32
+type Outer
+    inner: Inner
+o: Outer =
+    inner: Inner
+        val: 42
+panic`
+		const ctx = createContext(source)
+		tokenize(ctx)
+		const result = matchOnly(ctx)
+		assert.ok(result, 'should parse nested record init')
+	})
+
+	it('creates NestedRecordInit node for type name in field init', () => {
+		const source = `o: Outer =
+    inner: Inner
+        val: 42
+panic`
+		const ctx = createContext(source)
+		tokenize(ctx)
+		parse(ctx)
+
+		const nodes = [...ctx.nodes]
+		const nestedRecordInit = nodes.find(([, n]) => n.kind === NodeKind.NestedRecordInit)
+		assert.ok(nestedRecordInit, 'should create NestedRecordInit node')
+	})
+})
+
 describe('nested record types', () => {
 	it('supports field with user-defined type', () => {
 		const source = `type Inner

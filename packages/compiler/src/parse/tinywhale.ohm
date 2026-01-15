@@ -3,8 +3,9 @@ TinyWhale {
   Line (a line) = IndentedLine | DedentLine | RootLine
 
   // IndentedLine can contain a MatchArm, Statement, FieldDecl, or FieldInit
+  // FieldInit comes before FieldDecl: uppercase identifiers are tried as NestedRecordInit first
   IndentedLine = indentToken IndentedContent?
-  IndentedContent = MatchArm | FieldDecl | FieldInit | Statement
+  IndentedContent = MatchArm | FieldInit | FieldDecl | Statement
   DedentLine = dedentToken+ Statement?
   RootLine = Statement
 
@@ -22,8 +23,12 @@ TinyWhale {
   // Field declaration inside type (on indented line)
   FieldDecl = lowerIdentifier colon TypeRef
 
-  // Field initialization: x: 5 or nested: home: \n    zip: 123
-  FieldInit = lowerIdentifier colon Expression
+  // Field initialization: x: 5 or inner: Inner (nested construction)
+  FieldInit = lowerIdentifier colon FieldValue
+  FieldValue = NestedRecordInit | Expression
+
+  // Nested record construction (typename signals block follows)
+  NestedRecordInit = upperIdentifier
 
   // Type reference (primitives or user-defined)
   TypeRef = upperIdentifier | typeKeyword

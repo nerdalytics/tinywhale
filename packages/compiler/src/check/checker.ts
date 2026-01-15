@@ -1579,6 +1579,71 @@ function getFieldInitFromLine(
 }
 
 /**
+ * Check if a FieldInit node has a NestedRecordInit child.
+ * This indicates a field with user-defined type (in type declaration context)
+ * or nested record construction (in record literal context).
+ */
+function hasNestedRecordInit(fieldInitId: NodeId, context: CompilationContext): boolean {
+	for (const [, child] of context.nodes.iterateChildren(fieldInitId)) {
+		if (child.kind === NodeKind.NestedRecordInit) {
+			return true
+		}
+	}
+	return false
+}
+
+/**
+ * Get the type name from a NestedRecordInit child of a FieldInit node.
+ */
+function getNestedRecordTypeName(fieldInitId: NodeId, context: CompilationContext): string | null {
+	for (const [, child] of context.nodes.iterateChildren(fieldInitId)) {
+		if (child.kind === NodeKind.NestedRecordInit) {
+			const typeToken = context.tokens.get(child.tokenId)
+			return context.strings.get(typeToken.payload as StringId)
+		}
+	}
+	return null
+}
+
+/**
+ * Process a FieldInit with NestedRecordInit as a type declaration field.
+ * This handles the case where a user-defined type field is parsed as FieldInit.
+ */
+function processFieldInitAsTypeField(
+	fieldInitId: NodeId,
+	state: CheckerState,
+	context: CompilationContext
+): void {
+	if (!state.typeDeclContext) return
+
+	const fieldInitNode = context.nodes.get(fieldInitId)
+	const fieldToken = context.tokens.get(fieldInitNode.tokenId)
+	const fieldName = context.strings.get(fieldToken.payload as StringId)
+
+	const typeName = getNestedRecordTypeName(fieldInitId, context)
+	if (!typeName) return
+
+	const fieldTypeId = resolveUserDefinedFieldType(typeName, fieldInitId, state, context)
+	if (!fieldTypeId) return
+
+	// Check for duplicate field names
+	if (state.typeDeclContext.fieldNames.has(fieldName)) {
+		context.emitAtNode('TWCHECK026' as DiagnosticCode, fieldInitId, {
+			name: fieldName,
+			typeName: state.typeDeclContext.typeName,
+		})
+		return
+	}
+
+	state.typeDeclContext.fieldNames.add(fieldName)
+	state.typeDeclContext.fields.push({
+		name: fieldName,
+		nodeId: fieldInitId,
+		typeId: fieldTypeId,
+	})
+}
+
+/**
  * Start processing a record literal.
  * Called when we detect a VariableBinding with a record type and no direct expression.
  */
@@ -2117,11 +2182,22 @@ function processIndentedLineAsFieldDecl(
 ): boolean {
 	if (!state.typeDeclContext) return false
 
+	// Try standard FieldDecl first (for primitive types)
 	const fieldDecl = getFieldDeclFromLine(lineId, context)
-	if (!fieldDecl) return false
+	if (fieldDecl) {
+		processFieldDecl(fieldDecl.id, state, context)
+		return true
+	}
 
-	processFieldDecl(fieldDecl.id, state, context)
-	return true
+	// Also handle FieldInit with NestedRecordInit as type field (for user-defined types)
+	// This occurs because the grammar parses `inner: Inner` as FieldInit when FieldInit is tried first
+	const fieldInit = getFieldInitFromLine(lineId, context)
+	if (fieldInit && hasNestedRecordInit(fieldInit.id, context)) {
+		processFieldInitAsTypeField(fieldInit.id, state, context)
+		return true
+	}
+
+	return false
 }
 
 function processIndentedLineAsFieldInit(
