@@ -1,18 +1,24 @@
-# TinyWhale: Deeply nested records (3 levels)
+# TinyWhale: Deeply nested records with siblings at each level
 type Level3
     value: i32
 
 type Level2
     level3: Level3
+    b: i32
 
 type Level1
     level2: Level2
+    a: i32
 
 root: Level1 =
     level2: Level2
         level3: Level3
             value: 123
+        b: 20
+    a: 10
 
 # Access through all levels
-result: i32 = root.level2.level3.value
+deep: i32 = root.level2.level3.value
+mid: i32 = root.level2.b
+top: i32 = root.a
 panic

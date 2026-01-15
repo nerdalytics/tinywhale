@@ -4,9 +4,11 @@ TinyWhale {
 
   // IndentedLine can contain a MatchArm, Statement, FieldDecl, or FieldInit
   // FieldInit comes before FieldDecl: uppercase identifiers are tried as NestedRecordInit first
-  IndentedLine = indentToken IndentedContent?
+  // When dedenting from level N to level M (where M > 0), tokenizer emits both indent and dedent tokens.
+  // anyDedent* handles the dedent tokens that follow the indent marker.
+  IndentedLine = indentToken anyDedent* IndentedContent?
   IndentedContent = MatchArm | FieldInit | FieldDecl | Statement
-  DedentLine = dedentToken+ Statement?
+  DedentLine = anyDedent+ Statement?
   RootLine = Statement
 
   // Statements
@@ -150,9 +152,12 @@ TinyWhale {
 
   // Lexical token rules (marker followed by indent level)
   indentToken = "⇥" digit+
-  dedentToken = "⇤" digit+
+  anyDedent = dedentZero | dedentNonZero
+  dedentZero = "⇤0"
+  dedentNonZero = "⇤" nonZeroDigit digit*
+  nonZeroDigit = "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"
 
   // Comments treated as whitespace
   space += comment
-  comment = "#" (~("#" | "\n" | "\r" | dedentToken) any)* ("#" | &"\n" | &"\r" | &dedentToken | end)
+  comment = "#" (~("#" | "\n" | "\r" | anyDedent) any)* ("#" | &"\n" | &"\r" | &anyDedent | end)
 }

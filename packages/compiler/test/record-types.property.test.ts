@@ -671,6 +671,277 @@ function generateNestedInit(depth: number, value: number): string {
 	return init
 }
 
+// ============================================================================
+// Sibling Fields After Nested Blocks Properties
+// ============================================================================
+
+/**
+ * Generate nested types with sibling fields at each level
+ * Each level has: nested inner + sibling primitive field
+ * Leaf level has: val: i32
+ */
+function generateNestedTypesWithSiblings(depth: number): string {
+	let types = ''
+	for (let i = depth - 1; i >= 0; i--) {
+		if (i === depth - 1) {
+			// Leaf type: just a primitive
+			types += `type T${i}\n    val: i32\n`
+		} else {
+			// Non-leaf: inner record + sibling primitive
+			types += `type T${i}\n    inner: T${i + 1}\n    sib${i}: i32\n`
+		}
+	}
+	return types
+}
+
+/**
+ * Generate nested init with sibling fields at each level
+ * siblingValues[i] is the value for sib at level i
+ */
+function generateNestedInitWithSiblings(
+	depth: number,
+	leafValue: number,
+	siblingValues: number[]
+): string {
+	let init = 'o: T0 =\n'
+	for (let i = 0; i < depth - 1; i++) {
+		init += `${'    '.repeat(i + 1)}inner: T${i + 1}\n`
+	}
+	// Leaf value
+	init += `${'    '.repeat(depth)}val: ${leafValue}\n`
+	// Sibling fields (in reverse order from deepest to shallowest)
+	for (let i = depth - 2; i >= 0; i--) {
+		init += `${'    '.repeat(i + 1)}sib${i}: ${siblingValues[i] ?? 0}\n`
+	}
+	return init
+}
+
+describe('record types/sibling fields after nested blocks properties', () => {
+	it('sibling fields after nested block compile to valid WASM', () => {
+		fc.assert(
+			fc.property(
+				fc.integer({ max: 3, min: 2 }), // depth >= 2 to have at least one sibling
+				fc.integer({ max: 1000, min: 0 }), // leaf value
+				fc.array(fc.integer({ max: 1000, min: 0 }), { maxLength: 3, minLength: 3 }), // sibling values
+				(depth, leafValue, siblingValues) => {
+					const types = generateNestedTypesWithSiblings(depth)
+					const init = generateNestedInitWithSiblings(depth, leafValue, siblingValues)
+					const source = `${types}${init}panic\n`
+
+					const ctx = new CompilationContext(source)
+					tokenize(ctx)
+					const parseResult = parse(ctx)
+					if (!parseResult.succeeded) return true
+
+					const checkResult = check(ctx)
+					if (!checkResult.succeeded) return true
+
+					const emitResult = emit(ctx)
+
+					// Verify valid WASM magic number
+					return (
+						emitResult.valid &&
+						emitResult.binary[0] === 0x00 &&
+						emitResult.binary[1] === 0x61 &&
+						emitResult.binary[2] === 0x73 &&
+						emitResult.binary[3] === 0x6d
+					)
+				}
+			),
+			{ numRuns: 30 }
+		)
+	})
+
+	it('all sibling field literal values appear in WASM output', () => {
+		fc.assert(
+			fc.property(
+				fc.integer({ max: 3, min: 2 }),
+				fc.integer({ max: 500, min: 100 }), // Use range 100-500 to avoid false positives
+				fc.array(fc.integer({ max: 900, min: 600 }), { maxLength: 3, minLength: 3 }), // 600-900 range
+				(depth, leafValue, siblingValues) => {
+					const types = generateNestedTypesWithSiblings(depth)
+					const init = generateNestedInitWithSiblings(depth, leafValue, siblingValues)
+					const source = `${types}${init}panic\n`
+
+					const ctx = new CompilationContext(source)
+					tokenize(ctx)
+					const parseResult = parse(ctx)
+					if (!parseResult.succeeded) return true
+
+					const checkResult = check(ctx)
+					if (!checkResult.succeeded) return true
+
+					const emitResult = emit(ctx)
+					if (!emitResult.valid) return true
+
+					// Leaf value should appear
+					if (!emitResult.text.includes(`i32.const ${leafValue}`)) return false
+
+					// All sibling values should appear (up to depth-1 siblings)
+					for (let i = 0; i < depth - 1; i++) {
+						const sibVal = siblingValues[i] ?? 0
+						if (!emitResult.text.includes(`i32.const ${sibVal}`)) return false
+					}
+					return true
+				}
+			),
+			{ numRuns: 30 }
+		)
+	})
+
+	it('WAT local count matches primitive field count with siblings', () => {
+		fc.assert(
+			fc.property(
+				fc.integer({ max: 3, min: 2 }),
+				fc.integer({ max: 100, min: 0 }),
+				fc.array(fc.integer({ max: 100, min: 0 }), { maxLength: 3, minLength: 3 }),
+				(depth, leafValue, siblingValues) => {
+					const types = generateNestedTypesWithSiblings(depth)
+					const init = generateNestedInitWithSiblings(depth, leafValue, siblingValues)
+					const source = `${types}${init}panic\n`
+
+					const ctx = new CompilationContext(source)
+					tokenize(ctx)
+					const parseResult = parse(ctx)
+					if (!parseResult.succeeded) return true
+
+					const checkResult = check(ctx)
+					if (!checkResult.succeeded) return true
+
+					const emitResult = emit(ctx)
+					if (!emitResult.valid) return true
+
+					// Count i32 locals in WAT (primitives only, not record placeholders)
+					const i32Locals = (emitResult.text.match(/\(local \$\d+ i32\)/g) || []).length
+
+					// Expected: 1 leaf val + (depth-1) siblings
+					const expectedLocals = 1 + (depth - 1)
+
+					return i32Locals === expectedLocals
+				}
+			),
+			{ numRuns: 30 }
+		)
+	})
+
+	it('sibling field order is flexible', () => {
+		// Test that siblings can appear before or after nested blocks
+		fc.assert(
+			fc.property(
+				fc.boolean(), // siblingFirst: whether sibling comes before nested
+				fc.integer({ max: 100, min: 0 }),
+				fc.integer({ max: 100, min: 0 }),
+				(siblingFirst, innerVal, sibVal) => {
+					const types = `type Inner\n    val: i32\ntype Outer\n    inner: Inner\n    sib: i32\n`
+
+					// Two orderings of fields in init
+					const init = siblingFirst
+						? `o: Outer =\n    sib: ${sibVal}\n    inner: Inner\n        val: ${innerVal}\n`
+						: `o: Outer =\n    inner: Inner\n        val: ${innerVal}\n    sib: ${sibVal}\n`
+
+					const source = `${types}${init}panic\n`
+
+					const ctx = new CompilationContext(source)
+					tokenize(ctx)
+					const parseResult = parse(ctx)
+					if (!parseResult.succeeded) return true
+
+					const checkResult = check(ctx)
+					// Both orderings should succeed
+					return checkResult.succeeded
+				}
+			),
+			{ numRuns: 50 }
+		)
+	})
+
+	it('deeply nested with siblings produces deterministic output', () => {
+		fc.assert(
+			fc.property(
+				fc.integer({ max: 3, min: 2 }),
+				fc.integer({ max: 100, min: 0 }),
+				fc.array(fc.integer({ max: 100, min: 0 }), { maxLength: 3, minLength: 3 }),
+				(depth, leafValue, siblingValues) => {
+					const types = generateNestedTypesWithSiblings(depth)
+					const init = generateNestedInitWithSiblings(depth, leafValue, siblingValues)
+					const source = `${types}${init}panic\n`
+
+					// Compile twice
+					const ctx1 = new CompilationContext(source)
+					const ctx2 = new CompilationContext(source)
+
+					tokenize(ctx1)
+					tokenize(ctx2)
+
+					const parse1 = parse(ctx1)
+					const parse2 = parse(ctx2)
+					if (!parse1.succeeded || !parse2.succeeded) return true
+
+					const check1 = check(ctx1)
+					const check2 = check(ctx2)
+					if (!check1.succeeded || !check2.succeeded) return true
+
+					const emit1 = emit(ctx1)
+					const emit2 = emit(ctx2)
+					if (!emit1.valid || !emit2.valid) return true
+
+					// Binary should be identical
+					if (emit1.binary.length !== emit2.binary.length) return false
+					for (let i = 0; i < emit1.binary.length; i++) {
+						if (emit1.binary[i] !== emit2.binary[i]) return false
+					}
+					return true
+				}
+			),
+			{ numRuns: 20 }
+		)
+	})
+
+	it('multiple siblings after single nested block all compile', () => {
+		fc.assert(
+			fc.property(
+				fc.integer({ max: 4, min: 2 }), // number of siblings
+				fc.array(fc.integer({ max: 100, min: 0 }), { maxLength: 5, minLength: 5 }),
+				(siblingCount, values) => {
+					// Create type with 1 nested field + N siblings
+					let typeFields = '    inner: Inner\n'
+					for (let i = 0; i < siblingCount; i++) {
+						typeFields += `    s${i}: i32\n`
+					}
+					const types = `type Inner\n    val: i32\ntype Outer\n${typeFields}`
+
+					// Init with nested block first, then all siblings
+					let init = `o: Outer =\n    inner: Inner\n        val: ${values[0] ?? 0}\n`
+					for (let i = 0; i < siblingCount; i++) {
+						init += `    s${i}: ${values[i + 1] ?? 0}\n`
+					}
+
+					const source = `${types}${init}panic\n`
+
+					const ctx = new CompilationContext(source)
+					tokenize(ctx)
+					const parseResult = parse(ctx)
+					if (!parseResult.succeeded) return true
+
+					const checkResult = check(ctx)
+					if (!checkResult.succeeded) return true
+
+					const emitResult = emit(ctx)
+
+					// All sibling values should appear
+					if (!emitResult.valid) return true
+					for (let i = 0; i < siblingCount; i++) {
+						const val = values[i + 1] ?? 0
+						if (!emitResult.text.includes(`i32.const ${val}`)) return false
+					}
+					return true
+				}
+			),
+			{ numRuns: 30 }
+		)
+	})
+})
+
 describe('record types/nested record instantiation properties', () => {
 	it('nested depth N produces correct flattened local count', () => {
 		fc.assert(

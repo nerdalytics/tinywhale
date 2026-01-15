@@ -778,3 +778,121 @@ panic`
 		assert.ok(diags.some((d) => d.def.code === 'TWCHECK027')) // missing field
 	})
 })
+
+describe('sibling fields after nested blocks', () => {
+	it('parses sibling field after nested record block', () => {
+		const source = `type Inner
+    val: i32
+type Outer
+    inner: Inner
+    x: i32
+o: Outer =
+    inner: Inner
+        val: 42
+    x: 10
+panic`
+		const ctx = createContext(source)
+		tokenize(ctx)
+		const result = matchOnly(ctx)
+		assert.ok(result, 'should parse sibling field after nested block')
+	})
+
+	it('compiles sibling field after nested block', () => {
+		const source = `type Inner
+    val: i32
+type Outer
+    inner: Inner
+    x: i32
+o: Outer =
+    inner: Inner
+        val: 42
+    x: 10
+panic`
+		const ctx = createContext(source)
+		tokenize(ctx)
+		parse(ctx)
+		const checkResult = check(ctx)
+
+		assert.ok(
+			checkResult.succeeded,
+			`check failed: ${ctx
+				.getErrors()
+				.map((e) => ctx.formatDiagnostic(e))
+				.join(', ')}`
+		)
+
+		const result = emit(ctx)
+		assert.ok(result.valid, 'should emit valid WASM')
+		assert.ok(result.text.includes('i32.const 42'), 'should have nested val')
+		assert.ok(result.text.includes('i32.const 10'), 'should have sibling x')
+	})
+
+	it('compiles multiple siblings after nested block', () => {
+		const source = `type Inner
+    a: i32
+type Outer
+    inner: Inner
+    x: i32
+    y: i32
+o: Outer =
+    inner: Inner
+        a: 1
+    x: 2
+    y: 3
+panic`
+		const ctx = createContext(source)
+		tokenize(ctx)
+		parse(ctx)
+		const checkResult = check(ctx)
+
+		assert.ok(
+			checkResult.succeeded,
+			`check failed: ${ctx
+				.getErrors()
+				.map((e) => ctx.formatDiagnostic(e))
+				.join(', ')}`
+		)
+
+		const result = emit(ctx)
+		assert.ok(result.valid, 'should emit valid WASM')
+		assert.ok(result.text.includes('i32.const 1'), 'should have inner.a')
+		assert.ok(result.text.includes('i32.const 2'), 'should have x')
+		assert.ok(result.text.includes('i32.const 3'), 'should have y')
+	})
+
+	it('compiles deeply nested with siblings at each level', () => {
+		const source = `type L3
+    val: i32
+type L2
+    l3: L3
+    b: i32
+type L1
+    l2: L2
+    a: i32
+root: L1 =
+    l2: L2
+        l3: L3
+            val: 100
+        b: 20
+    a: 10
+panic`
+		const ctx = createContext(source)
+		tokenize(ctx)
+		parse(ctx)
+		const checkResult = check(ctx)
+
+		assert.ok(
+			checkResult.succeeded,
+			`check failed: ${ctx
+				.getErrors()
+				.map((e) => ctx.formatDiagnostic(e))
+				.join(', ')}`
+		)
+
+		const result = emit(ctx)
+		assert.ok(result.valid, 'should emit valid WASM')
+		assert.ok(result.text.includes('i32.const 100'), 'should have l3.val')
+		assert.ok(result.text.includes('i32.const 20'), 'should have l2.b')
+		assert.ok(result.text.includes('i32.const 10'), 'should have l1.a')
+	})
+})

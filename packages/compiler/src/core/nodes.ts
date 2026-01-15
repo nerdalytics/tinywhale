@@ -13,43 +13,34 @@ export const NodeKind = {
 	CompareChain: 106,
 	DedentLine: 1,
 
-	// Record expressions (107-110)
 	FieldAccess: 109,
 
-	// Type declarations (50-59)
 	FieldDecl: 51,
 	FieldInit: 108,
 	FloatLiteral: 103,
 
-	// Expressions (100-149)
 	Identifier: 100,
-	// Line types (0-9)
 	IndentedLine: 0,
 	IntLiteral: 101,
 	LiteralPattern: 201,
 	MatchArm: 13,
 	MatchExpr: 12,
 
-	// Nested record construction
 	NestedRecordInit: 110,
 	OrPattern: 203,
 
-	// Statements (10-99)
 	PanicStatement: 10,
 	ParenExpr: 105,
 
-	// Program root (255)
 	Program: 255,
 	RecordLiteral: 107,
 	RootLine: 2,
 
-	// Type annotations (150-199)
 	TypeAnnotation: 150,
 	TypeDecl: 50,
 	UnaryExpr: 102,
 	VariableBinding: 11,
 
-	// Patterns (200-249)
 	WildcardPattern: 200,
 } as const
 
@@ -172,14 +163,12 @@ export class NodeStore {
 		const { start, count } = this.getChildRange(id)
 		if (count === 0) return
 
-		// Start at the end of the child range
 		let pos = offsetNodeId(start, count - 1)
 
 		while (pos >= start) {
 			const child = this.nodes[pos]
 			if (child === undefined) break
 			yield [pos, child]
-			// Move backwards past this child's subtree to find previous sibling
 			pos = offsetNodeId(pos, -child.subtreeSize)
 		}
 	}

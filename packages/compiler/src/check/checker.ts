@@ -74,6 +74,8 @@ interface BlockContext {
 	nodeId: NodeId
 	children: NodeId[]
 	expectedChildKind: NodeKind
+	// Expected indent level for children of this context
+	childIndentLevel?: number
 	// For RecordLiteral/NestedRecordInit: binding info
 	bindingNameId?: StringId
 	bindingNodeId?: NodeId
@@ -89,7 +91,6 @@ interface BlockContext {
 	fields?: Array<{ name: string; typeId: TypeId; nodeId: NodeId }>
 }
 
-// Block context helpers for unified block handling
 function pushBlockContext(state: CheckerState, ctx: BlockContext): void {
 	state.blockContextStack.push(ctx)
 }
@@ -106,7 +107,6 @@ function parentBlockContext(state: CheckerState): BlockContext | null {
 	return state.blockContextStack.at(-2) ?? null
 }
 
-// parentBlockContext will be used in Task 7 for nested record literals
 void parentBlockContext
 
 interface CheckerState {
@@ -197,20 +197,17 @@ function resolveTypeFromAnnotation(
 	const typeAnnotationNode = context.nodes.get(typeAnnotationId)
 	const typeToken = context.tokens.get(typeAnnotationNode.tokenId)
 
-	// Try primitive type first
 	const primitiveType = getTypeNameFromToken(typeToken.kind)
 	if (primitiveType) {
 		return primitiveType
 	}
 
-	// Try user-defined type (identifier)
 	if (typeToken.kind === TokenKind.Identifier) {
 		const typeName = context.strings.get(typeToken.payload as StringId)
 		const typeId = state.types.lookup(typeName)
 		if (typeId !== undefined) {
 			return { name: typeName, typeId }
 		}
-		// Type not found - return null (caller will emit error)
 	}
 
 	return null
@@ -241,7 +238,6 @@ function valueFitsInType(value: bigint, typeId: TypeId): boolean {
  */
 function splitBigIntTo32BitParts(value: bigint, typeId: TypeId): { low: number; high: number } {
 	if (typeId === BuiltinTypeId.I32) {
-		// For i32, the value fits in low 32 bits
 		return { high: 0, low: Number(BigInt.asIntN(32, value)) }
 	}
 	const low = Number(BigInt.asIntN(32, value))
@@ -1323,21 +1319,18 @@ function extractBindingNodes(bindingId: NodeId, context: CompilationContext): Bi
 	const prevNode = context.nodes.get(prevId)
 
 	if (prevNode.kind === NodeKind.TypeAnnotation) {
-		// No expression - record literal mode
 		const typeAnnotationId = prevId
 		const identId = offsetNodeId(typeAnnotationId, -prevNode.subtreeSize)
 		return { exprId: null, hasExpression: false, identId, typeAnnotationId }
 	}
 
 	if (isExpressionNode(prevNode.kind)) {
-		// Has expression - normal variable binding
 		const typeAnnotationId = offsetNodeId(prevId, -prevNode.subtreeSize)
 		const typeAnnotationNode = context.nodes.get(typeAnnotationId)
 		const identId = offsetNodeId(typeAnnotationId, -typeAnnotationNode.subtreeSize)
 		return { exprId: prevId, hasExpression: true, identId, typeAnnotationId }
 	}
 
-	// Unexpected node kind
 	console.assert(
 		false,
 		'VariableBinding: expected TypeAnnotation or expression, found %d',
@@ -1376,7 +1369,6 @@ function processRecordLiteralBinding(
 	if (state.types.isRecordType(declaredType)) {
 		startRecordLiteral(bindingId, declaredType, typeInfo.name, nameId, state, context)
 	} else {
-		// Non-record type without expression - error
 		context.emitAtNode('TWCHECK010' as DiagnosticCode, typeAnnotationId, {
 			found: typeInfo.name,
 		})
@@ -1432,7 +1424,6 @@ function processVariableBinding(
 		return
 	}
 
-	// Normal variable binding with expression
 	const exprResult = checkExpression(exprId as NodeId, declaredType, state, context)
 	if (!isValidExprResult(exprResult)) return
 
@@ -1514,7 +1505,6 @@ function resolveUserDefinedFieldType(
 	state: CheckerState,
 	context: CompilationContext
 ): TypeId | null {
-	// Check for self-reference
 	const ctx = currentBlockContext(state)
 	if (ctx?.kind === 'TypeDecl' && fieldTypeName === ctx.typeName) {
 		context.emitAtNode('TWCHECK032' as DiagnosticCode, fieldDeclId, {
@@ -1549,7 +1539,6 @@ function resolveFieldType(
 		return resolveUserDefinedFieldType(fieldTypeName, fieldDeclId, state, context)
 	}
 
-	// Primitive type
 	const typeInfo = getTypeNameFromToken(typeToken.kind)
 	if (!typeInfo) {
 		context.emitAtNode('TWCHECK010' as DiagnosticCode, fieldDeclId, {
@@ -1623,6 +1612,20 @@ function getFieldInitFromLine(
 		if (child.kind === NodeKind.FieldInit) {
 			return { id: childId, kind: child.kind }
 		}
+	}
+	return null
+}
+
+/**
+ * Get the indent level from a line node.
+ * For IndentedLine, the tokenId points to the indent token which has the level in its payload.
+ * Returns null if the line's token is not an indent token.
+ */
+function getIndentLevelFromLine(lineId: NodeId, context: CompilationContext): number | null {
+	const node = context.nodes.get(lineId)
+	const token = context.tokens.get(node.tokenId)
+	if (token.kind === TokenKind.Indent) {
+		return token.payload
 	}
 	return null
 }
@@ -1965,12 +1968,15 @@ function buildNestedRecordParentPath(
 /**
  * Start processing a nested record initialization.
  * Called when we detect a FieldInit with a NestedRecordInit child in a record literal context.
+ * currentIndentLevel is the indent level of the line that contains this nested record init.
+ * Children of this nested record should be at currentIndentLevel + 1.
  */
 function startNestedRecordInit(
 	nestedInitNodeId: NodeId,
 	fieldName: string,
 	state: CheckerState,
-	context: CompilationContext
+	context: CompilationContext,
+	currentIndentLevel?: number
 ): boolean {
 	const nestedInitNode = context.nodes.get(nestedInitNodeId)
 	const typeToken = context.tokens.get(nestedInitNode.tokenId)
@@ -1988,7 +1994,8 @@ function startNestedRecordInit(
 	const parentCtx = currentBlockContext(state)
 	const parentPath = buildNestedRecordParentPath(fieldName, parentCtx, context)
 
-	pushBlockContext(state, {
+	// Build the context object, conditionally including childIndentLevel
+	const ctx: BlockContext = {
 		children: [],
 		expectedChildKind: NodeKind.FieldInit,
 		fieldInits: [],
@@ -1999,7 +2006,14 @@ function startNestedRecordInit(
 		parentPath,
 		typeId,
 		typeName,
-	})
+	}
+
+	// Children of this nested record should be at the next indent level
+	if (currentIndentLevel !== undefined) {
+		ctx.childIndentLevel = currentIndentLevel + 1
+	}
+
+	pushBlockContext(state, ctx)
 	return true
 }
 
@@ -2175,7 +2189,6 @@ function processMatchArm(armId: NodeId, state: CheckerState, context: Compilatio
 	const exprNode = context.nodes.get(exprId)
 
 	if (!isExpressionNode(exprNode.kind)) {
-		// Malformed arm
 		return
 	}
 
@@ -2184,17 +2197,13 @@ function processMatchArm(armId: NodeId, state: CheckerState, context: Compilatio
 	const patternNode = context.nodes.get(patternId)
 
 	if (!isPatternNode(patternNode.kind)) {
-		// Malformed arm
 		return
 	}
 
-	// Check the pattern
 	checkPattern(patternId, state.matchContext.scrutinee.typeId, state, context)
 
-	// Check the body expression
 	const bodyResult = checkExpression(exprId, state.matchContext.expectedType, state, context)
 
-	// Add to collected arms
 	if (isValidExprResult(bodyResult)) {
 		state.matchContext.arms.push({
 			bodyInstId: bodyResult.instId,
@@ -2395,7 +2404,6 @@ function emitStatement(
 			})
 			break
 		case NodeKind.VariableBinding:
-			// Check if this is a match binding
 			{
 				const matchExprId = prevNodeId(stmtId)
 				const matchExprNode = context.nodes.get(matchExprId)
@@ -2419,10 +2427,8 @@ function flushUnreachableWarning(state: CheckerState, context: CompilationContex
 	const { endLine, firstNodeId, startLine } = range
 
 	if (startLine === endLine) {
-		// Single line - use default suggestion
 		context.emitAtNode('TWCHECK050' as DiagnosticCode, firstNodeId)
 	} else {
-		// Multiple lines - use custom suggestion with range
 		const suggestion = `Lines ${startLine}-${endLine} are unreachable. You can safely remove this code, or move it before the exit point.`
 		context.emitAtNodeWithSuggestion('TWCHECK050' as DiagnosticCode, firstNodeId, suggestion)
 	}
@@ -2535,17 +2541,19 @@ function isInRecordInitContext(state: CheckerState): boolean {
 /**
  * Try to start a nested record init from a field init node.
  * Returns true if this field init starts a nested record construction.
+ * currentIndentLevel is the indent level of the current line, used to set the expected child level.
  */
 function tryStartNestedRecordFromFieldInit(
 	fieldInitId: NodeId,
 	state: CheckerState,
-	context: CompilationContext
+	context: CompilationContext,
+	currentIndentLevel?: number
 ): boolean {
 	if (!hasNestedRecordInit(fieldInitId, context)) return false
 	const fieldName = extractFieldInitName(fieldInitId, context)
 	const nestedInitNode = getNestedRecordInitFromFieldInit(fieldInitId, context)
 	if (nestedInitNode && fieldName) {
-		return startNestedRecordInit(nestedInitNode, fieldName, state, context)
+		return startNestedRecordInit(nestedInitNode, fieldName, state, context, currentIndentLevel)
 	}
 	return false
 }
@@ -2560,7 +2568,11 @@ function processIndentedLineAsFieldInit(
 	const fieldInit = getFieldInitFromLine(lineId, context)
 	if (!fieldInit) return false
 
-	if (tryStartNestedRecordFromFieldInit(fieldInit.id, state, context)) return true
+	// Get the indent level of this line to pass to nested record init
+	const currentIndentLevel = getIndentLevelFromLine(lineId, context) ?? undefined
+
+	if (tryStartNestedRecordFromFieldInit(fieldInit.id, state, context, currentIndentLevel))
+		return true
 
 	processFieldInitInNestedContext(fieldInit.id, state, context)
 	return true
@@ -2589,11 +2601,41 @@ function processFieldInitInNestedContext(
 	ctx.fieldInits?.push({ exprResult, name: fieldName, nodeId: fieldInitId })
 }
 
+/**
+ * Check if we should finalize a nested record context based on indent level.
+ * Returns true if the context should be finalized.
+ */
+function shouldFinalizeNestedForIndent(state: CheckerState, lineIndentLevel: number): boolean {
+	const ctx = currentBlockContext(state)
+	return ctx?.childIndentLevel !== undefined && lineIndentLevel < ctx.childIndentLevel
+}
+
+/**
+ * Finalize nested record contexts when returning to a lower indent level.
+ * This handles dedenting from nested blocks while still on an IndentedLine.
+ */
+function finalizeNestedContextsForIndent(
+	state: CheckerState,
+	context: CompilationContext,
+	lineIndentLevel: number | null
+): void {
+	if (lineIndentLevel === null) return
+	while (
+		isInNestedRecordInitContext(state) &&
+		shouldFinalizeNestedForIndent(state, lineIndentLevel)
+	) {
+		finalizeNestedRecordInit(state, context)
+	}
+}
+
 function handleIndentedLine(
 	lineId: NodeId,
 	state: CheckerState,
 	context: CompilationContext
 ): void {
+	const lineIndentLevel = getIndentLevelFromLine(lineId, context)
+	finalizeNestedContextsForIndent(state, context, lineIndentLevel)
+
 	if (processIndentedLineAsMatchArm(lineId, state, context)) return
 	if (processIndentedLineAsFieldDecl(lineId, state, context)) return
 	if (processIndentedLineAsFieldInit(lineId, state, context)) return

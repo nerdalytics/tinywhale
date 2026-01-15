@@ -106,24 +106,20 @@ export function compile(
 ): import('./codegen/index.ts').CompileResult {
 	const context = new CompilationContext(source, options.filename)
 
-	// Phase 1: Tokenization
 	const tokenResult = tokenize(context)
 	if (!tokenResult.succeeded) {
 		throw new CompileError(getFormattedError(context, 'Tokenization failed'))
 	}
 
-	// Phase 2: Parsing
 	const parseResult = parse(context)
 	if (!parseResult.succeeded) {
 		throw new CompileError(getFormattedError(context, 'Parse failed'))
 	}
 
-	// Phase 3: Checking (semantic analysis)
 	const checkResult = check(context)
 	if (!checkResult.succeeded) {
 		throw new CompileError(getFormattedError(context, 'Check failed'))
 	}
 
-	// Phase 4: Emission
 	return runEmitPhase(context, options.optimize ?? false)
 }
