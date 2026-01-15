@@ -263,9 +263,9 @@ export const TWCHECK032: DiagnosticDef = {
 
 export const TWCHECK033: DiagnosticDef = {
 	code: 'TWCHECK033',
+	description: 'Nested record initializer type must match field declaration.',
 	message: 'type mismatch: field expects `{expected}`, got `{got}`',
 	severity: DiagnosticSeverity.Error,
-	description: 'Nested record initializer type must match field declaration.',
 	suggestion: 'Use the correct type name that matches the field declaration.',
 }
 

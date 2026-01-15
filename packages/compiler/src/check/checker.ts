@@ -59,20 +59,6 @@ interface MatchContext {
 }
 
 /**
- * Context for collecting type declaration fields.
- */
-interface TypeDeclContext {
-	/** Type name */
-	typeName: string
-	/** Parse node ID of the TypeDecl (for diagnostics) */
-	typeDeclNodeId: NodeId
-	/** Collected fields */
-	fields: Array<{ name: string; typeId: TypeId; nodeId: NodeId }>
-	/** Track field names for duplicate detection */
-	fieldNames: Set<string>
-}
-
-/**
  * Context for collecting record literal field initializers.
  */
 interface RecordLiteralContext {
@@ -121,7 +107,7 @@ interface BlockContext {
 	fields?: Array<{ name: string; typeId: TypeId; nodeId: NodeId }>
 }
 
-// Block context helpers - will be used in Tasks 6-7 when migrating TypeDecl/RecordLiteral
+// Block context helpers for unified block handling
 function pushBlockContext(state: CheckerState, ctx: BlockContext): void {
 	state.blockContextStack.push(ctx)
 }
@@ -138,10 +124,7 @@ function parentBlockContext(state: CheckerState): BlockContext | null {
 	return state.blockContextStack.at(-2) ?? null
 }
 
-// Suppress noUnusedLocals until Tasks 6-7 migrate to use these helpers
-void pushBlockContext
-void popBlockContext
-void currentBlockContext
+// parentBlockContext will be used in Task 7 for nested record literals
 void parentBlockContext
 
 interface CheckerState {
@@ -152,7 +135,6 @@ interface CheckerState {
 	currentScope: Scope
 	unreachableRange: UnreachableRange | null
 	matchContext: MatchContext | null
-	typeDeclContext: TypeDeclContext | null // Keep for now, will remove in Task 6
 	recordLiteralContext: RecordLiteralContext | null // Keep for now, will remove in Task 7
 	blockContextStack: BlockContext[]
 }
@@ -1492,12 +1474,16 @@ function startTypeDecl(typeDeclId: NodeId, state: CheckerState, context: Compila
 	const identToken = context.tokens.get(identTokenId)
 	const typeName = context.strings.get(identToken.payload as StringId)
 
-	state.typeDeclContext = {
+	pushBlockContext(state, {
+		children: [],
+		expectedChildKind: NodeKind.FieldDecl,
 		fieldNames: new Set(),
 		fields: [],
-		typeDeclNodeId: typeDeclId,
+		kind: 'TypeDecl',
+		nodeId: typeDeclId,
+		typeId: null, // Will be assigned after registration
 		typeName,
-	}
+	})
 }
 
 /**
@@ -1510,7 +1496,8 @@ function resolveUserDefinedFieldType(
 	context: CompilationContext
 ): TypeId | null {
 	// Check for self-reference
-	if (fieldTypeName === state.typeDeclContext?.typeName) {
+	const ctx = currentBlockContext(state)
+	if (ctx?.kind === 'TypeDecl' && fieldTypeName === ctx.typeName) {
 		context.emitAtNode('TWCHECK032' as DiagnosticCode, fieldDeclId, {
 			field: fieldTypeName,
 			type: fieldTypeName,
@@ -1563,7 +1550,8 @@ function processFieldDecl(
 	state: CheckerState,
 	context: CompilationContext
 ): void {
-	if (!state.typeDeclContext) {
+	const ctx = currentBlockContext(state)
+	if (!ctx || ctx.kind !== 'TypeDecl') {
 		// FieldDecl outside type declaration - should not happen if parser is correct
 		return
 	}
@@ -1578,34 +1566,22 @@ function processFieldDecl(
 	const typeToken = context.tokens.get(typeTokenId as typeof fieldDeclNode.tokenId)
 
 	const fieldTypeId = resolveFieldType(typeToken, fieldDeclId, state, context)
-	if (!fieldTypeId) {
-		return
-	}
+	if (!fieldTypeId) return
 
-	// Check for duplicate field names
-	if (state.typeDeclContext.fieldNames.has(fieldName)) {
-		context.emitAtNode('TWCHECK026' as DiagnosticCode, fieldDeclId, {
-			name: fieldName,
-			typeName: state.typeDeclContext.typeName,
-		})
-		return
-	}
-
-	state.typeDeclContext.fieldNames.add(fieldName)
-	state.typeDeclContext.fields.push({
-		name: fieldName,
-		nodeId: fieldDeclId,
-		typeId: fieldTypeId,
-	})
+	addFieldToTypeDeclContext(ctx, fieldName, fieldTypeId, fieldDeclId, context)
 }
 
 /**
  * Finalize a type declaration by registering it with the TypeStore.
  */
 function finalizeTypeDecl(state: CheckerState, _context: CompilationContext): void {
-	if (!state.typeDeclContext) return
+	const ctx = currentBlockContext(state)
+	if (!ctx || ctx.kind !== 'TypeDecl') return
 
-	const { fields, typeDeclNodeId, typeName } = state.typeDeclContext
+	popBlockContext(state)
+
+	const { fields, nodeId, typeName } = ctx
+	if (!fields) return
 
 	// Convert to FieldInfo format
 	const fieldInfos = fields.map((f, index) => ({
@@ -1614,8 +1590,7 @@ function finalizeTypeDecl(state: CheckerState, _context: CompilationContext): vo
 		typeId: f.typeId,
 	}))
 
-	state.types.registerRecordType(typeName, fieldInfos, typeDeclNodeId)
-	state.typeDeclContext = null
+	state.types.registerRecordType(typeName, fieldInfos, nodeId)
 }
 
 /**
@@ -1661,6 +1636,29 @@ function getNestedRecordTypeName(fieldInitId: NodeId, context: CompilationContex
 }
 
 /**
+ * Add a field to the current TypeDecl block context.
+ * Returns false if the field name is a duplicate.
+ */
+function addFieldToTypeDeclContext(
+	ctx: BlockContext,
+	fieldName: string,
+	fieldTypeId: TypeId,
+	fieldNodeId: NodeId,
+	context: CompilationContext
+): boolean {
+	if (ctx.fieldNames?.has(fieldName)) {
+		context.emitAtNode('TWCHECK026' as DiagnosticCode, fieldNodeId, {
+			name: fieldName,
+			typeName: ctx.typeName,
+		})
+		return false
+	}
+	ctx.fieldNames?.add(fieldName)
+	ctx.fields?.push({ name: fieldName, nodeId: fieldNodeId, typeId: fieldTypeId })
+	return true
+}
+
+/**
  * Process a FieldInit with NestedRecordInit as a type declaration field.
  * This handles the case where a user-defined type field is parsed as FieldInit.
  */
@@ -1669,7 +1667,8 @@ function processFieldInitAsTypeField(
 	state: CheckerState,
 	context: CompilationContext
 ): void {
-	if (!state.typeDeclContext) return
+	const ctx = currentBlockContext(state)
+	if (!ctx || ctx.kind !== 'TypeDecl') return
 
 	const fieldInitNode = context.nodes.get(fieldInitId)
 	const fieldToken = context.tokens.get(fieldInitNode.tokenId)
@@ -1681,21 +1680,7 @@ function processFieldInitAsTypeField(
 	const fieldTypeId = resolveUserDefinedFieldType(typeName, fieldInitId, state, context)
 	if (!fieldTypeId) return
 
-	// Check for duplicate field names
-	if (state.typeDeclContext.fieldNames.has(fieldName)) {
-		context.emitAtNode('TWCHECK026' as DiagnosticCode, fieldInitId, {
-			name: fieldName,
-			typeName: state.typeDeclContext.typeName,
-		})
-		return
-	}
-
-	state.typeDeclContext.fieldNames.add(fieldName)
-	state.typeDeclContext.fields.push({
-		name: fieldName,
-		nodeId: fieldInitId,
-		typeId: fieldTypeId,
-	})
+	addFieldToTypeDeclContext(ctx, fieldName, fieldTypeId, fieldInitId, context)
 }
 
 /**
@@ -2230,12 +2215,20 @@ function processIndentedLineAsMatchArm(
 	return true
 }
 
+/**
+ * Check if we're in a TypeDecl block context.
+ */
+function isInTypeDeclContext(state: CheckerState): boolean {
+	const ctx = currentBlockContext(state)
+	return ctx?.kind === 'TypeDecl'
+}
+
 function processIndentedLineAsFieldDecl(
 	lineId: NodeId,
 	state: CheckerState,
 	context: CompilationContext
 ): boolean {
-	if (!state.typeDeclContext) return false
+	if (!isInTypeDeclContext(state)) return false
 
 	// Try standard FieldDecl first (for primitive types)
 	const fieldDecl = getFieldDeclFromLine(lineId, context)
@@ -2298,8 +2291,8 @@ function processDedentLineStatement(
 }
 
 function handleDedentLine(lineId: NodeId, state: CheckerState, context: CompilationContext): void {
-	// Finalize pending type declaration and process statement
-	if (state.typeDeclContext) {
+	// Finalize pending TypeDecl from blockContextStack
+	if (isInTypeDeclContext(state)) {
 		finalizeTypeDecl(state, context)
 		processDedentLineStatement(lineId, state, context)
 		return
@@ -2324,8 +2317,8 @@ function handleDedentLine(lineId: NodeId, state: CheckerState, context: Compilat
 }
 
 function handleRootLine(lineId: NodeId, state: CheckerState, context: CompilationContext): void {
-	// Finalize any pending type declaration
-	if (state.typeDeclContext) finalizeTypeDecl(state, context)
+	// Finalize any pending TypeDecl from blockContextStack
+	if (isInTypeDeclContext(state)) finalizeTypeDecl(state, context)
 
 	// Finalize any pending match context
 	if (state.matchContext) finalizeMatch(state, context)
@@ -2394,7 +2387,9 @@ function assignCheckResultsToContext(
 }
 
 function finalizePendingContexts(state: CheckerState, context: CompilationContext): void {
-	if (state.typeDeclContext) finalizeTypeDecl(state, context)
+	// Finalize any pending TypeDecl from blockContextStack
+	if (isInTypeDeclContext(state)) finalizeTypeDecl(state, context)
+
 	if (state.matchContext) finalizeMatch(state, context)
 	if (state.recordLiteralContext) finalizeRecordLiteral(state, context)
 }
@@ -2429,7 +2424,6 @@ export function check(context: CompilationContext): CheckResult {
 		recordLiteralContext: null,
 		scopes,
 		symbols,
-		typeDeclContext: null,
 		types,
 		unreachableRange: null,
 	}
