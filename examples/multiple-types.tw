@@ -1,0 +1,19 @@
+# TinyWhale: Multiple type declarations in one file
+type Point
+    x: i32
+    y: i32
+
+type Line
+    start: i32
+    end: i32
+
+p: Point =
+    x: 5
+    y: 10
+
+l: Line =
+    start: 0
+    end: 100
+
+sum: i32 = p.x + l.end
+panic

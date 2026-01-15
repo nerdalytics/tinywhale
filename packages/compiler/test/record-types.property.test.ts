@@ -609,3 +609,33 @@ describe('record types/end-to-end properties', () => {
 		)
 	})
 })
+
+// ============================================================================
+// Multiple Type Declarations Properties
+// ============================================================================
+
+describe('record types/multiple type declarations properties', () => {
+	it('N type declarations creates N registered types', () => {
+		fc.assert(
+			fc.property(fc.integer({ max: 5, min: 1 }), (typeCount) => {
+				const typeDecls = Array.from(
+					{ length: typeCount },
+					(_, i) => `type T${i}\n    f: i32`
+				).join('\n')
+				const source = `${typeDecls}\npanic\n`
+
+				const ctx = new CompilationContext(source)
+				tokenize(ctx)
+				parse(ctx)
+				check(ctx)
+
+				// All types should be registered
+				for (let i = 0; i < typeCount; i++) {
+					if (ctx.types?.lookup(`T${i}`) === undefined) return false
+				}
+				return true
+			}),
+			{ numRuns: 50 }
+		)
+	})
+})

@@ -19,7 +19,7 @@ import {
 	type ParseNode,
 	prevNodeId,
 } from '../core/nodes.ts'
-import { TokenKind } from '../core/tokens.ts'
+import { nextTokenId, type Token, TokenKind } from '../core/tokens.ts'
 import { InstStore, ScopeStore, SymbolStore, TypeStore } from './stores.ts'
 import {
 	BuiltinTypeId,
@@ -1431,8 +1431,11 @@ function getFieldDeclFromLine(
  */
 function startTypeDecl(typeDeclId: NodeId, state: CheckerState, context: CompilationContext): void {
 	const typeDeclNode = context.nodes.get(typeDeclId)
-	const token = context.tokens.get(typeDeclNode.tokenId)
-	const typeName = context.strings.get(token.payload as StringId)
+	// TypeDecl node's tokenId points to the 'type' keyword
+	// The type name is in the next token (the identifier)
+	const identTokenId = nextTokenId(typeDeclNode.tokenId)
+	const identToken = context.tokens.get(identTokenId)
+	const typeName = context.strings.get(identToken.payload as StringId)
 
 	state.typeDeclContext = {
 		fieldNames: new Set(),
@@ -1440,6 +1443,60 @@ function startTypeDecl(typeDeclId: NodeId, state: CheckerState, context: Compila
 		typeDeclNodeId: typeDeclId,
 		typeName,
 	}
+}
+
+/**
+ * Resolves a user-defined field type by name lookup.
+ */
+function resolveUserDefinedFieldType(
+	fieldTypeName: string,
+	fieldDeclId: NodeId,
+	state: CheckerState,
+	context: CompilationContext
+): TypeId | null {
+	// Check for self-reference
+	if (fieldTypeName === state.typeDeclContext?.typeName) {
+		context.emitAtNode('TWCHECK032' as DiagnosticCode, fieldDeclId, {
+			field: fieldTypeName,
+			type: fieldTypeName,
+		})
+		return null
+	}
+
+	const lookedUpTypeId = state.types.lookup(fieldTypeName)
+	if (lookedUpTypeId === undefined) {
+		context.emitAtNode('TWCHECK010' as DiagnosticCode, fieldDeclId, {
+			name: fieldTypeName,
+		})
+		return null
+	}
+	return lookedUpTypeId
+}
+
+/**
+ * Resolves field type from token (either user-defined or primitive).
+ * Returns typeId or null if type is invalid.
+ */
+function resolveFieldType(
+	typeToken: Token,
+	fieldDeclId: NodeId,
+	state: CheckerState,
+	context: CompilationContext
+): TypeId | null {
+	if (typeToken.kind === TokenKind.Identifier) {
+		const fieldTypeName = context.strings.get(typeToken.payload as StringId)
+		return resolveUserDefinedFieldType(fieldTypeName, fieldDeclId, state, context)
+	}
+
+	// Primitive type
+	const typeInfo = getTypeNameFromToken(typeToken.kind)
+	if (!typeInfo) {
+		context.emitAtNode('TWCHECK010' as DiagnosticCode, fieldDeclId, {
+			name: 'unknown',
+		})
+		return null
+	}
+	return typeInfo.typeId
 }
 
 /**
@@ -1461,10 +1518,14 @@ function processFieldDecl(
 	const fieldName = context.strings.get(fieldToken.payload as StringId)
 
 	// Get the type token (field token + 2: skip colon)
-	// Token layout: Identifier, Colon, TypeKeyword
+	// Token layout: Identifier, Colon, TypeKeyword/Identifier
 	const typeTokenId = (fieldDeclNode.tokenId as number) + 2
 	const typeToken = context.tokens.get(typeTokenId as typeof fieldDeclNode.tokenId)
-	const typeInfo = getTypeNameFromToken(typeToken.kind)
+
+	const fieldTypeId = resolveFieldType(typeToken, fieldDeclId, state, context)
+	if (!fieldTypeId) {
+		return
+	}
 
 	// Check for duplicate field names
 	if (state.typeDeclContext.fieldNames.has(fieldName)) {
@@ -1475,18 +1536,11 @@ function processFieldDecl(
 		return
 	}
 
-	if (!typeInfo) {
-		context.emitAtNode('TWCHECK010' as DiagnosticCode, fieldDeclId, {
-			found: 'unknown',
-		})
-		return
-	}
-
 	state.typeDeclContext.fieldNames.add(fieldName)
 	state.typeDeclContext.fields.push({
 		name: fieldName,
 		nodeId: fieldDeclId,
-		typeId: typeInfo.typeId,
+		typeId: fieldTypeId,
 	})
 }
 
@@ -2100,6 +2154,14 @@ function processDedentLineStatement(
 	state: CheckerState,
 	context: CompilationContext
 ): void {
+	// Check for TypeDecl first (needs special context setup)
+	const typeDecl = getTypeDeclFromLine(lineId, context)
+	if (typeDecl) {
+		startTypeDecl(typeDecl.id, state, context)
+		return
+	}
+
+	// Handle other statements
 	const stmt = getStatementFromLine(lineId, context)
 	if (stmt) emitStatement(stmt.id, stmt.kind, state, context)
 }

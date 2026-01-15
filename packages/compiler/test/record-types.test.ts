@@ -516,3 +516,108 @@ panic`
 		assert.ok(result.text.includes('i64'), 'should have i64 type')
 	})
 })
+
+describe('multiple type declarations', () => {
+	it('supports multiple type declarations in one file', () => {
+		const source = `type Point
+    x: i32
+    y: i32
+type Line
+    start: i32
+    end: i32
+panic`
+		const ctx = createContext(source)
+		tokenize(ctx)
+		parse(ctx)
+		const result = check(ctx)
+
+		assert.ok(result.succeeded, 'should succeed with multiple types')
+		assert.ok(ctx.types?.lookup('Point') !== undefined, 'Point should be registered')
+		assert.ok(ctx.types?.lookup('Line') !== undefined, 'Line should be registered')
+	})
+
+	it('allows using fields from both types', () => {
+		const source = `type Point
+    x: i32
+type Line
+    len: i32
+p: Point =
+    x: 5
+l: Line =
+    len: 10
+sum: i32 = p.x + l.len
+panic`
+		const ctx = createContext(source)
+		tokenize(ctx)
+		parse(ctx)
+		const result = check(ctx)
+
+		assert.ok(result.succeeded)
+	})
+})
+
+describe('nested record types', () => {
+	it('supports field with user-defined type', () => {
+		const source = `type Inner
+    val: i32
+type Outer
+    inner: Inner
+panic`
+		const ctx = createContext(source)
+		tokenize(ctx)
+		parse(ctx)
+		const result = check(ctx)
+
+		assert.ok(result.succeeded, 'should allow user-defined type in field')
+
+		const outerType = ctx.types?.lookup('Outer')
+		assert.ok(outerType !== undefined)
+		const innerField = ctx.types?.getField(outerType, 'inner')
+		assert.ok(innerField, 'Outer should have inner field')
+	})
+
+	it('errors when referencing undefined type', () => {
+		const source = `type Outer
+    inner: Nonexistent
+panic`
+		const ctx = createContext(source)
+		tokenize(ctx)
+		parse(ctx)
+		check(ctx)
+
+		assert.ok(ctx.hasErrors(), 'should error on undefined type')
+	})
+
+	it('errors on forward reference (define-before-use)', () => {
+		const source = `type Outer
+    inner: Inner
+type Inner
+    val: i32
+panic`
+		const ctx = createContext(source)
+		tokenize(ctx)
+		parse(ctx)
+		check(ctx)
+
+		assert.ok(ctx.hasErrors(), 'should error: Inner not yet defined')
+	})
+
+	describe('recursive type detection', () => {
+		it('detects direct self-reference cycle', () => {
+			const source = `type Node
+    next: Node
+panic`
+			const ctx = createContext(source)
+			tokenize(ctx)
+			parse(ctx)
+			check(ctx)
+
+			assert.ok(ctx.hasErrors(), 'should detect recursive type')
+			const diags = ctx.getDiagnostics()
+			assert.ok(
+				diags.some((d) => d.def.code === 'TWCHECK032'),
+				'should emit TWCHECK032'
+			)
+		})
+	})
+})

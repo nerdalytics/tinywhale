@@ -253,6 +253,14 @@ export const TWCHECK031: DiagnosticDef = {
 	suggestion: 'Only record types have fields. Use a record type or remove the field access.',
 }
 
+export const TWCHECK032: DiagnosticDef = {
+	code: 'TWCHECK032',
+	description: 'A record type cannot contain itself directly or indirectly.',
+	message: 'recursive type: field `{field}` creates cycle via `{type}`',
+	severity: DiagnosticSeverity.Error,
+	suggestion: 'Consider using a different data structure.',
+}
+
 // =============================================================================
 // CHECKER WARNINGS (TWCHECK050-099)
 // =============================================================================
@@ -305,6 +313,7 @@ export const COMPILER_DIAGNOSTICS = {
 	TWCHECK029,
 	TWCHECK030,
 	TWCHECK031,
+	TWCHECK032,
 	TWCHECK050,
 	TWGEN001,
 	TWLEX001,
