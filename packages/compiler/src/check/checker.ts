@@ -91,7 +91,6 @@ interface BlockContext {
 	fields?: Array<{ name: string; typeId: TypeId; nodeId: NodeId }>
 }
 
-// Block context helpers for unified block handling
 function pushBlockContext(state: CheckerState, ctx: BlockContext): void {
 	state.blockContextStack.push(ctx)
 }
@@ -108,7 +107,6 @@ function parentBlockContext(state: CheckerState): BlockContext | null {
 	return state.blockContextStack.at(-2) ?? null
 }
 
-// parentBlockContext will be used in Task 7 for nested record literals
 void parentBlockContext
 
 interface CheckerState {
@@ -199,20 +197,17 @@ function resolveTypeFromAnnotation(
 	const typeAnnotationNode = context.nodes.get(typeAnnotationId)
 	const typeToken = context.tokens.get(typeAnnotationNode.tokenId)
 
-	// Try primitive type first
 	const primitiveType = getTypeNameFromToken(typeToken.kind)
 	if (primitiveType) {
 		return primitiveType
 	}
 
-	// Try user-defined type (identifier)
 	if (typeToken.kind === TokenKind.Identifier) {
 		const typeName = context.strings.get(typeToken.payload as StringId)
 		const typeId = state.types.lookup(typeName)
 		if (typeId !== undefined) {
 			return { name: typeName, typeId }
 		}
-		// Type not found - return null (caller will emit error)
 	}
 
 	return null
@@ -243,7 +238,6 @@ function valueFitsInType(value: bigint, typeId: TypeId): boolean {
  */
 function splitBigIntTo32BitParts(value: bigint, typeId: TypeId): { low: number; high: number } {
 	if (typeId === BuiltinTypeId.I32) {
-		// For i32, the value fits in low 32 bits
 		return { high: 0, low: Number(BigInt.asIntN(32, value)) }
 	}
 	const low = Number(BigInt.asIntN(32, value))
@@ -1325,21 +1319,18 @@ function extractBindingNodes(bindingId: NodeId, context: CompilationContext): Bi
 	const prevNode = context.nodes.get(prevId)
 
 	if (prevNode.kind === NodeKind.TypeAnnotation) {
-		// No expression - record literal mode
 		const typeAnnotationId = prevId
 		const identId = offsetNodeId(typeAnnotationId, -prevNode.subtreeSize)
 		return { exprId: null, hasExpression: false, identId, typeAnnotationId }
 	}
 
 	if (isExpressionNode(prevNode.kind)) {
-		// Has expression - normal variable binding
 		const typeAnnotationId = offsetNodeId(prevId, -prevNode.subtreeSize)
 		const typeAnnotationNode = context.nodes.get(typeAnnotationId)
 		const identId = offsetNodeId(typeAnnotationId, -typeAnnotationNode.subtreeSize)
 		return { exprId: prevId, hasExpression: true, identId, typeAnnotationId }
 	}
 
-	// Unexpected node kind
 	console.assert(
 		false,
 		'VariableBinding: expected TypeAnnotation or expression, found %d',
@@ -1378,7 +1369,6 @@ function processRecordLiteralBinding(
 	if (state.types.isRecordType(declaredType)) {
 		startRecordLiteral(bindingId, declaredType, typeInfo.name, nameId, state, context)
 	} else {
-		// Non-record type without expression - error
 		context.emitAtNode('TWCHECK010' as DiagnosticCode, typeAnnotationId, {
 			found: typeInfo.name,
 		})
@@ -1434,7 +1424,6 @@ function processVariableBinding(
 		return
 	}
 
-	// Normal variable binding with expression
 	const exprResult = checkExpression(exprId as NodeId, declaredType, state, context)
 	if (!isValidExprResult(exprResult)) return
 
@@ -1516,7 +1505,6 @@ function resolveUserDefinedFieldType(
 	state: CheckerState,
 	context: CompilationContext
 ): TypeId | null {
-	// Check for self-reference
 	const ctx = currentBlockContext(state)
 	if (ctx?.kind === 'TypeDecl' && fieldTypeName === ctx.typeName) {
 		context.emitAtNode('TWCHECK032' as DiagnosticCode, fieldDeclId, {
@@ -1551,7 +1539,6 @@ function resolveFieldType(
 		return resolveUserDefinedFieldType(fieldTypeName, fieldDeclId, state, context)
 	}
 
-	// Primitive type
 	const typeInfo = getTypeNameFromToken(typeToken.kind)
 	if (!typeInfo) {
 		context.emitAtNode('TWCHECK010' as DiagnosticCode, fieldDeclId, {
@@ -2202,7 +2189,6 @@ function processMatchArm(armId: NodeId, state: CheckerState, context: Compilatio
 	const exprNode = context.nodes.get(exprId)
 
 	if (!isExpressionNode(exprNode.kind)) {
-		// Malformed arm
 		return
 	}
 
@@ -2211,17 +2197,13 @@ function processMatchArm(armId: NodeId, state: CheckerState, context: Compilatio
 	const patternNode = context.nodes.get(patternId)
 
 	if (!isPatternNode(patternNode.kind)) {
-		// Malformed arm
 		return
 	}
 
-	// Check the pattern
 	checkPattern(patternId, state.matchContext.scrutinee.typeId, state, context)
 
-	// Check the body expression
 	const bodyResult = checkExpression(exprId, state.matchContext.expectedType, state, context)
 
-	// Add to collected arms
 	if (isValidExprResult(bodyResult)) {
 		state.matchContext.arms.push({
 			bodyInstId: bodyResult.instId,
@@ -2422,7 +2404,6 @@ function emitStatement(
 			})
 			break
 		case NodeKind.VariableBinding:
-			// Check if this is a match binding
 			{
 				const matchExprId = prevNodeId(stmtId)
 				const matchExprNode = context.nodes.get(matchExprId)
@@ -2446,10 +2427,8 @@ function flushUnreachableWarning(state: CheckerState, context: CompilationContex
 	const { endLine, firstNodeId, startLine } = range
 
 	if (startLine === endLine) {
-		// Single line - use default suggestion
 		context.emitAtNode('TWCHECK050' as DiagnosticCode, firstNodeId)
 	} else {
-		// Multiple lines - use custom suggestion with range
 		const suggestion = `Lines ${startLine}-${endLine} are unreachable. You can safely remove this code, or move it before the exit point.`
 		context.emitAtNodeWithSuggestion('TWCHECK050' as DiagnosticCode, firstNodeId, suggestion)
 	}

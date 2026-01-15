@@ -58,7 +58,6 @@ export interface CompileResult {
 }
 
 function toBinaryenType(typeId: TypeId, context: CompilationContext): binaryen.Type {
-	// Unwrap distinct types to get the underlying WASM primitive
 	const wasmTypeId = context.types?.toWasmType(typeId) ?? typeId
 
 	switch (wasmTypeId) {
@@ -392,7 +391,6 @@ function emitLogicalAnd(
 	const right = valueMap.get(rightId)
 	if (left === undefined || right === undefined) return null
 
-	// Short-circuit: if left is 0, return 0; otherwise return right
 	return mod.if(left, right, mod.i32.const(0))
 }
 
@@ -410,7 +408,6 @@ function emitLogicalOr(
 	const right = valueMap.get(rightId)
 	if (left === undefined || right === undefined) return null
 
-	// Short-circuit: if left is non-zero, return 1; otherwise return right
 	return mod.if(left, mod.i32.const(1), right)
 }
 
@@ -428,16 +425,13 @@ function extractLiteralValue(
 
 	const firstToken = context.tokens.get(patternNode.tokenId)
 
-	// Check if pattern starts with Minus (kind=5)
 	if (firstToken.kind === 5) {
-		// Negated literal: tokenId+1 is the IntLiteral
 		const literalTokenId = nextTokenId(patternNode.tokenId)
 		const literalToken = context.tokens.get(literalTokenId)
 		const text = context.strings.get(literalToken.payload as StringId)
 		return { isNegated: true, value: BigInt(text) }
 	}
 
-	// Positive literal: tokenId is the IntLiteral
 	const text = context.strings.get(firstToken.payload as StringId)
 	return { isNegated: false, value: BigInt(text) }
 }
@@ -685,7 +679,6 @@ function emitInstruction(
 		case InstKind.Match:
 			return emitMatch(mod, inst, currentInstId, valueMap, context)
 		case InstKind.MatchArm:
-			// MatchArm is handled by emitMatch - skip here
 			return null
 		case InstKind.FieldAccess:
 			// Field access on flattened records is resolved to VarRef by the checker.

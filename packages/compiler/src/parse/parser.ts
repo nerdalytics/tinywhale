@@ -34,7 +34,6 @@ function tokenToOhmString(token: Token, context: CompilationContext): string | n
 		case TokenKind.Identifier:
 			return context.strings.get(token.payload as StringId)
 		case TokenKind.IntLiteral:
-			// Now stored as StringId
 			return context.strings.get(token.payload as StringId)
 		case TokenKind.FloatLiteral:
 			return context.strings.get(token.payload as StringId)
@@ -246,7 +245,6 @@ function createNodeEmittingSemantics(
 		})
 	}
 
-	// Emit expression nodes (leaves in postorder)
 	semantics.addOperation<NodeId>('emitExpression', {
 		AddExpr(first: Node, ops: Node, rest: Node): NodeId {
 			return emitBinaryChain(first, ops, rest)
@@ -269,10 +267,8 @@ function createNodeEmittingSemantics(
 			return expr['emitExpression']()
 		},
 		FieldAccess(base: Node, _dots: Node, fields: Node): NodeId {
-			// Emit base expression first
 			let currentId = base['emitExpression']() as NodeId
 
-			// For each .field, create a FieldAccess node
 			for (let i = 0; i < fields.numChildren; i++) {
 				const fieldNode = fields.child(i)
 				const tid = getTokenIdForOhmNode(fieldNode)
@@ -350,10 +346,8 @@ function createNodeEmittingSemantics(
 		},
 	})
 
-	// Emit type annotation nodes
 	semantics.addOperation<NodeId>('emitTypeAnnotation', {
 		TypeAnnotation(_colon: Node, typeName: Node): NodeId {
-			// Use the typeName's Ohm position to find the correct type keyword token
 			const tid = getTokenIdForOhmNode(typeName)
 			return context.nodes.add({
 				kind: NodeKind.TypeAnnotation,
@@ -363,7 +357,6 @@ function createNodeEmittingSemantics(
 		},
 	})
 
-	// Emit pattern nodes
 	semantics.addOperation<NodeId>('emitPattern', {
 		BindingPattern(ident: Node): NodeId {
 			const tid = getTokenIdForOhmNode(ident)
@@ -382,7 +375,6 @@ function createNodeEmittingSemantics(
 			})
 		},
 		OrPattern(first: Node, _pipes: Node, rest: Node): NodeId {
-			// Emit all primary patterns first (postorder)
 			const startCount = context.nodes.count()
 			first['emitPattern']()
 			for (const child of rest.children) {
@@ -390,7 +382,6 @@ function createNodeEmittingSemantics(
 			}
 			const childCount = context.nodes.count() - startCount
 
-			// If only one pattern, return it directly (no OrPattern wrapper)
 			if (childCount === 1) {
 				return startCount as NodeId
 			}
@@ -418,7 +409,6 @@ function createNodeEmittingSemantics(
 		},
 	})
 
-	// Emit match arm nodes
 	semantics.addOperation<NodeId>('emitMatchArm', {
 		MatchArm(pattern: Node, _arrow: Node, expr: Node): NodeId {
 			const startCount = context.nodes.count()
@@ -435,10 +425,8 @@ function createNodeEmittingSemantics(
 		},
 	})
 
-	// Emit field value (NestedRecordInit or Expression)
 	semantics.addOperation<NodeId>('emitFieldValue', {
 		FieldValue(value: Node): NodeId {
-			// Route based on whether it's NestedRecordInit or Expression
 			if (value.ctorName === 'NestedRecordInit') {
 				return value['emitFieldValue']()
 			}
@@ -454,7 +442,6 @@ function createNodeEmittingSemantics(
 		},
 	})
 
-	// Emit indented content (MatchArm, FieldDecl, FieldInit, or Statement)
 	semantics.addOperation<NodeId>('emitIndentedContent', {
 		FieldDecl(fieldName: Node, _colon: Node, _typeRef: Node): NodeId {
 			const tid = getTokenIdForOhmNode(fieldName)
@@ -477,7 +464,6 @@ function createNodeEmittingSemantics(
 			})
 		},
 		IndentedContent(content: Node): NodeId {
-			// Route based on content type using lookup table
 			const routeMap: Record<string, string> = {
 				FieldDecl: 'emitIndentedContent',
 				FieldInit: 'emitIndentedContent',
@@ -504,7 +490,6 @@ function createNodeEmittingSemantics(
 	semantics.addOperation<NodeId>('emitStatement', {
 		MatchBinding(ident: Node, typeAnnotation: Node, _equals: Node, matchExpr: Node): NodeId {
 			const startCount = context.nodes.count()
-			// Emit children first (postorder)
 			ident['emitExpression']()
 			typeAnnotation['emitTypeAnnotation']()
 			matchExpr['emitStatement']() // MatchExpr emits scrutinee + MatchExpr node
@@ -558,7 +543,6 @@ function createNodeEmittingSemantics(
 			ident['emitExpression']()
 			typeAnnotation['emitTypeAnnotation']()
 
-			// Expression is optional (for record literals where value is indented block)
 			const exprNode = optExpr.children[0]
 			if (exprNode !== undefined) {
 				exprNode['emitExpression']()

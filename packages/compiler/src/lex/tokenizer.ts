@@ -107,7 +107,6 @@ function handleSpaceIndent(
 		return
 	}
 	if (delta !== state.indentUnit) {
-		// Point to where the size mismatch starts (after expected indent)
 		const errorColumn = state.indentUnit + 1
 		context.emit('TWLEX002' as DiagnosticCode, lineNumber, errorColumn, {
 			found: delta,
@@ -129,7 +128,6 @@ function handleSpaceDedent(
 	for (let s = 0; s <= state.previousSpaces; s += state.indentUnit) {
 		validLevels.push(s)
 	}
-	// Point to where the invalid dedent ends
 	const errorColumn = indentCount + 1
 	context.emit('TWLEX003' as DiagnosticCode, lineNumber, errorColumn, {
 		expected: validLevels[validLevels.length - 1] ?? 0,
@@ -236,7 +234,6 @@ function validateIndentJump(
 	if (newLevel <= previousLevel + 1) return
 	const expected = previousLevel + 1
 	const unit = indentType === 'tab' ? 'tab' : 'spaces'
-	// Point to the first extra indent character
 	const errorColumn = indentType === 'tab' ? expected + 1 : expected * (indentUnit ?? 1) + 1
 	context.emit('TWLEX004' as DiagnosticCode, lineNumber, errorColumn, {
 		expected,
@@ -360,7 +357,6 @@ function tokenizeNumericLiteral(
 		pos = consumeDigits(content, pos + 1) // skip '.' and consume fraction
 	}
 
-	// Exponent can appear with or without decimal
 	pos = consumeExponent(content, pos)
 
 	const text = content.slice(startPos, pos)

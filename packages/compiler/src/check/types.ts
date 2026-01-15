@@ -83,14 +83,12 @@ export type InstKind = (typeof InstKind)[keyof typeof InstKind]
  * - No aliases exist - every type declaration is nominal
  */
 export const TypeKind = {
-	// User-defined types (5+) - NOMINAL
 	/** Distinct type - every `type` declaration creates one of these */
 	Distinct: 5,
 	/** 32-bit IEEE 754 float */
 	F32: 3,
 	/** 64-bit IEEE 754 float */
 	F64: 4,
-	// WASM core value types (1-4)
 	/** 32-bit signed integer */
 	I32: 1,
 	/** 64-bit signed integer */
@@ -202,7 +200,6 @@ export interface CheckResult {
 	readonly succeeded: boolean
 }
 
-// Inst accessor functions - type-safe access to instruction arguments
 
 export function getIntConstLow(inst: Inst): number {
 	return inst.arg0

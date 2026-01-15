@@ -123,7 +123,6 @@ export class SymbolStore {
 		const id = symbolId(this.symbols.length)
 		const fullEntry: SymbolEntry = { ...entry, localIndex }
 		this.symbols.push(fullEntry)
-		// Overwrite previous binding (shadowing)
 		this.nameToSymbol.set(entry.nameId, id)
 		return id
 	}
@@ -221,7 +220,6 @@ export class TypeStore {
 	 * Initialize builtin types at fixed indices.
 	 */
 	private bootstrapBuiltins(): void {
-		// Must be added in exact order to match BuiltinTypeId indices
 		this.addBuiltin(TypeKind.None, 'none') // 0
 		this.addBuiltin(TypeKind.I32, 'i32') // 1
 		this.addBuiltin(TypeKind.I64, 'i64') // 2
@@ -319,7 +317,6 @@ export class TypeStore {
 			return BuiltinTypeId.Invalid
 		}
 		if (info.kind === TypeKind.Distinct) {
-			// Recursively unwrap (handles nested distinct types)
 			return this.toWasmType(info.underlying)
 		}
 		return id
