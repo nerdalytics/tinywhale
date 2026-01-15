@@ -19,7 +19,7 @@ import {
 	type ParseNode,
 	prevNodeId,
 } from '../core/nodes.ts'
-import { TokenKind, nextTokenId } from '../core/tokens.ts'
+import { nextTokenId, TokenKind, type Token } from '../core/tokens.ts'
 import { InstStore, ScopeStore, SymbolStore, TypeStore } from './stores.ts'
 import {
 	BuiltinTypeId,
@@ -1446,6 +1446,60 @@ function startTypeDecl(typeDeclId: NodeId, state: CheckerState, context: Compila
 }
 
 /**
+ * Resolves a user-defined field type by name lookup.
+ */
+function resolveUserDefinedFieldType(
+	fieldTypeName: string,
+	fieldDeclId: NodeId,
+	state: CheckerState,
+	context: CompilationContext
+): TypeId | null {
+	// Check for self-reference
+	if (fieldTypeName === state.typeDeclContext?.typeName) {
+		context.emitAtNode('TWCHECK032' as DiagnosticCode, fieldDeclId, {
+			field: fieldTypeName,
+			type: fieldTypeName,
+		})
+		return null
+	}
+
+	const lookedUpTypeId = state.types.lookup(fieldTypeName)
+	if (lookedUpTypeId === undefined) {
+		context.emitAtNode('TWCHECK010' as DiagnosticCode, fieldDeclId, {
+			name: fieldTypeName,
+		})
+		return null
+	}
+	return lookedUpTypeId
+}
+
+/**
+ * Resolves field type from token (either user-defined or primitive).
+ * Returns typeId or null if type is invalid.
+ */
+function resolveFieldType(
+	typeToken: Token,
+	fieldDeclId: NodeId,
+	state: CheckerState,
+	context: CompilationContext
+): TypeId | null {
+	if (typeToken.kind === TokenKind.Identifier) {
+		const fieldTypeName = context.strings.get(typeToken.payload as StringId)
+		return resolveUserDefinedFieldType(fieldTypeName, fieldDeclId, state, context)
+	}
+
+	// Primitive type
+	const typeInfo = getTypeNameFromToken(typeToken.kind)
+	if (!typeInfo) {
+		context.emitAtNode('TWCHECK010' as DiagnosticCode, fieldDeclId, {
+			name: 'unknown',
+		})
+		return null
+	}
+	return typeInfo.typeId
+}
+
+/**
  * Process a FieldDecl node within a type declaration.
  * Extracts field name and type, checking for duplicates.
  */
@@ -1468,41 +1522,9 @@ function processFieldDecl(
 	const typeTokenId = (fieldDeclNode.tokenId as number) + 2
 	const typeToken = context.tokens.get(typeTokenId as typeof fieldDeclNode.tokenId)
 
-	let fieldTypeId: TypeId
-	let fieldTypeName: string
-
-	if (typeToken.kind === TokenKind.Identifier) {
-		// User-defined type - look up in TypeStore
-		fieldTypeName = context.strings.get(typeToken.payload as StringId)
-
-		// Add cycle detection (check before lookup to catch self-reference)
-		if (fieldTypeName === state.typeDeclContext?.typeName) {
-			context.emitAtNode('TWCHECK032' as DiagnosticCode, fieldDeclId, {
-				field: fieldName,
-				type: fieldTypeName,
-			})
-			return
-		}
-
-		const lookedUpTypeId = state.types.lookup(fieldTypeName)
-		if (lookedUpTypeId === undefined) {
-			context.emitAtNode('TWCHECK010' as DiagnosticCode, fieldDeclId, {
-				name: fieldTypeName,
-			})
-			return
-		}
-		fieldTypeId = lookedUpTypeId
-	} else {
-		// Primitive type
-		const typeInfo = getTypeNameFromToken(typeToken.kind)
-		if (!typeInfo) {
-			context.emitAtNode('TWCHECK010' as DiagnosticCode, fieldDeclId, {
-				name: 'unknown',
-			})
-			return
-		}
-		fieldTypeName = typeInfo.name
-		fieldTypeId = typeInfo.typeId
+	const fieldTypeId = resolveFieldType(typeToken, fieldDeclId, state, context)
+	if (!fieldTypeId) {
+		return
 	}
 
 	// Check for duplicate field names
