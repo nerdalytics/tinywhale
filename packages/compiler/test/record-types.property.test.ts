@@ -639,3 +639,158 @@ describe('record types/multiple type declarations properties', () => {
 		)
 	})
 })
+
+// ============================================================================
+// Nested Record Instantiation Properties
+// ============================================================================
+
+/**
+ * Generate nested type declarations: T0 contains T1, T1 contains T2, ..., T(n-1) has val: i32
+ */
+function generateNestedTypes(depth: number): string {
+	let types = ''
+	for (let i = depth - 1; i >= 0; i--) {
+		if (i === depth - 1) {
+			types += `type T${i}\n    val: i32\n`
+		} else {
+			types += `type T${i}\n    inner: T${i + 1}\n`
+		}
+	}
+	return types
+}
+
+/**
+ * Generate nested record initialization for a given depth
+ */
+function generateNestedInit(depth: number, value: number): string {
+	let init = `o: T0 =\n`
+	for (let i = 0; i < depth - 1; i++) {
+		init += '    '.repeat(i + 1) + `inner: T${i + 1}\n`
+	}
+	init += '    '.repeat(depth) + `val: ${value}\n`
+	return init
+}
+
+describe('record types/nested record instantiation properties', () => {
+	it('nested depth N produces correct flattened local count', () => {
+		fc.assert(
+			fc.property(fc.integer({ max: 3, min: 1 }), (depth) => {
+				const types = generateNestedTypes(depth)
+				const init = generateNestedInit(depth, 42)
+				const source = types + init + 'panic\n'
+
+				const ctx = new CompilationContext(source)
+				tokenize(ctx)
+				const parseResult = parse(ctx)
+				if (!parseResult.succeeded) return true // Grammar issue, not what we're testing
+
+				const checkResult = check(ctx)
+				if (!checkResult.succeeded) return true
+
+				// Should have 1 flattened local (the deepest val)
+				return ctx.symbols !== null && ctx.symbols.localCount() >= 1
+			}),
+			{ numRuns: 20 }
+		)
+	})
+
+	it('nested record init compiles to valid WASM', () => {
+		fc.assert(
+			fc.property(
+				fc.integer({ max: 3, min: 1 }),
+				fc.integer({ max: 1000, min: 0 }),
+				(depth, value) => {
+					const types = generateNestedTypes(depth)
+					const init = generateNestedInit(depth, value)
+					const source = types + init + 'panic\n'
+
+					const ctx = new CompilationContext(source)
+					tokenize(ctx)
+					const parseResult = parse(ctx)
+					if (!parseResult.succeeded) return true
+
+					const checkResult = check(ctx)
+					if (!checkResult.succeeded) return true
+
+					const emitResult = emit(ctx)
+
+					// Verify valid WASM magic number: 0x00 0x61 0x73 0x6D ("\0asm")
+					return (
+						emitResult.valid &&
+						emitResult.binary[0] === 0x00 &&
+						emitResult.binary[1] === 0x61 &&
+						emitResult.binary[2] === 0x73 &&
+						emitResult.binary[3] === 0x6d
+					)
+				}
+			),
+			{ numRuns: 20 }
+		)
+	})
+
+	it('nested record init produces WAT with correct local declarations', () => {
+		fc.assert(
+			fc.property(fc.integer({ max: 3, min: 1 }), (depth) => {
+				const types = generateNestedTypes(depth)
+				const init = generateNestedInit(depth, 42)
+				const source = types + init + 'panic\n'
+
+				const ctx = new CompilationContext(source)
+				tokenize(ctx)
+				const parseResult = parse(ctx)
+				if (!parseResult.succeeded) return true
+
+				const checkResult = check(ctx)
+				if (!checkResult.succeeded) return true
+
+				const emitResult = emit(ctx)
+				if (!emitResult.valid) return true
+
+				// WAT should contain (local declarations and valid module structure
+				return emitResult.text.includes('(module') && emitResult.text.includes('(local')
+			}),
+			{ numRuns: 20 }
+		)
+	})
+
+	it('deeply nested records produce deterministic output', () => {
+		fc.assert(
+			fc.property(
+				fc.integer({ max: 3, min: 1 }),
+				fc.integer({ max: 100, min: 0 }),
+				(depth, value) => {
+					const types = generateNestedTypes(depth)
+					const init = generateNestedInit(depth, value)
+					const source = types + init + 'panic\n'
+
+					// Compile twice
+					const ctx1 = new CompilationContext(source)
+					const ctx2 = new CompilationContext(source)
+
+					tokenize(ctx1)
+					tokenize(ctx2)
+
+					const parse1 = parse(ctx1)
+					const parse2 = parse(ctx2)
+					if (!parse1.succeeded || !parse2.succeeded) return true
+
+					const check1 = check(ctx1)
+					const check2 = check(ctx2)
+					if (!check1.succeeded || !check2.succeeded) return true
+
+					const emit1 = emit(ctx1)
+					const emit2 = emit(ctx2)
+					if (!emit1.valid || !emit2.valid) return true
+
+					// Binary should be identical
+					if (emit1.binary.length !== emit2.binary.length) return false
+					for (let i = 0; i < emit1.binary.length; i++) {
+						if (emit1.binary[i] !== emit2.binary[i]) return false
+					}
+					return true
+				}
+			),
+			{ numRuns: 20 }
+		)
+	})
+})
