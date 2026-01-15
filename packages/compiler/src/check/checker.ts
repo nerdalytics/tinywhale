@@ -59,37 +59,51 @@ interface MatchContext {
 }
 
 /**
- * Kind of block context for unified block handling.
+ * Common properties shared by all block context kinds.
  */
-type BlockContextKind = 'TypeDecl' | 'RecordLiteral' | 'NestedRecordInit'
-
-/**
- * Unified context for block-based constructs (type declarations, record literals, nested inits).
- * All share the pattern: header starts block, indented lines are children, dedent finalizes.
- */
-interface BlockContext {
-	kind: BlockContextKind
+interface BlockContextBase {
 	typeName: string
 	typeId: TypeId | null
 	nodeId: NodeId
 	children: NodeId[]
 	expectedChildKind: NodeKind
-	// Expected indent level for children of this context
 	childIndentLevel?: number
-	// For RecordLiteral/NestedRecordInit: binding info
-	bindingNameId?: StringId
-	bindingNodeId?: NodeId
-	// For RecordLiteral/NestedRecordInit: track field names
-	fieldNames?: Set<string>
-	// For RecordLiteral/NestedRecordInit: collected field inits with results
-	fieldInits?: Array<{ name: string; nodeId: NodeId; exprResult: ExprResult }>
-	// For NestedRecordInit: field name this is initializing
-	fieldName?: string
-	// For NestedRecordInit: parent path for flattening
-	parentPath?: string
-	// For TypeDecl: track field type info
-	fields?: Array<{ name: string; typeId: TypeId; nodeId: NodeId }>
+	fieldNames: Set<string>
 }
+
+/**
+ * Context for type declaration blocks.
+ */
+interface TypeDeclContext extends BlockContextBase {
+	kind: 'TypeDecl'
+	fields: Array<{ name: string; typeId: TypeId; nodeId: NodeId }>
+}
+
+/**
+ * Context for record literal blocks (top-level record instantiation).
+ */
+interface RecordLiteralContext extends BlockContextBase {
+	kind: 'RecordLiteral'
+	bindingNameId: StringId
+	bindingNodeId: NodeId
+	fieldInits: Array<{ name: string; nodeId: NodeId; exprResult: ExprResult }>
+}
+
+/**
+ * Context for nested record initialization blocks.
+ */
+interface NestedRecordInitContext extends BlockContextBase {
+	kind: 'NestedRecordInit'
+	fieldName: string
+	parentPath: string
+	fieldInits: Array<{ name: string; nodeId: NodeId; exprResult: ExprResult }>
+}
+
+/**
+ * Discriminated union for block-based constructs.
+ * All share the pattern: header starts block, indented lines are children, dedent finalizes.
+ */
+type BlockContext = TypeDeclContext | RecordLiteralContext | NestedRecordInitContext
 
 function pushBlockContext(state: CheckerState, ctx: BlockContext): void {
 	state.blockContextStack.push(ctx)
@@ -1677,21 +1691,21 @@ function getNestedRecordInitFromFieldInit(
  * Returns false if the field name is a duplicate.
  */
 function addFieldToTypeDeclContext(
-	ctx: BlockContext,
+	ctx: TypeDeclContext,
 	fieldName: string,
 	fieldTypeId: TypeId,
 	fieldNodeId: NodeId,
 	context: CompilationContext
 ): boolean {
-	if (ctx.fieldNames?.has(fieldName)) {
+	if (ctx.fieldNames.has(fieldName)) {
 		context.emitAtNode('TWCHECK026' as DiagnosticCode, fieldNodeId, {
 			name: fieldName,
 			typeName: ctx.typeName,
 		})
 		return false
 	}
-	ctx.fieldNames?.add(fieldName)
-	ctx.fields?.push({ name: fieldName, nodeId: fieldNodeId, typeId: fieldTypeId })
+	ctx.fieldNames.add(fieldName)
+	ctx.fields.push({ name: fieldName, nodeId: fieldNodeId, typeId: fieldTypeId })
 	return true
 }
 
@@ -1766,7 +1780,7 @@ function validateRecordField(
 	state: CheckerState,
 	context: CompilationContext
 ): FieldInfo | null {
-	if (ctx.fieldNames?.has(fieldName)) {
+	if (ctx.fieldNames.has(fieldName)) {
 		context.emitAtNode('TWCHECK029' as DiagnosticCode, fieldInitId, { name: fieldName })
 		return null
 	}
@@ -1814,14 +1828,14 @@ function checkMissingRecordFields(
 function emitRecordFieldBindings(
 	fieldSymbolIds: SymbolId[],
 	fields: readonly FieldInfo[],
-	fieldInits: NonNullable<BlockContext['fieldInits']>,
+	fieldInits: RecordLiteralContext['fieldInits'],
 	bindingNodeId: NodeId,
 	state: CheckerState
 ): void {
 	for (let i = 0; i < fieldSymbolIds.length; i++) {
 		const symId = fieldSymbolIds[i]
 		const field = fields[i]
-		const fieldInit = fieldInits.find((fi) => fi.name === field?.name)
+		const fieldInit = fieldInits.find((fi: { name: string }) => fi.name === field?.name)
 
 		if (symId !== undefined && fieldInit?.exprResult.instId !== undefined && field) {
 			state.insts.add({
@@ -1842,7 +1856,7 @@ function emitFinalizedRecordLiteral(
 	bindingNameId: StringId,
 	bindingNodeId: NodeId,
 	recordTypeId: TypeId,
-	fieldInits: NonNullable<BlockContext['fieldInits']>,
+	fieldInits: RecordLiteralContext['fieldInits'],
 	state: CheckerState,
 	context: CompilationContext
 ): void {
@@ -1858,22 +1872,12 @@ function emitFinalizedRecordLiteral(
 }
 
 /**
- * Type guard for validating RecordLiteral block context has all required fields.
+ * Type guard for validating RecordLiteral block context has a resolved type.
  */
-function isValidRecordLiteralCtx(ctx: BlockContext): ctx is BlockContext & {
-	typeId: TypeId
-	bindingNameId: StringId
-	bindingNodeId: NodeId
-	fieldNames: Set<string>
-	fieldInits: NonNullable<BlockContext['fieldInits']>
-} {
-	return (
-		ctx.typeId !== null &&
-		ctx.bindingNameId !== undefined &&
-		ctx.bindingNodeId !== undefined &&
-		ctx.fieldNames !== undefined &&
-		ctx.fieldInits !== undefined
-	)
+function isValidRecordLiteralCtx(
+	ctx: BlockContext
+): ctx is RecordLiteralContext & { typeId: TypeId } {
+	return ctx.kind === 'RecordLiteral' && ctx.typeId !== null
 }
 
 /**
@@ -2018,24 +2022,21 @@ function startNestedRecordInit(
 }
 
 /**
- * Check if a nested record init context can be validated.
+ * Check if a nested record init context can be validated (has resolved type).
  */
-function canValidateNestedRecordFields(ctx: BlockContext): ctx is BlockContext & {
-	typeId: TypeId
-	fieldNames: Set<string>
-} {
-	return ctx.typeId !== null && ctx.fieldNames !== undefined
+function canValidateNestedRecordFields(
+	ctx: BlockContext
+): ctx is (RecordLiteralContext | NestedRecordInitContext) & { typeId: TypeId } {
+	return (ctx.kind === 'RecordLiteral' || ctx.kind === 'NestedRecordInit') && ctx.typeId !== null
 }
 
 /**
- * Type guard for validating NestedRecordInit block context has all required fields for emission.
+ * Type guard for validating NestedRecordInit block context has a resolved type for emission.
  */
-function isValidNestedRecordInitCtx(ctx: BlockContext): ctx is BlockContext & {
-	typeId: TypeId
-	parentPath: string
-	fieldInits: NonNullable<BlockContext['fieldInits']>
-} {
-	return ctx.typeId !== null && ctx.parentPath !== undefined && ctx.fieldInits !== undefined
+function isValidNestedRecordInitCtx(
+	ctx: BlockContext
+): ctx is NestedRecordInitContext & { typeId: TypeId } {
+	return ctx.kind === 'NestedRecordInit' && ctx.typeId !== null
 }
 
 /**
@@ -2043,11 +2044,7 @@ function isValidNestedRecordInitCtx(ctx: BlockContext): ctx is BlockContext & {
  * Uses parentPath as the base name for flattened locals (e.g., "o_inner" → "$o_inner_val").
  */
 function emitFinalizedNestedRecordInit(
-	ctx: BlockContext & {
-		typeId: TypeId
-		parentPath: string
-		fieldInits: NonNullable<BlockContext['fieldInits']>
-	},
+	ctx: NestedRecordInitContext & { typeId: TypeId },
 	state: CheckerState,
 	context: CompilationContext
 ): void {
@@ -2084,12 +2081,10 @@ function validateNestedRecordMissingFields(
 /**
  * Register the completed nested record init with its parent context.
  */
-function registerNestedRecordWithParent(ctx: BlockContext, state: CheckerState): void {
+function registerNestedRecordWithParent(ctx: NestedRecordInitContext, state: CheckerState): void {
 	const parentCtx = currentBlockContext(state)
-	const isRecordContext =
-		parentCtx?.kind === 'RecordLiteral' || parentCtx?.kind === 'NestedRecordInit'
-	if (isRecordContext && ctx.fieldName) {
-		parentCtx?.fieldNames?.add(ctx.fieldName)
+	if (parentCtx?.kind === 'RecordLiteral' || parentCtx?.kind === 'NestedRecordInit') {
+		parentCtx.fieldNames.add(ctx.fieldName)
 	}
 }
 
@@ -2597,8 +2592,8 @@ function processFieldInitInNestedContext(
 	const exprId = prevNodeId(fieldInitId)
 	const exprResult = checkExpression(exprId, fieldInfo.typeId, state, context)
 
-	ctx.fieldNames?.add(fieldName)
-	ctx.fieldInits?.push({ exprResult, name: fieldName, nodeId: fieldInitId })
+	ctx.fieldNames.add(fieldName)
+	ctx.fieldInits.push({ exprResult, name: fieldName, nodeId: fieldInitId })
 }
 
 /**
