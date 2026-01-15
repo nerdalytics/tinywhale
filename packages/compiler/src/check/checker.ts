@@ -1464,10 +1464,36 @@ function processFieldDecl(
 	const fieldName = context.strings.get(fieldToken.payload as StringId)
 
 	// Get the type token (field token + 2: skip colon)
-	// Token layout: Identifier, Colon, TypeKeyword
+	// Token layout: Identifier, Colon, TypeKeyword/Identifier
 	const typeTokenId = (fieldDeclNode.tokenId as number) + 2
 	const typeToken = context.tokens.get(typeTokenId as typeof fieldDeclNode.tokenId)
-	const typeInfo = getTypeNameFromToken(typeToken.kind)
+
+	let fieldTypeId: TypeId
+	let fieldTypeName: string
+
+	if (typeToken.kind === TokenKind.Identifier) {
+		// User-defined type - look up in TypeStore
+		fieldTypeName = context.strings.get(typeToken.payload as StringId)
+		const lookedUpTypeId = state.types.lookup(fieldTypeName)
+		if (lookedUpTypeId === undefined) {
+			context.emitAtNode('TWCHECK010' as DiagnosticCode, fieldDeclId, {
+				name: fieldTypeName,
+			})
+			return
+		}
+		fieldTypeId = lookedUpTypeId
+	} else {
+		// Primitive type
+		const typeInfo = getTypeNameFromToken(typeToken.kind)
+		if (!typeInfo) {
+			context.emitAtNode('TWCHECK010' as DiagnosticCode, fieldDeclId, {
+				name: 'unknown',
+			})
+			return
+		}
+		fieldTypeName = typeInfo.name
+		fieldTypeId = typeInfo.typeId
+	}
 
 	// Check for duplicate field names
 	if (state.typeDeclContext.fieldNames.has(fieldName)) {
@@ -1478,18 +1504,11 @@ function processFieldDecl(
 		return
 	}
 
-	if (!typeInfo) {
-		context.emitAtNode('TWCHECK010' as DiagnosticCode, fieldDeclId, {
-			found: 'unknown',
-		})
-		return
-	}
-
 	state.typeDeclContext.fieldNames.add(fieldName)
 	state.typeDeclContext.fields.push({
 		name: fieldName,
 		nodeId: fieldDeclId,
-		typeId: typeInfo.typeId,
+		typeId: fieldTypeId,
 	})
 }
 
