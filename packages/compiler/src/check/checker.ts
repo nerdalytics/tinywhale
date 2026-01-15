@@ -1617,6 +1617,21 @@ function getNestedRecordTypeName(fieldInitId: NodeId, context: CompilationContex
 }
 
 /**
+ * Get the NestedRecordInit node ID from a FieldInit node (if present).
+ */
+function getNestedRecordInitFromFieldInit(
+	fieldInitId: NodeId,
+	context: CompilationContext
+): NodeId | null {
+	for (const [childId, child] of context.nodes.iterateChildren(fieldInitId)) {
+		if (child.kind === NodeKind.NestedRecordInit) {
+			return childId
+		}
+	}
+	return null
+}
+
+/**
  * Add a field to the current TypeDecl block context.
  * Returns false if the field name is a duplicate.
  */
@@ -1728,29 +1743,6 @@ function validateRecordField(
 	}
 
 	return fieldInfo
-}
-
-/**
- * Process a FieldInit node within a record literal.
- * Extracts field name and expression, checking for duplicates and unknown fields.
- */
-function processFieldInit(
-	fieldInitId: NodeId,
-	state: CheckerState,
-	context: CompilationContext
-): void {
-	const ctx = currentBlockContext(state)
-	if (!ctx || ctx.kind !== 'RecordLiteral') return
-
-	const fieldName = extractFieldInitName(fieldInitId, context)
-	const fieldInfo = validateRecordField(fieldInitId, fieldName, ctx, state, context)
-	if (!fieldInfo) return
-
-	const exprId = prevNodeId(fieldInitId)
-	const exprResult = checkExpression(exprId, fieldInfo.typeId, state, context)
-
-	ctx.fieldNames?.add(fieldName)
-	ctx.fieldInits?.push({ exprResult, name: fieldName, nodeId: fieldInitId })
 }
 
 /**
@@ -1878,6 +1870,154 @@ function finalizeRecordLiteral(state: CheckerState, context: CompilationContext)
 			context
 		)
 	}
+}
+
+/**
+ * Check if we're in a NestedRecordInit block context.
+ */
+function isInNestedRecordInitContext(state: CheckerState): boolean {
+	const ctx = currentBlockContext(state)
+	return ctx !== null && ctx.kind === 'NestedRecordInit'
+}
+
+/**
+ * Validate that the nested record init type matches the expected field type.
+ * Returns true if valid, false if there's a mismatch (error already emitted).
+ */
+function validateNestedRecordTypeMatch(
+	nodeId: NodeId,
+	fieldName: string,
+	typeId: TypeId,
+	typeName: string,
+	state: CheckerState,
+	context: CompilationContext
+): boolean {
+	const parentCtx = currentBlockContext(state)
+	if (!parentCtx?.typeId) return true
+
+	const fieldInfo = state.types.getField(parentCtx.typeId, fieldName)
+	if (fieldInfo && fieldInfo.typeId !== typeId) {
+		context.emitAtNode('TWCHECK033' as DiagnosticCode, nodeId, {
+			expected: state.types.typeName(fieldInfo.typeId),
+			got: typeName,
+		})
+		return false
+	}
+	return true
+}
+
+/**
+ * Build the parent path for a nested record field for flattening.
+ */
+function buildNestedRecordParentPath(
+	fieldName: string,
+	parentCtx: BlockContext | null,
+	context: CompilationContext
+): string {
+	if (parentCtx?.kind === 'RecordLiteral' && parentCtx.bindingNameId) {
+		const baseName = context.strings.get(parentCtx.bindingNameId)
+		return `${baseName}_${fieldName}`
+	}
+	if (parentCtx?.kind === 'NestedRecordInit' && parentCtx.parentPath) {
+		return `${parentCtx.parentPath}_${fieldName}`
+	}
+	return fieldName
+}
+
+/**
+ * Start processing a nested record initialization.
+ * Called when we detect a FieldInit with a NestedRecordInit child in a record literal context.
+ */
+function startNestedRecordInit(
+	nestedInitNodeId: NodeId,
+	fieldName: string,
+	state: CheckerState,
+	context: CompilationContext
+): boolean {
+	const nestedInitNode = context.nodes.get(nestedInitNodeId)
+	const typeToken = context.tokens.get(nestedInitNode.tokenId)
+	const typeName = context.strings.get(typeToken.payload as StringId)
+
+	const typeId = state.types.lookup(typeName)
+	if (typeId === undefined) {
+		context.emitAtNode('TWCHECK010' as DiagnosticCode, nestedInitNodeId, { name: typeName })
+		return false
+	}
+
+	if (!validateNestedRecordTypeMatch(nestedInitNodeId, fieldName, typeId, typeName, state, context))
+		return false
+
+	const parentCtx = currentBlockContext(state)
+	const parentPath = buildNestedRecordParentPath(fieldName, parentCtx, context)
+
+	pushBlockContext(state, {
+		children: [],
+		expectedChildKind: NodeKind.FieldInit,
+		fieldInits: [],
+		fieldName,
+		fieldNames: new Set(),
+		kind: 'NestedRecordInit',
+		nodeId: nestedInitNodeId,
+		parentPath,
+		typeId,
+		typeName,
+	})
+	return true
+}
+
+/**
+ * Check if a nested record init context can be validated.
+ */
+function canValidateNestedRecordFields(ctx: BlockContext): ctx is BlockContext & {
+	typeId: TypeId
+	fieldNames: Set<string>
+} {
+	return ctx.typeId !== null && ctx.fieldNames !== undefined
+}
+
+/**
+ * Validate that all required fields are provided in a nested record init.
+ */
+function validateNestedRecordMissingFields(
+	ctx: BlockContext,
+	state: CheckerState,
+	context: CompilationContext
+): void {
+	if (!canValidateNestedRecordFields(ctx)) return
+	const requiredFields = state.types.getFields(ctx.typeId)
+	for (const field of requiredFields) {
+		if (!ctx.fieldNames.has(field.name)) {
+			context.emitAtNode('TWCHECK027' as DiagnosticCode, ctx.nodeId, {
+				name: field.name,
+				typeName: ctx.typeName,
+			})
+		}
+	}
+}
+
+/**
+ * Register the completed nested record init with its parent context.
+ */
+function registerNestedRecordWithParent(ctx: BlockContext, state: CheckerState): void {
+	const parentCtx = currentBlockContext(state)
+	const isRecordContext =
+		parentCtx?.kind === 'RecordLiteral' || parentCtx?.kind === 'NestedRecordInit'
+	if (isRecordContext && ctx.fieldName) {
+		parentCtx?.fieldNames?.add(ctx.fieldName)
+	}
+}
+
+/**
+ * Finalize a nested record initialization.
+ * Validates all required fields are present and registers with parent context.
+ */
+function finalizeNestedRecordInit(state: CheckerState, context: CompilationContext): void {
+	const ctx = currentBlockContext(state)
+	if (!ctx || ctx.kind !== 'NestedRecordInit') return
+
+	popBlockContext(state)
+	validateNestedRecordMissingFields(ctx, state, context)
+	registerNestedRecordWithParent(ctx, state)
 }
 
 function getMatchArmFromLine(
@@ -2305,18 +2445,69 @@ function processIndentedLineAsFieldDecl(
 	return false
 }
 
+/**
+ * Check if we're in a RecordLiteral or NestedRecordInit block context.
+ */
+function isInRecordInitContext(state: CheckerState): boolean {
+	const ctx = currentBlockContext(state)
+	return ctx !== null && (ctx.kind === 'RecordLiteral' || ctx.kind === 'NestedRecordInit')
+}
+
+/**
+ * Try to start a nested record init from a field init node.
+ * Returns true if this field init starts a nested record construction.
+ */
+function tryStartNestedRecordFromFieldInit(
+	fieldInitId: NodeId,
+	state: CheckerState,
+	context: CompilationContext
+): boolean {
+	if (!hasNestedRecordInit(fieldInitId, context)) return false
+	const fieldName = extractFieldInitName(fieldInitId, context)
+	const nestedInitNode = getNestedRecordInitFromFieldInit(fieldInitId, context)
+	if (nestedInitNode && fieldName) {
+		return startNestedRecordInit(nestedInitNode, fieldName, state, context)
+	}
+	return false
+}
+
 function processIndentedLineAsFieldInit(
 	lineId: NodeId,
 	state: CheckerState,
 	context: CompilationContext
 ): boolean {
-	if (!isInRecordLiteralContext(state)) return false
+	if (!isInRecordInitContext(state)) return false
 
 	const fieldInit = getFieldInitFromLine(lineId, context)
 	if (!fieldInit) return false
 
-	processFieldInit(fieldInit.id, state, context)
+	if (tryStartNestedRecordFromFieldInit(fieldInit.id, state, context)) return true
+
+	processFieldInitInNestedContext(fieldInit.id, state, context)
 	return true
+}
+
+/**
+ * Process a FieldInit node within a record literal or nested record init context.
+ * Handles type checking and registers the field with the current context.
+ */
+function processFieldInitInNestedContext(
+	fieldInitId: NodeId,
+	state: CheckerState,
+	context: CompilationContext
+): void {
+	const ctx = currentBlockContext(state)
+	if (!ctx || (ctx.kind !== 'RecordLiteral' && ctx.kind !== 'NestedRecordInit')) return
+
+	const fieldName = extractFieldInitName(fieldInitId, context)
+	const fieldInfo = validateRecordField(fieldInitId, fieldName, ctx, state, context)
+	if (!fieldInfo) return
+
+	const exprId = prevNodeId(fieldInitId)
+	const exprResult = checkExpression(exprId, fieldInfo.typeId, state, context)
+
+	ctx.fieldNames?.add(fieldName)
+	ctx.fieldInits?.push({ exprResult, name: fieldName, nodeId: fieldInitId })
 }
 
 function handleIndentedLine(
@@ -2362,6 +2553,15 @@ function handleDedentLine(lineId: NodeId, state: CheckerState, context: Compilat
 		return
 	}
 
+	// Finalize pending nested record init - pops back to parent context
+	if (isInNestedRecordInitContext(state)) {
+		finalizeNestedRecordInit(state, context)
+		// After finalizing, we may still be in a record context - handle the dedent line
+		// by recursively handling this line (now in the parent context)
+		handleDedentLine(lineId, state, context)
+		return
+	}
+
 	// Finalize pending record literal and process statement
 	if (isInRecordLiteralContext(state)) {
 		finalizeRecordLiteral(state, context)
@@ -2373,15 +2573,18 @@ function handleDedentLine(lineId: NodeId, state: CheckerState, context: Compilat
 	context.emitAtNode('TWCHECK001' as DiagnosticCode, lineId)
 }
 
-function handleRootLine(lineId: NodeId, state: CheckerState, context: CompilationContext): void {
-	// Finalize any pending TypeDecl from blockContextStack
+/**
+ * Finalize all pending block contexts before processing a root line.
+ */
+function finalizeAllPendingBlockContexts(state: CheckerState, context: CompilationContext): void {
 	if (isInTypeDeclContext(state)) finalizeTypeDecl(state, context)
-
-	// Finalize any pending match context
 	if (state.matchContext) finalizeMatch(state, context)
-
-	// Finalize any pending record literal
+	while (isInNestedRecordInitContext(state)) finalizeNestedRecordInit(state, context)
 	if (isInRecordLiteralContext(state)) finalizeRecordLiteral(state, context)
+}
+
+function handleRootLine(lineId: NodeId, state: CheckerState, context: CompilationContext): void {
+	finalizeAllPendingBlockContexts(state, context)
 
 	// Check if this line contains a type declaration
 	const typeDecl = getTypeDeclFromLine(lineId, context)
@@ -2448,6 +2651,12 @@ function finalizePendingContexts(state: CheckerState, context: CompilationContex
 	if (isInTypeDeclContext(state)) finalizeTypeDecl(state, context)
 
 	if (state.matchContext) finalizeMatch(state, context)
+
+	// Finalize any pending nested record inits (unwind the stack)
+	while (isInNestedRecordInitContext(state)) {
+		finalizeNestedRecordInit(state, context)
+	}
+
 	if (isInRecordLiteralContext(state)) finalizeRecordLiteral(state, context)
 }
 

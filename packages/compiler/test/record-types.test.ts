@@ -655,3 +655,63 @@ panic`
 		})
 	})
 })
+
+describe('nested record instantiation checker', () => {
+	it('validates nested record init type name', () => {
+		const source = `type Inner
+    val: i32
+type Outer
+    inner: Inner
+o: Outer =
+    inner: Inner
+        val: 42
+panic`
+		const ctx = createContext(source)
+		tokenize(ctx)
+		parse(ctx)
+		const result = check(ctx)
+
+		assert.ok(result.succeeded, 'should succeed with valid nested init')
+	})
+
+	it('errors on type mismatch in nested init', () => {
+		const source = `type A
+    x: i32
+type B
+    y: i32
+type Outer
+    inner: A
+o: Outer =
+    inner: B
+        y: 5
+panic`
+		const ctx = createContext(source)
+		tokenize(ctx)
+		parse(ctx)
+		check(ctx)
+
+		assert.ok(ctx.hasErrors(), 'should error on type mismatch')
+		const diags = ctx.getDiagnostics()
+		assert.ok(diags.some((d) => d.def.code === 'TWCHECK033'))
+	})
+
+	it('validates all nested fields provided', () => {
+		const source = `type Inner
+    x: i32
+    y: i32
+type Outer
+    inner: Inner
+o: Outer =
+    inner: Inner
+        x: 1
+panic`
+		const ctx = createContext(source)
+		tokenize(ctx)
+		parse(ctx)
+		check(ctx)
+
+		assert.ok(ctx.hasErrors(), 'should error on missing field')
+		const diags = ctx.getDiagnostics()
+		assert.ok(diags.some((d) => d.def.code === 'TWCHECK027')) // missing field
+	})
+})
