@@ -826,4 +826,37 @@ panic`
 		assert.ok(result.text.includes('i32.const 42'), 'should have nested val')
 		assert.ok(result.text.includes('i32.const 10'), 'should have sibling x')
 	})
+
+	it('compiles multiple siblings after nested block', () => {
+		const source = `type Inner
+    a: i32
+type Outer
+    inner: Inner
+    x: i32
+    y: i32
+o: Outer =
+    inner: Inner
+        a: 1
+    x: 2
+    y: 3
+panic`
+		const ctx = createContext(source)
+		tokenize(ctx)
+		parse(ctx)
+		const checkResult = check(ctx)
+
+		assert.ok(
+			checkResult.succeeded,
+			`check failed: ${ctx
+				.getErrors()
+				.map((e) => ctx.formatDiagnostic(e))
+				.join(', ')}`
+		)
+
+		const result = emit(ctx)
+		assert.ok(result.valid, 'should emit valid WASM')
+		assert.ok(result.text.includes('i32.const 1'), 'should have inner.a')
+		assert.ok(result.text.includes('i32.const 2'), 'should have x')
+		assert.ok(result.text.includes('i32.const 3'), 'should have y')
+	})
 })
