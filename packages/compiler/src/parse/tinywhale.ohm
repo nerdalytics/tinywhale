@@ -6,7 +6,9 @@ TinyWhale {
   // FieldInit comes before FieldDecl: uppercase identifiers are tried as NestedRecordInit first
   IndentedLine = indentToken IndentedContent?
   IndentedContent = MatchArm | FieldInit | FieldDecl | Statement
-  DedentLine = dedentToken+ Statement?
+  DedentLine = DedentToNested | DedentToRoot
+  DedentToNested = anyDedent* dedentNonZero IndentedContent?
+  DedentToRoot = anyDedent* dedentZero Statement?
   RootLine = Statement
 
   // Statements
@@ -150,9 +152,12 @@ TinyWhale {
 
   // Lexical token rules (marker followed by indent level)
   indentToken = "⇥" digit+
-  dedentToken = "⇤" digit+
+  anyDedent = dedentZero | dedentNonZero
+  dedentZero = "⇤0"
+  dedentNonZero = "⇤" nonZeroDigit digit*
+  nonZeroDigit = "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"
 
   // Comments treated as whitespace
   space += comment
-  comment = "#" (~("#" | "\n" | "\r" | dedentToken) any)* ("#" | &"\n" | &"\r" | &dedentToken | end)
+  comment = "#" (~("#" | "\n" | "\r" | anyDedent) any)* ("#" | &"\n" | &"\r" | &anyDedent | end)
 }
