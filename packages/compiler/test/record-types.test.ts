@@ -89,6 +89,9 @@ describe('record types node kinds', () => {
 	it('has FieldAccess node kind', () => {
 		assert.ok(NodeKind.FieldAccess !== undefined)
 	})
+	it('has NestedRecordInit node kind', () => {
+		assert.ok(NodeKind.NestedRecordInit !== undefined)
+	})
 })
 
 describe('record types parsing', () => {
