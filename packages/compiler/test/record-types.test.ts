@@ -813,7 +813,13 @@ panic`
 		parse(ctx)
 		const checkResult = check(ctx)
 
-		assert.ok(checkResult.succeeded, `check failed: ${ctx.getErrors().map(e => ctx.formatDiagnostic(e)).join(', ')}`)
+		assert.ok(
+			checkResult.succeeded,
+			`check failed: ${ctx
+				.getErrors()
+				.map((e) => ctx.formatDiagnostic(e))
+				.join(', ')}`
+		)
 
 		const result = emit(ctx)
 		assert.ok(result.valid, 'should emit valid WASM')

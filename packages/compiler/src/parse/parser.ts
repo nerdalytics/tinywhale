@@ -197,14 +197,14 @@ function createNodeEmittingSemantics(
 	}
 
 	semantics.addOperation<number>('toLevel', {
-		dedentZero(_marker: Node) {
-			return 0
+		anyDedent(dedent: Node) {
+			return dedent['toLevel']()
 		},
 		dedentNonZero(_marker: Node, firstDigit: Node, restDigits: Node) {
 			return Number(firstDigit.sourceString + restDigits.sourceString)
 		},
-		anyDedent(dedent: Node) {
-			return dedent['toLevel']()
+		dedentZero(_marker: Node) {
+			return 0
 		},
 		indentToken(_marker: Node, levelDigits: Node) {
 			return Number(levelDigits.sourceString)
@@ -578,6 +578,9 @@ function createNodeEmittingSemantics(
 	})
 
 	semantics.addOperation<NodeId | null>('emitLine', {
+		DedentLine(dedentVariant: Node) {
+			return dedentVariant['emitLine']()
+		},
 		DedentToNested(_dedentNonZeros: Node, optionalContent: Node) {
 			const lineNumber = getLineNumber(this)
 			const startCount = context.nodes.count()
@@ -615,9 +618,6 @@ function createNodeEmittingSemantics(
 				subtreeSize,
 				tokenId: tid,
 			})
-		},
-		DedentLine(dedentVariant: Node) {
-			return dedentVariant['emitLine']()
 		},
 		IndentedLine(_indentToken: Node, _anyDedents: Node, optionalContent: Node) {
 			const lineNumber = getLineNumber(this)
