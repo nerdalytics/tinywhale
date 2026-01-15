@@ -37,14 +37,5 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build
-        run: mise run build
-
-      - name: Lint
-        run: mise run check-ci
-
-      - name: Typecheck
-        run: mise run typecheck
-
-      - name: Test
-        run: pnpm -r test
+      - name: Build, Lint, Typecheck, Test
+        run: mise run ci

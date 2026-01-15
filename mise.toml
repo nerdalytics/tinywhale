@@ -38,6 +38,15 @@ run = "pnpm exec biome check --write --max-diagnostics 100"
 description = "Run biome check without auto-fix (for CI)"
 run = "pnpm exec biome check --max-diagnostics 100"
 
+[tasks.ci]
+description = "Run full CI pipeline: build, lint, typecheck, test"
+depends = ["build"]
+run = """
+pnpm exec biome check --max-diagnostics 100
+pnpm exec tsc
+pnpm -r test
+"""
+
 [tasks.typecheck]
 description = "Run TypeScript type checking"
 run = "pnpm exec tsc"
