@@ -261,6 +261,14 @@ export const TWCHECK032: DiagnosticDef = {
 	suggestion: 'Consider using a different data structure.',
 }
 
+export const TWCHECK033: DiagnosticDef = {
+	code: 'TWCHECK033',
+	message: 'type mismatch: field expects `{expected}`, got `{got}`',
+	severity: DiagnosticSeverity.Error,
+	description: 'Nested record initializer type must match field declaration.',
+	suggestion: 'Use the correct type name that matches the field declaration.',
+}
+
 // =============================================================================
 // CHECKER WARNINGS (TWCHECK050-099)
 // =============================================================================
@@ -314,6 +322,7 @@ export const COMPILER_DIAGNOSTICS = {
 	TWCHECK030,
 	TWCHECK031,
 	TWCHECK032,
+	TWCHECK033,
 	TWCHECK050,
 	TWGEN001,
 	TWLEX001,
