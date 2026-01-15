@@ -1,0 +1,15 @@
+# TinyWhale: Nested record instantiation
+type Inner
+    val: i32
+
+type Outer
+    inner: Inner
+
+# Create with nested construction
+o: Outer =
+    inner: Inner
+        val: 42
+
+# Access nested field
+result: i32 = o.inner.val
+panic
