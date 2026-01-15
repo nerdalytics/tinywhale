@@ -555,3 +555,50 @@ panic`
 		assert.ok(result.succeeded)
 	})
 })
+
+describe('nested record types', () => {
+	it('supports field with user-defined type', () => {
+		const source = `type Inner
+    val: i32
+type Outer
+    inner: Inner
+panic`
+		const ctx = createContext(source)
+		tokenize(ctx)
+		parse(ctx)
+		const result = check(ctx)
+
+		assert.ok(result.succeeded, 'should allow user-defined type in field')
+
+		const outerType = ctx.types?.lookup('Outer')
+		assert.ok(outerType !== undefined)
+		const innerField = ctx.types?.getField(outerType, 'inner')
+		assert.ok(innerField, 'Outer should have inner field')
+	})
+
+	it('errors when referencing undefined type', () => {
+		const source = `type Outer
+    inner: Nonexistent
+panic`
+		const ctx = createContext(source)
+		tokenize(ctx)
+		parse(ctx)
+		check(ctx)
+
+		assert.ok(ctx.hasErrors(), 'should error on undefined type')
+	})
+
+	it('errors on forward reference (define-before-use)', () => {
+		const source = `type Outer
+    inner: Inner
+type Inner
+    val: i32
+panic`
+		const ctx = createContext(source)
+		tokenize(ctx)
+		parse(ctx)
+		check(ctx)
+
+		assert.ok(ctx.hasErrors(), 'should error: Inner not yet defined')
+	})
+})
