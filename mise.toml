@@ -1,6 +1,6 @@
 # mise configuration for tinywhale monorepo
 [tools]
-node = "24.12.0"
+node = "24.13.0"
 pnpm = "10.28.0"
 
 [tasks.install]
@@ -8,8 +8,12 @@ description = "Install dependencies"
 run = "pnpm install"
 
 [tasks.update]
-description = "Update dependencies"
-run = "pnpm up --workspace --interactive --recursive --latest"
+description = "Update all dependencies to latest versions"
+run = "pnpm up -r --latest"
+
+[tasks.update-interactive]
+description = "Interactively select which dependencies to update"
+run = "pnpm up -r --latest --interactive"
 
 [tasks.generate-grammar]
 description = "Generate Ohm grammar bundles with TypeScript types"
