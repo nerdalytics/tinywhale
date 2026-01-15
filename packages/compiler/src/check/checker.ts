@@ -1976,6 +1976,40 @@ function canValidateNestedRecordFields(ctx: BlockContext): ctx is BlockContext &
 }
 
 /**
+ * Type guard for validating NestedRecordInit block context has all required fields for emission.
+ */
+function isValidNestedRecordInitCtx(ctx: BlockContext): ctx is BlockContext & {
+	typeId: TypeId
+	parentPath: string
+	fieldInits: NonNullable<BlockContext['fieldInits']>
+} {
+	return ctx.typeId !== null && ctx.parentPath !== undefined && ctx.fieldInits !== undefined
+}
+
+/**
+ * Emit symbols and bindings for a finalized nested record init.
+ * Uses parentPath as the base name for flattened locals (e.g., "o_inner" → "$o_inner_val").
+ */
+function emitFinalizedNestedRecordInit(
+	ctx: BlockContext & {
+		typeId: TypeId
+		parentPath: string
+		fieldInits: NonNullable<BlockContext['fieldInits']>
+	},
+	state: CheckerState,
+	context: CompilationContext
+): void {
+	const fields = state.types.getFields(ctx.typeId)
+	const fieldSymbolIds = state.symbols.declareRecordBinding(
+		ctx.parentPath,
+		fields,
+		ctx.nodeId,
+		(name) => context.strings.intern(name)
+	)
+	emitRecordFieldBindings(fieldSymbolIds, fields, ctx.fieldInits, ctx.nodeId, state)
+}
+
+/**
  * Validate that all required fields are provided in a nested record init.
  */
 function validateNestedRecordMissingFields(
@@ -2009,7 +2043,8 @@ function registerNestedRecordWithParent(ctx: BlockContext, state: CheckerState):
 
 /**
  * Finalize a nested record initialization.
- * Validates all required fields are present and registers with parent context.
+ * Validates all required fields are present, emits symbols and bindings,
+ * and registers with parent context.
  */
 function finalizeNestedRecordInit(state: CheckerState, context: CompilationContext): void {
 	const ctx = currentBlockContext(state)
@@ -2017,6 +2052,12 @@ function finalizeNestedRecordInit(state: CheckerState, context: CompilationConte
 
 	popBlockContext(state)
 	validateNestedRecordMissingFields(ctx, state, context)
+
+	// Emit symbols and bindings for the nested record fields
+	if (!context.hasErrors() && isValidNestedRecordInitCtx(ctx)) {
+		emitFinalizedNestedRecordInit(ctx, state, context)
+	}
+
 	registerNestedRecordWithParent(ctx, state)
 }
 

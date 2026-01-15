@@ -656,6 +656,28 @@ panic`
 	})
 })
 
+describe('nested record codegen', () => {
+	it('emits correct flattened locals for nested records', () => {
+		const source = `type Inner
+    val: i32
+type Outer
+    inner: Inner
+o: Outer =
+    inner: Inner
+        val: 42
+panic`
+		const ctx = createContext(source)
+		tokenize(ctx)
+		parse(ctx)
+		check(ctx)
+		const result = emit(ctx)
+
+		assert.ok(result.valid, 'should produce valid WASM')
+		assert.ok(result.text.includes('local.set'), 'should have local.set for nested field')
+		assert.ok(result.text.includes('i32.const 42'), 'should have const 42 for nested val')
+	})
+})
+
 describe('nested record instantiation checker', () => {
 	it('validates nested record init type name', () => {
 		const source = `type Inner
