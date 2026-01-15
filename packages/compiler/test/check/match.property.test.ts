@@ -372,8 +372,9 @@ describe('match expressions/WAT output properties', () => {
 				fc.integer({ max: 100, min: 0 }),
 				(armCount, scrutinee) => {
 					// Use distinct values in 200-299 range to avoid false positives
-					const arms = Array.from({ length: armCount }, (_, i) => `	${i} -> ${200 + i * 10}`)
-						.join('\n')
+					const arms = Array.from({ length: armCount }, (_, i) => `	${i} -> ${200 + i * 10}`).join(
+						'\n'
+					)
 					const source = `x: i32 = ${scrutinee}
 result: i32 = match x
 ${arms}

@@ -200,7 +200,6 @@ export interface CheckResult {
 	readonly succeeded: boolean
 }
 
-
 export function getIntConstLow(inst: Inst): number {
 	return inst.arg0
 }
