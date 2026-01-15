@@ -656,6 +656,47 @@ panic`
 	})
 })
 
+describe('nested field access', () => {
+	it('supports nested field access (o.inner.val)', () => {
+		const source = `type Inner
+    val: i32
+type Outer
+    inner: Inner
+o: Outer =
+    inner: Inner
+        val: 42
+result: i32 = o.inner.val
+panic`
+		const ctx = createContext(source)
+		tokenize(ctx)
+		parse(ctx)
+		const result = check(ctx)
+
+		assert.ok(result.succeeded, 'should support nested field access')
+	})
+
+	it('emits correct code for nested field access', () => {
+		const source = `type Inner
+    val: i32
+type Outer
+    inner: Inner
+o: Outer =
+    inner: Inner
+        val: 42
+result: i32 = o.inner.val
+panic`
+		const ctx = createContext(source)
+		tokenize(ctx)
+		parse(ctx)
+		check(ctx)
+		const result = emit(ctx)
+
+		assert.ok(result.valid, 'should produce valid WASM')
+		// The nested field access o.inner.val should emit a local.get for the flattened symbol
+		assert.ok(result.text.includes('local.get'), 'should emit local.get for nested field access')
+	})
+})
+
 describe('nested record codegen', () => {
 	it('emits correct flattened locals for nested records', () => {
 		const source = `type Inner

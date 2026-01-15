@@ -1054,8 +1054,33 @@ function checkBinaryExprInferred(
 }
 
 /**
+ * Build the flattened base path from a FieldAccess chain.
+ * For o.inner.val, this builds "o_inner" from the base FieldAccess node.
+ */
+function buildFlattenedBasePath(nodeId: NodeId, context: CompilationContext): string | null {
+	const node = context.nodes.get(nodeId)
+
+	if (node.kind === NodeKind.Identifier) {
+		const token = context.tokens.get(node.tokenId)
+		return context.strings.get(token.payload as StringId)
+	}
+
+	if (node.kind === NodeKind.FieldAccess) {
+		const fieldToken = context.tokens.get(node.tokenId)
+		const fieldName = context.strings.get(fieldToken.payload as StringId)
+		const baseId = prevNodeId(nodeId)
+		const basePath = buildFlattenedBasePath(baseId, context)
+		if (basePath === null) return null
+		return `${basePath}_${fieldName}`
+	}
+
+	return null
+}
+
+/**
  * Try to resolve a flattened record field symbol.
  * For p.x where p is a record, returns the symbol for p_x if it exists.
+ * For nested access like o.inner.val, builds path o_inner_val.
  */
 function tryResolveFlattenedSymbol(
 	baseId: NodeId,
@@ -1063,16 +1088,14 @@ function tryResolveFlattenedSymbol(
 	state: CheckerState,
 	context: CompilationContext
 ): { symId: SymbolId; baseName: string } | null {
-	const baseNode = context.nodes.get(baseId)
-	if (baseNode.kind !== NodeKind.Identifier) return null
+	const basePath = buildFlattenedBasePath(baseId, context)
+	if (basePath === null) return null
 
-	const baseToken = context.tokens.get(baseNode.tokenId)
-	const baseName = context.strings.get(baseToken.payload as StringId)
-	const flattenedName = `${baseName}_${fieldName}`
+	const flattenedName = `${basePath}_${fieldName}`
 	const flattenedNameId = context.strings.intern(flattenedName)
 	const symId = state.symbols.lookupByName(flattenedNameId)
 
-	return symId !== undefined ? { baseName, symId } : null
+	return symId !== undefined ? { baseName: basePath, symId } : null
 }
 
 /**
@@ -1091,23 +1114,38 @@ function emitFlattenedVarRef(exprId: NodeId, symId: SymbolId, state: CheckerStat
 }
 
 /**
+ * Get the root identifier node from a field access chain.
+ * For o.inner.val, returns the node ID for 'o'.
+ */
+function getRootIdentifierNode(nodeId: NodeId, context: CompilationContext): NodeId | null {
+	const node = context.nodes.get(nodeId)
+	if (node.kind === NodeKind.Identifier) return nodeId
+	if (node.kind === NodeKind.FieldAccess) {
+		return getRootIdentifierNode(prevNodeId(nodeId), context)
+	}
+	return null
+}
+
+/**
  * Check for unknown identifier in flattened field access.
+ * For nested access like o.inner.val, checks that the root identifier 'o' exists.
  */
 function checkFlattenedBaseExists(
 	baseId: NodeId,
 	state: CheckerState,
 	context: CompilationContext
 ): boolean {
-	const baseNode = context.nodes.get(baseId)
-	if (baseNode.kind !== NodeKind.Identifier) return true
+	const rootId = getRootIdentifierNode(baseId, context)
+	if (rootId === null) return true
 
-	const baseToken = context.tokens.get(baseNode.tokenId)
-	const baseName = context.strings.get(baseToken.payload as StringId)
-	const baseNameId = baseToken.payload as StringId
-	const baseSymId = state.symbols.lookupByName(baseNameId)
+	const rootNode = context.nodes.get(rootId)
+	const rootToken = context.tokens.get(rootNode.tokenId)
+	const rootName = context.strings.get(rootToken.payload as StringId)
+	const rootNameId = rootToken.payload as StringId
+	const rootSymId = state.symbols.lookupByName(rootNameId)
 
-	if (baseSymId === undefined) {
-		context.emitAtNode('TWCHECK013' as DiagnosticCode, baseId, { name: baseName })
+	if (rootSymId === undefined) {
+		context.emitAtNode('TWCHECK013' as DiagnosticCode, rootId, { name: rootName })
 		return false
 	}
 	return true
