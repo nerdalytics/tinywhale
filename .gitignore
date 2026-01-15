@@ -9,6 +9,7 @@
 # Allow list for the current folder
 !.gitattributes
 !.github/
+!.github/**
 !.npmrc
 !biome.json
 !examples/
