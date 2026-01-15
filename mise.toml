@@ -34,14 +34,12 @@ run = "pnpm -r test"
 description = "Run biome check (lint & format)"
 run = "pnpm exec biome check --write --max-diagnostics 100"
 
-[tasks.check-ci]
-description = "Run biome check without auto-fix (for CI)"
-run = "pnpm exec biome check --max-diagnostics 100"
-
 [tasks.ci]
 description = "Run full CI pipeline: build, lint, typecheck, test"
-depends = ["build"]
+hide = true
 run = """
+cd packages/compiler && npx @ohm-js/cli generateBundles --withTypes --esm 'src/parse/*.ohm'
+pnpm -r build
 pnpm exec biome check --max-diagnostics 100
 pnpm exec tsc
 pnpm -r test
