@@ -59,24 +59,6 @@ interface MatchContext {
 }
 
 /**
- * Context for collecting record literal field initializers.
- */
-interface RecordLiteralContext {
-	/** Record type ID */
-	recordTypeId: TypeId
-	/** Record type name (for diagnostics) */
-	typeName: string
-	/** Parse node ID of the VariableBinding (for diagnostics) */
-	bindingNodeId: NodeId
-	/** Variable name string ID */
-	bindingNameId: StringId
-	/** Collected field initializers */
-	fieldInits: Array<{ name: string; nodeId: NodeId; exprResult: ExprResult }>
-	/** Track field names for duplicate detection */
-	fieldNames: Set<string>
-}
-
-/**
  * Kind of block context for unified block handling.
  */
 type BlockContextKind = 'TypeDecl' | 'RecordLiteral' | 'NestedRecordInit'
@@ -135,7 +117,6 @@ interface CheckerState {
 	currentScope: Scope
 	unreachableRange: UnreachableRange | null
 	matchContext: MatchContext | null
-	recordLiteralContext: RecordLiteralContext | null // Keep for now, will remove in Task 7
 	blockContextStack: BlockContext[]
 }
 
@@ -1688,21 +1669,65 @@ function processFieldInitAsTypeField(
  * Called when we detect a VariableBinding with a record type and no direct expression.
  */
 function startRecordLiteral(
-	bindingId: NodeId,
+	bindingNodeId: NodeId,
 	recordTypeId: TypeId,
 	typeName: string,
 	bindingNameId: StringId,
 	state: CheckerState,
 	_context: CompilationContext
 ): void {
-	state.recordLiteralContext = {
+	pushBlockContext(state, {
 		bindingNameId,
-		bindingNodeId: bindingId,
+		bindingNodeId,
+		children: [],
+		expectedChildKind: NodeKind.FieldInit,
 		fieldInits: [],
 		fieldNames: new Set(),
-		recordTypeId,
+		kind: 'RecordLiteral',
+		nodeId: bindingNodeId,
+		typeId: recordTypeId,
 		typeName,
+	})
+}
+
+/**
+ * Extract field name from a FieldInit node.
+ */
+function extractFieldInitName(fieldInitId: NodeId, context: CompilationContext): string {
+	const fieldInitNode = context.nodes.get(fieldInitId)
+	const fieldToken = context.tokens.get(fieldInitNode.tokenId)
+	return context.strings.get(fieldToken.payload as StringId)
+}
+
+/**
+ * Validate that a field is not a duplicate and exists in the record type.
+ * Returns field info if valid, null otherwise (errors already emitted).
+ */
+function validateRecordField(
+	fieldInitId: NodeId,
+	fieldName: string,
+	ctx: BlockContext,
+	state: CheckerState,
+	context: CompilationContext
+): FieldInfo | null {
+	if (ctx.fieldNames?.has(fieldName)) {
+		context.emitAtNode('TWCHECK029' as DiagnosticCode, fieldInitId, { name: fieldName })
+		return null
 	}
+
+	const recordTypeId = ctx.typeId
+	if (recordTypeId === null) return null
+
+	const fieldInfo = state.types.getField(recordTypeId, fieldName)
+	if (!fieldInfo) {
+		context.emitAtNode('TWCHECK028' as DiagnosticCode, fieldInitId, {
+			name: fieldName,
+			typeName: ctx.typeName,
+		})
+		return null
+	}
+
+	return fieldInfo
 }
 
 /**
@@ -1714,43 +1739,18 @@ function processFieldInit(
 	state: CheckerState,
 	context: CompilationContext
 ): void {
-	if (!state.recordLiteralContext) {
-		// FieldInit outside record literal - should not happen if parser is correct
-		return
-	}
+	const ctx = currentBlockContext(state)
+	if (!ctx || ctx.kind !== 'RecordLiteral') return
 
-	const fieldInitNode = context.nodes.get(fieldInitId)
-	const fieldToken = context.tokens.get(fieldInitNode.tokenId)
-	const fieldName = context.strings.get(fieldToken.payload as StringId)
+	const fieldName = extractFieldInitName(fieldInitId, context)
+	const fieldInfo = validateRecordField(fieldInitId, fieldName, ctx, state, context)
+	if (!fieldInfo) return
 
-	// Check for duplicate field in initializer
-	if (state.recordLiteralContext.fieldNames.has(fieldName)) {
-		context.emitAtNode('TWCHECK029' as DiagnosticCode, fieldInitId, {
-			name: fieldName,
-		})
-		return
-	}
-
-	// Check if field exists in the record type
-	const fieldInfo = state.types.getField(state.recordLiteralContext.recordTypeId, fieldName)
-	if (!fieldInfo) {
-		context.emitAtNode('TWCHECK028' as DiagnosticCode, fieldInitId, {
-			name: fieldName,
-			typeName: state.recordLiteralContext.typeName,
-		})
-		return
-	}
-
-	// Get the expression (in postorder, expression is before FieldInit node)
 	const exprId = prevNodeId(fieldInitId)
 	const exprResult = checkExpression(exprId, fieldInfo.typeId, state, context)
 
-	state.recordLiteralContext.fieldNames.add(fieldName)
-	state.recordLiteralContext.fieldInits.push({
-		exprResult,
-		name: fieldName,
-		nodeId: fieldInitId,
-	})
+	ctx.fieldNames?.add(fieldName)
+	ctx.fieldInits?.push({ exprResult, name: fieldName, nodeId: fieldInitId })
 }
 
 /**
@@ -1781,7 +1781,7 @@ function checkMissingRecordFields(
 function emitRecordFieldBindings(
 	fieldSymbolIds: SymbolId[],
 	fields: readonly FieldInfo[],
-	fieldInits: RecordLiteralContext['fieldInits'],
+	fieldInits: NonNullable<BlockContext['fieldInits']>,
 	bindingNodeId: NodeId,
 	state: CheckerState
 ): void {
@@ -1803,32 +1803,81 @@ function emitRecordFieldBindings(
 }
 
 /**
+ * Emit symbols and bindings for a finalized record literal.
+ */
+function emitFinalizedRecordLiteral(
+	bindingNameId: StringId,
+	bindingNodeId: NodeId,
+	recordTypeId: TypeId,
+	fieldInits: NonNullable<BlockContext['fieldInits']>,
+	state: CheckerState,
+	context: CompilationContext
+): void {
+	const baseName = context.strings.get(bindingNameId)
+	const fields = state.types.getFields(recordTypeId)
+	const fieldSymbolIds = state.symbols.declareRecordBinding(
+		baseName,
+		fields,
+		bindingNodeId,
+		(name) => context.strings.intern(name)
+	)
+	emitRecordFieldBindings(fieldSymbolIds, fields, fieldInits, bindingNodeId, state)
+}
+
+/**
+ * Type guard for validating RecordLiteral block context has all required fields.
+ */
+function isValidRecordLiteralCtx(ctx: BlockContext): ctx is BlockContext & {
+	typeId: TypeId
+	bindingNameId: StringId
+	bindingNodeId: NodeId
+	fieldNames: Set<string>
+	fieldInits: NonNullable<BlockContext['fieldInits']>
+} {
+	return (
+		ctx.typeId !== null &&
+		ctx.bindingNameId !== undefined &&
+		ctx.bindingNodeId !== undefined &&
+		ctx.fieldNames !== undefined &&
+		ctx.fieldInits !== undefined
+	)
+}
+
+/**
  * Finalize a record literal by validating all required fields are present
  * and emitting the binding instruction.
  *
  * Creates flattened symbols for each field: p: Point → $p_x, $p_y locals.
  */
 function finalizeRecordLiteral(state: CheckerState, context: CompilationContext): void {
-	if (!state.recordLiteralContext) return
+	const ctx = currentBlockContext(state)
+	if (!ctx || ctx.kind !== 'RecordLiteral') return
 
-	const { bindingNameId, bindingNodeId, fieldInits, fieldNames, recordTypeId, typeName } =
-		state.recordLiteralContext
+	popBlockContext(state)
+
+	if (!isValidRecordLiteralCtx(ctx)) return
+
+	const {
+		bindingNameId,
+		bindingNodeId,
+		fieldInits,
+		fieldNames,
+		typeId: recordTypeId,
+		typeName,
+	} = ctx
 
 	checkMissingRecordFields(recordTypeId, fieldNames, bindingNodeId, typeName, state, context)
 
 	if (!context.hasErrors()) {
-		const baseName = context.strings.get(bindingNameId)
-		const fields = state.types.getFields(recordTypeId)
-		const fieldSymbolIds = state.symbols.declareRecordBinding(
-			baseName,
-			fields,
+		emitFinalizedRecordLiteral(
+			bindingNameId,
 			bindingNodeId,
-			(name) => context.strings.intern(name)
+			recordTypeId,
+			fieldInits,
+			state,
+			context
 		)
-		emitRecordFieldBindings(fieldSymbolIds, fields, fieldInits, bindingNodeId, state)
 	}
-
-	state.recordLiteralContext = null
 }
 
 function getMatchArmFromLine(
@@ -2223,6 +2272,14 @@ function isInTypeDeclContext(state: CheckerState): boolean {
 	return ctx?.kind === 'TypeDecl'
 }
 
+/**
+ * Check if we're in a RecordLiteral block context.
+ */
+function isInRecordLiteralContext(state: CheckerState): boolean {
+	const ctx = currentBlockContext(state)
+	return ctx !== null && ctx.kind === 'RecordLiteral'
+}
+
 function processIndentedLineAsFieldDecl(
 	lineId: NodeId,
 	state: CheckerState,
@@ -2253,7 +2310,7 @@ function processIndentedLineAsFieldInit(
 	state: CheckerState,
 	context: CompilationContext
 ): boolean {
-	if (!state.recordLiteralContext) return false
+	if (!isInRecordLiteralContext(state)) return false
 
 	const fieldInit = getFieldInitFromLine(lineId, context)
 	if (!fieldInit) return false
@@ -2306,7 +2363,7 @@ function handleDedentLine(lineId: NodeId, state: CheckerState, context: Compilat
 	}
 
 	// Finalize pending record literal and process statement
-	if (state.recordLiteralContext) {
+	if (isInRecordLiteralContext(state)) {
 		finalizeRecordLiteral(state, context)
 		processDedentLineStatement(lineId, state, context)
 		return
@@ -2324,7 +2381,7 @@ function handleRootLine(lineId: NodeId, state: CheckerState, context: Compilatio
 	if (state.matchContext) finalizeMatch(state, context)
 
 	// Finalize any pending record literal
-	if (state.recordLiteralContext) finalizeRecordLiteral(state, context)
+	if (isInRecordLiteralContext(state)) finalizeRecordLiteral(state, context)
 
 	// Check if this line contains a type declaration
 	const typeDecl = getTypeDeclFromLine(lineId, context)
@@ -2391,7 +2448,7 @@ function finalizePendingContexts(state: CheckerState, context: CompilationContex
 	if (isInTypeDeclContext(state)) finalizeTypeDecl(state, context)
 
 	if (state.matchContext) finalizeMatch(state, context)
-	if (state.recordLiteralContext) finalizeRecordLiteral(state, context)
+	if (isInRecordLiteralContext(state)) finalizeRecordLiteral(state, context)
 }
 
 /**
@@ -2421,7 +2478,6 @@ export function check(context: CompilationContext): CheckResult {
 		currentScope: mainScope,
 		insts,
 		matchContext: null,
-		recordLiteralContext: null,
 		scopes,
 		symbols,
 		types,
