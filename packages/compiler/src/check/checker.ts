@@ -90,6 +90,60 @@ interface RecordLiteralContext {
 	fieldNames: Set<string>
 }
 
+/**
+ * Kind of block context for unified block handling.
+ */
+type BlockContextKind = 'TypeDecl' | 'RecordLiteral' | 'NestedRecordInit'
+
+/**
+ * Unified context for block-based constructs (type declarations, record literals, nested inits).
+ * All share the pattern: header starts block, indented lines are children, dedent finalizes.
+ */
+interface BlockContext {
+	kind: BlockContextKind
+	typeName: string
+	typeId: TypeId | null
+	nodeId: NodeId
+	children: NodeId[]
+	expectedChildKind: NodeKind
+	// For RecordLiteral/NestedRecordInit: binding info
+	bindingNameId?: StringId
+	bindingNodeId?: NodeId
+	// For RecordLiteral/NestedRecordInit: track field names
+	fieldNames?: Set<string>
+	// For RecordLiteral/NestedRecordInit: collected field inits with results
+	fieldInits?: Array<{ name: string; nodeId: NodeId; exprResult: ExprResult }>
+	// For NestedRecordInit: field name this is initializing
+	fieldName?: string
+	// For NestedRecordInit: parent path for flattening
+	parentPath?: string
+	// For TypeDecl: track field type info
+	fields?: Array<{ name: string; typeId: TypeId; nodeId: NodeId }>
+}
+
+// Block context helpers - will be used in Tasks 6-7 when migrating TypeDecl/RecordLiteral
+function pushBlockContext(state: CheckerState, ctx: BlockContext): void {
+	state.blockContextStack.push(ctx)
+}
+
+function popBlockContext(state: CheckerState): BlockContext | null {
+	return state.blockContextStack.pop() ?? null
+}
+
+function currentBlockContext(state: CheckerState): BlockContext | null {
+	return state.blockContextStack.at(-1) ?? null
+}
+
+function parentBlockContext(state: CheckerState): BlockContext | null {
+	return state.blockContextStack.at(-2) ?? null
+}
+
+// Suppress noUnusedLocals until Tasks 6-7 migrate to use these helpers
+void pushBlockContext
+void popBlockContext
+void currentBlockContext
+void parentBlockContext
+
 interface CheckerState {
 	readonly insts: InstStore
 	readonly scopes: ScopeStore
@@ -98,8 +152,9 @@ interface CheckerState {
 	currentScope: Scope
 	unreachableRange: UnreachableRange | null
 	matchContext: MatchContext | null
-	typeDeclContext: TypeDeclContext | null
-	recordLiteralContext: RecordLiteralContext | null
+	typeDeclContext: TypeDeclContext | null // Keep for now, will remove in Task 6
+	recordLiteralContext: RecordLiteralContext | null // Keep for now, will remove in Task 7
+	blockContextStack: BlockContext[]
 }
 
 interface ExprResult {
@@ -2367,6 +2422,7 @@ export function check(context: CompilationContext): CheckResult {
 	const mainScope = scopes.get(mainScopeId)
 
 	const state: CheckerState = {
+		blockContextStack: [],
 		currentScope: mainScope,
 		insts,
 		matchContext: null,
