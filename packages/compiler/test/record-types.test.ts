@@ -778,3 +778,22 @@ panic`
 		assert.ok(diags.some((d) => d.def.code === 'TWCHECK027')) // missing field
 	})
 })
+
+describe('sibling fields after nested blocks', () => {
+	it('parses sibling field after nested record block', () => {
+		const source = `type Inner
+    val: i32
+type Outer
+    inner: Inner
+    x: i32
+o: Outer =
+    inner: Inner
+        val: 42
+    x: 10
+panic`
+		const ctx = createContext(source)
+		tokenize(ctx)
+		const result = matchOnly(ctx)
+		assert.ok(result, 'should parse sibling field after nested block')
+	})
+})
