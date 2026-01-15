@@ -665,9 +665,9 @@ function generateNestedTypes(depth: number): string {
 function generateNestedInit(depth: number, value: number): string {
 	let init = `o: T0 =\n`
 	for (let i = 0; i < depth - 1; i++) {
-		init += '    '.repeat(i + 1) + `inner: T${i + 1}\n`
+		init += `${'    '.repeat(i + 1)}inner: T${i + 1}\n`
 	}
-	init += '    '.repeat(depth) + `val: ${value}\n`
+	init += `${'    '.repeat(depth)}val: ${value}\n`
 	return init
 }
 
@@ -677,7 +677,7 @@ describe('record types/nested record instantiation properties', () => {
 			fc.property(fc.integer({ max: 3, min: 1 }), (depth) => {
 				const types = generateNestedTypes(depth)
 				const init = generateNestedInit(depth, 42)
-				const source = types + init + 'panic\n'
+				const source = `${types}${init}panic\n`
 
 				const ctx = new CompilationContext(source)
 				tokenize(ctx)
@@ -702,7 +702,7 @@ describe('record types/nested record instantiation properties', () => {
 				(depth, value) => {
 					const types = generateNestedTypes(depth)
 					const init = generateNestedInit(depth, value)
-					const source = types + init + 'panic\n'
+					const source = `${types}${init}panic\n`
 
 					const ctx = new CompilationContext(source)
 					tokenize(ctx)
@@ -733,7 +733,7 @@ describe('record types/nested record instantiation properties', () => {
 			fc.property(fc.integer({ max: 3, min: 1 }), (depth) => {
 				const types = generateNestedTypes(depth)
 				const init = generateNestedInit(depth, 42)
-				const source = types + init + 'panic\n'
+				const source = `${types}${init}panic\n`
 
 				const ctx = new CompilationContext(source)
 				tokenize(ctx)
@@ -761,7 +761,7 @@ describe('record types/nested record instantiation properties', () => {
 				(depth, value) => {
 					const types = generateNestedTypes(depth)
 					const init = generateNestedInit(depth, value)
-					const source = types + init + 'panic\n'
+					const source = `${types}${init}panic\n`
 
 					// Compile twice
 					const ctx1 = new CompilationContext(source)
