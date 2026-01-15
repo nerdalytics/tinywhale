@@ -13,7 +13,7 @@ export const NodeKind = {
 	CompareChain: 106,
 	DedentLine: 1,
 
-	// Record expressions (107-109)
+	// Record expressions (107-110)
 	FieldAccess: 109,
 
 	// Type declarations (50-59)
@@ -29,6 +29,9 @@ export const NodeKind = {
 	LiteralPattern: 201,
 	MatchArm: 13,
 	MatchExpr: 12,
+
+	// Nested record construction
+	NestedRecordInit: 110,
 	OrPattern: 203,
 
 	// Statements (10-99)

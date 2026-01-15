@@ -89,6 +89,9 @@ describe('record types node kinds', () => {
 	it('has FieldAccess node kind', () => {
 		assert.ok(NodeKind.FieldAccess !== undefined)
 	})
+	it('has NestedRecordInit node kind', () => {
+		assert.ok(NodeKind.NestedRecordInit !== undefined)
+	})
 })
 
 describe('record types parsing', () => {
@@ -556,6 +559,37 @@ panic`
 	})
 })
 
+describe('nested record instantiation parsing', () => {
+	it('parses nested record init syntax', () => {
+		const source = `type Inner
+    val: i32
+type Outer
+    inner: Inner
+o: Outer =
+    inner: Inner
+        val: 42
+panic`
+		const ctx = createContext(source)
+		tokenize(ctx)
+		const result = matchOnly(ctx)
+		assert.ok(result, 'should parse nested record init')
+	})
+
+	it('creates NestedRecordInit node for type name in field init', () => {
+		const source = `o: Outer =
+    inner: Inner
+        val: 42
+panic`
+		const ctx = createContext(source)
+		tokenize(ctx)
+		parse(ctx)
+
+		const nodes = [...ctx.nodes]
+		const nestedRecordInit = nodes.find(([, n]) => n.kind === NodeKind.NestedRecordInit)
+		assert.ok(nestedRecordInit, 'should create NestedRecordInit node')
+	})
+})
+
 describe('nested record types', () => {
 	it('supports field with user-defined type', () => {
 		const source = `type Inner
@@ -619,5 +653,128 @@ panic`
 				'should emit TWCHECK032'
 			)
 		})
+	})
+})
+
+describe('nested field access', () => {
+	it('supports nested field access (o.inner.val)', () => {
+		const source = `type Inner
+    val: i32
+type Outer
+    inner: Inner
+o: Outer =
+    inner: Inner
+        val: 42
+result: i32 = o.inner.val
+panic`
+		const ctx = createContext(source)
+		tokenize(ctx)
+		parse(ctx)
+		const result = check(ctx)
+
+		assert.ok(result.succeeded, 'should support nested field access')
+	})
+
+	it('emits correct code for nested field access', () => {
+		const source = `type Inner
+    val: i32
+type Outer
+    inner: Inner
+o: Outer =
+    inner: Inner
+        val: 42
+result: i32 = o.inner.val
+panic`
+		const ctx = createContext(source)
+		tokenize(ctx)
+		parse(ctx)
+		check(ctx)
+		const result = emit(ctx)
+
+		assert.ok(result.valid, 'should produce valid WASM')
+		// The nested field access o.inner.val should emit a local.get for the flattened symbol
+		assert.ok(result.text.includes('local.get'), 'should emit local.get for nested field access')
+	})
+})
+
+describe('nested record codegen', () => {
+	it('emits correct flattened locals for nested records', () => {
+		const source = `type Inner
+    val: i32
+type Outer
+    inner: Inner
+o: Outer =
+    inner: Inner
+        val: 42
+panic`
+		const ctx = createContext(source)
+		tokenize(ctx)
+		parse(ctx)
+		check(ctx)
+		const result = emit(ctx)
+
+		assert.ok(result.valid, 'should produce valid WASM')
+		assert.ok(result.text.includes('local.set'), 'should have local.set for nested field')
+		assert.ok(result.text.includes('i32.const 42'), 'should have const 42 for nested val')
+	})
+})
+
+describe('nested record instantiation checker', () => {
+	it('validates nested record init type name', () => {
+		const source = `type Inner
+    val: i32
+type Outer
+    inner: Inner
+o: Outer =
+    inner: Inner
+        val: 42
+panic`
+		const ctx = createContext(source)
+		tokenize(ctx)
+		parse(ctx)
+		const result = check(ctx)
+
+		assert.ok(result.succeeded, 'should succeed with valid nested init')
+	})
+
+	it('errors on type mismatch in nested init', () => {
+		const source = `type A
+    x: i32
+type B
+    y: i32
+type Outer
+    inner: A
+o: Outer =
+    inner: B
+        y: 5
+panic`
+		const ctx = createContext(source)
+		tokenize(ctx)
+		parse(ctx)
+		check(ctx)
+
+		assert.ok(ctx.hasErrors(), 'should error on type mismatch')
+		const diags = ctx.getDiagnostics()
+		assert.ok(diags.some((d) => d.def.code === 'TWCHECK033'))
+	})
+
+	it('validates all nested fields provided', () => {
+		const source = `type Inner
+    x: i32
+    y: i32
+type Outer
+    inner: Inner
+o: Outer =
+    inner: Inner
+        x: 1
+panic`
+		const ctx = createContext(source)
+		tokenize(ctx)
+		parse(ctx)
+		check(ctx)
+
+		assert.ok(ctx.hasErrors(), 'should error on missing field')
+		const diags = ctx.getDiagnostics()
+		assert.ok(diags.some((d) => d.def.code === 'TWCHECK027')) // missing field
 	})
 })
