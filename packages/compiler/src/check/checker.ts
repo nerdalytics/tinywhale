@@ -19,7 +19,7 @@ import {
 	type ParseNode,
 	prevNodeId,
 } from '../core/nodes.ts'
-import { TokenKind } from '../core/tokens.ts'
+import { TokenKind, nextTokenId } from '../core/tokens.ts'
 import { InstStore, ScopeStore, SymbolStore, TypeStore } from './stores.ts'
 import {
 	BuiltinTypeId,
@@ -1431,8 +1431,11 @@ function getFieldDeclFromLine(
  */
 function startTypeDecl(typeDeclId: NodeId, state: CheckerState, context: CompilationContext): void {
 	const typeDeclNode = context.nodes.get(typeDeclId)
-	const token = context.tokens.get(typeDeclNode.tokenId)
-	const typeName = context.strings.get(token.payload as StringId)
+	// TypeDecl node's tokenId points to the 'type' keyword
+	// The type name is in the next token (the identifier)
+	const identTokenId = nextTokenId(typeDeclNode.tokenId)
+	const identToken = context.tokens.get(identTokenId)
+	const typeName = context.strings.get(identToken.payload as StringId)
 
 	state.typeDeclContext = {
 		fieldNames: new Set(),
@@ -2100,6 +2103,14 @@ function processDedentLineStatement(
 	state: CheckerState,
 	context: CompilationContext
 ): void {
+	// Check for TypeDecl first (needs special context setup)
+	const typeDecl = getTypeDeclFromLine(lineId, context)
+	if (typeDecl) {
+		startTypeDecl(typeDecl.id, state, context)
+		return
+	}
+
+	// Handle other statements
 	const stmt = getStatementFromLine(lineId, context)
 	if (stmt) emitStatement(stmt.id, stmt.kind, state, context)
 }
