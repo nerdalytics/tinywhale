@@ -796,4 +796,28 @@ panic`
 		const result = matchOnly(ctx)
 		assert.ok(result, 'should parse sibling field after nested block')
 	})
+
+	it('compiles sibling field after nested block', () => {
+		const source = `type Inner
+    val: i32
+type Outer
+    inner: Inner
+    x: i32
+o: Outer =
+    inner: Inner
+        val: 42
+    x: 10
+panic`
+		const ctx = createContext(source)
+		tokenize(ctx)
+		parse(ctx)
+		const checkResult = check(ctx)
+
+		assert.ok(checkResult.succeeded, `check failed: ${ctx.getErrors().map(e => ctx.formatDiagnostic(e)).join(', ')}`)
+
+		const result = emit(ctx)
+		assert.ok(result.valid, 'should emit valid WASM')
+		assert.ok(result.text.includes('i32.const 42'), 'should have nested val')
+		assert.ok(result.text.includes('i32.const 10'), 'should have sibling x')
+	})
 })
