@@ -255,9 +255,9 @@ export const TWCHECK031: DiagnosticDef = {
 
 export const TWCHECK032: DiagnosticDef = {
 	code: 'TWCHECK032',
+	description: 'A record type cannot contain itself directly or indirectly.',
 	message: 'recursive type: field `{field}` creates cycle via `{type}`',
 	severity: DiagnosticSeverity.Error,
-	description: 'A record type cannot contain itself directly or indirectly.',
 	suggestion: 'Consider using a different data structure.',
 }
 

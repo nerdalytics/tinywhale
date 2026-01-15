@@ -614,7 +614,10 @@ panic`
 
 			assert.ok(ctx.hasErrors(), 'should detect recursive type')
 			const diags = ctx.getDiagnostics()
-			assert.ok(diags.some((d) => d.def.code === 'TWCHECK032'), 'should emit TWCHECK032')
+			assert.ok(
+				diags.some((d) => d.def.code === 'TWCHECK032'),
+				'should emit TWCHECK032'
+			)
 		})
 	})
 })
