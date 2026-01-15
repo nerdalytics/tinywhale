@@ -4,11 +4,13 @@ TinyWhale {
 
   // IndentedLine can contain a MatchArm, Statement, FieldDecl, or FieldInit
   // FieldInit comes before FieldDecl: uppercase identifiers are tried as NestedRecordInit first
-  IndentedLine = indentToken IndentedContent?
+  // When dedenting from level N to level M (where M > 0), tokenizer emits both indent and dedent tokens.
+  // anyDedent* handles the dedent tokens that follow the indent marker.
+  IndentedLine = indentToken anyDedent* IndentedContent?
   IndentedContent = MatchArm | FieldInit | FieldDecl | Statement
   DedentLine = DedentToNested | DedentToRoot
-  DedentToNested = anyDedent* dedentNonZero IndentedContent?
-  DedentToRoot = anyDedent* dedentZero Statement?
+  DedentToNested = dedentNonZero+ IndentedContent?
+  DedentToRoot = dedentNonZero* dedentZero Statement?
   RootLine = Statement
 
   // Statements

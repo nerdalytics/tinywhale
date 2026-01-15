@@ -197,8 +197,14 @@ function createNodeEmittingSemantics(
 	}
 
 	semantics.addOperation<number>('toLevel', {
-		dedentToken(_marker: Node, levelDigits: Node) {
-			return Number(levelDigits.sourceString)
+		dedentZero(_marker: Node) {
+			return 0
+		},
+		dedentNonZero(_marker: Node, firstDigit: Node, restDigits: Node) {
+			return Number(firstDigit.sourceString + restDigits.sourceString)
+		},
+		anyDedent(dedent: Node) {
+			return dedent['toLevel']()
 		},
 		indentToken(_marker: Node, levelDigits: Node) {
 			return Number(levelDigits.sourceString)
@@ -572,7 +578,26 @@ function createNodeEmittingSemantics(
 	})
 
 	semantics.addOperation<NodeId | null>('emitLine', {
-		DedentLine(_dedentTokens: Node, optionalStatement: Node) {
+		DedentToNested(_dedentNonZeros: Node, optionalContent: Node) {
+			const lineNumber = getLineNumber(this)
+			const startCount = context.nodes.count()
+
+			const contentNode = optionalContent.children[0]
+			if (contentNode !== undefined) {
+				contentNode['emitIndentedContent']()
+			}
+
+			const childCount = context.nodes.count() - startCount
+			const subtreeSize = 1 + childCount
+
+			const tid = getTokenIdForLine(lineNumber)
+			return context.nodes.add({
+				kind: NodeKind.DedentLine,
+				subtreeSize,
+				tokenId: tid,
+			})
+		},
+		DedentToRoot(_dedentNonZeros: Node, _dedentZero: Node, optionalStatement: Node) {
 			const lineNumber = getLineNumber(this)
 			const startCount = context.nodes.count()
 
@@ -591,7 +616,10 @@ function createNodeEmittingSemantics(
 				tokenId: tid,
 			})
 		},
-		IndentedLine(_indentToken: Node, optionalContent: Node) {
+		DedentLine(dedentVariant: Node) {
+			return dedentVariant['emitLine']()
+		},
+		IndentedLine(_indentToken: Node, _anyDedents: Node, optionalContent: Node) {
 			const lineNumber = getLineNumber(this)
 			const startCount = context.nodes.count()
 
