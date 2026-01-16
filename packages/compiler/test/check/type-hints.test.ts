@@ -4,6 +4,7 @@ import fc from 'fast-check'
 import { check } from '../../src/check/checker.ts'
 import { TypeStore } from '../../src/check/stores.ts'
 import { BuiltinTypeId } from '../../src/check/types.ts'
+import { emit } from '../../src/codegen/index.ts'
 import { CompilationContext } from '../../src/core/context.ts'
 import { tokenize } from '../../src/lex/tokenizer.ts'
 import { parse } from '../../src/parse/parser.ts'
@@ -305,5 +306,164 @@ panic`
 		const result = check(ctx)
 
 		assert.ok(result.succeeded)
+	})
+})
+
+function generateRefinedProgram(
+	type: 'i32' | 'i64',
+	constraints: { min?: bigint; max?: bigint },
+	value: bigint
+): string {
+	const hints = []
+	if (constraints.min !== undefined) hints.push(`min=${constraints.min}`)
+	if (constraints.max !== undefined) hints.push(`max=${constraints.max}`)
+	const hintStr = hints.length > 0 ? `<${hints.join(', ')}>` : ''
+	return `x: ${type}${hintStr} = ${value}\npanic\n`
+}
+
+describe('check/type-hints end-to-end properties', () => {
+	it('soundness: values within constraints compile without errors', () => {
+		fc.assert(
+			fc.property(
+				fc.constantFrom('i32' as const, 'i64' as const),
+				fc.bigInt({ max: 100n, min: 0n }),
+				fc.bigInt({ max: 200n, min: 100n }),
+				(type, min, max) => {
+					// Value in range [min, max]
+					const value = min + (max - min) / 2n
+					const source = generateRefinedProgram(type, { max, min }, value)
+
+					const ctx = new CompilationContext(source)
+					tokenize(ctx)
+					const parseResult = parse(ctx)
+					if (!parseResult.succeeded) return true
+
+					const checkResult = check(ctx)
+					return checkResult.succeeded
+				}
+			),
+			{ numRuns: 100 }
+		)
+	})
+
+	it('completeness: values below min produce TWCHECK041', () => {
+		fc.assert(
+			fc.property(
+				fc.constantFrom('i32' as const, 'i64' as const),
+				fc.bigInt({ max: 100n, min: 1n }),
+				fc.bigInt({ max: 10n, min: 1n }),
+				(type, min, offset) => {
+					const value = min - offset // Below min
+					const source = generateRefinedProgram(type, { min }, value)
+
+					const ctx = new CompilationContext(source)
+					tokenize(ctx)
+					const parseResult = parse(ctx)
+					if (!parseResult.succeeded) return true
+
+					check(ctx)
+					const diags = ctx.getDiagnostics()
+					return diags.some((d) => d.def.code === 'TWCHECK041')
+				}
+			),
+			{ numRuns: 100 }
+		)
+	})
+
+	it('completeness: values above max produce TWCHECK041', () => {
+		fc.assert(
+			fc.property(
+				fc.constantFrom('i32' as const, 'i64' as const),
+				fc.bigInt({ max: 100n, min: 0n }),
+				fc.bigInt({ max: 10n, min: 1n }),
+				(type, max, offset) => {
+					const value = max + offset // Above max
+					const source = generateRefinedProgram(type, { max }, value)
+
+					const ctx = new CompilationContext(source)
+					tokenize(ctx)
+					const parseResult = parse(ctx)
+					if (!parseResult.succeeded) return true
+
+					check(ctx)
+					const diags = ctx.getDiagnostics()
+					return diags.some((d) => d.def.code === 'TWCHECK041')
+				}
+			),
+			{ numRuns: 100 }
+		)
+	})
+
+	it('valid refined programs produce valid WASM', () => {
+		fc.assert(
+			fc.property(
+				fc.constantFrom('i32' as const, 'i64' as const),
+				fc.bigInt({ max: 50n, min: 0n }),
+				fc.bigInt({ max: 100n, min: 50n }),
+				(type, min, max) => {
+					const value = min + (max - min) / 2n
+					const source = generateRefinedProgram(type, { max, min }, value)
+
+					const ctx = new CompilationContext(source)
+					tokenize(ctx)
+					const parseResult = parse(ctx)
+					if (!parseResult.succeeded) return true
+
+					const checkResult = check(ctx)
+					if (!checkResult.succeeded) return true
+
+					const emitResult = emit(ctx)
+					if (!emitResult.valid) return true
+
+					// WASM magic number
+					return (
+						emitResult.binary[0] === 0x00 &&
+						emitResult.binary[1] === 0x61 &&
+						emitResult.binary[2] === 0x73 &&
+						emitResult.binary[3] === 0x6d
+					)
+				}
+			),
+			{ numRuns: 50 }
+		)
+	})
+
+	it('determinism: same program produces identical output', () => {
+		fc.assert(
+			fc.property(
+				fc.constantFrom('i32' as const, 'i64' as const),
+				fc.bigInt({ max: 50n, min: 0n }),
+				fc.bigInt({ max: 100n, min: 50n }),
+				(type, min, max) => {
+					const value = min + (max - min) / 2n
+					const source = generateRefinedProgram(type, { max, min }, value)
+
+					const ctx1 = new CompilationContext(source)
+					const ctx2 = new CompilationContext(source)
+
+					tokenize(ctx1)
+					tokenize(ctx2)
+
+					const p1 = parse(ctx1)
+					const p2 = parse(ctx2)
+					if (!p1.succeeded || !p2.succeeded) return true
+
+					const c1 = check(ctx1)
+					const c2 = check(ctx2)
+					if (!c1.succeeded || !c2.succeeded) return true
+
+					const e1 = emit(ctx1)
+					const e2 = emit(ctx2)
+					if (!e1.valid || !e2.valid) return true
+
+					if (e1.binary.length !== e2.binary.length) return false
+					for (let i = 0; i < e1.binary.length; i++) {
+						if (e1.binary[i] !== e2.binary[i]) return false
+					}
+					return true
+				}
+			),
+			{ numRuns: 30 }
+		)
 	})
 })
