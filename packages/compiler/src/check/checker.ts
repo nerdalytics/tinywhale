@@ -451,13 +451,11 @@ function resolveTypeFromAnnotation(
 	state: CheckerState,
 	context: CompilationContext
 ): { name: string; typeId: TypeId } | null {
-	// Check for list type first
 	const listTypeChildId = findListTypeChild(typeAnnotationId, context)
 	if (listTypeChildId !== null) {
 		return resolveListType(listTypeChildId, state, context)
 	}
 
-	// Check for hinted primitive (e.g., i32<min=0, max=100>)
 	const hintedPrimitiveId = findHintedPrimitiveChild(typeAnnotationId, context)
 	if (hintedPrimitiveId !== null) {
 		return resolveHintedPrimitive(hintedPrimitiveId, state, context)
@@ -1634,7 +1632,6 @@ function checkIndexAccess(
 	const result = checkIndexAccessInferred(exprId, state, context)
 	if (!isValidExprResult(result)) return result
 
-	// Check that the element type matches the expected type
 	if (!state.types.areEqual(result.typeId, expectedType)) {
 		const expected = state.types.typeName(expectedType)
 		const found = state.types.typeName(result.typeId)
@@ -1664,16 +1661,13 @@ function checkFieldAccessInferred(
 	const fieldToken = context.tokens.get(node.tokenId)
 	const fieldName = context.strings.get(fieldToken.payload as StringId)
 
-	// Try flattened symbol resolution first (p.x → p_x)
 	const flattened = tryResolveFlattenedSymbol(baseId, fieldName, state, context)
 	if (flattened) return emitFlattenedVarRef(exprId, flattened.symId, state)
 
-	// Check for unknown base identifier
 	if (!checkFlattenedBaseExists(baseId, state, context)) {
 		return { instId: null, typeId: BuiltinTypeId.Invalid }
 	}
 
-	// Standard field access handling
 	const baseResult = checkExpressionInferred(baseId, state, context)
 	if (!isValidExprResult(baseResult)) return baseResult
 
@@ -1693,7 +1687,6 @@ function checkFieldAccess(
 	const result = checkFieldAccessInferred(exprId, state, context)
 	if (!isValidExprResult(result)) return result
 
-	// Check that the field type matches the expected type
 	if (!state.types.areEqual(result.typeId, expectedType)) {
 		const expected = state.types.typeName(expectedType)
 		const found = state.types.typeName(result.typeId)
@@ -1850,7 +1843,6 @@ function checkExpression(
 		case NodeKind.ListLiteral:
 			return checkListLiteral(exprId, expectedType, state, context)
 		default:
-			// Should be unreachable - all expression kinds should be handled
 			console.assert(false, 'checkExpression: unhandled expression kind %d', node.kind)
 			return { instId: null, typeId: BuiltinTypeId.Invalid }
 	}
