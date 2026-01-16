@@ -401,6 +401,14 @@ function extractHintValue(hintId: NodeId, context: CompilationContext): bigint {
 	return isNegative ? -BigInt(valueText) : BigInt(valueText)
 }
 
+function parseKeywordFromPrefix(prefix: string): string | null {
+	const trimmed = prefix.trim()
+	if (trimmed.endsWith('min')) return 'min'
+	if (trimmed.endsWith('max')) return 'max'
+	if (trimmed.endsWith('size')) return 'size'
+	return null
+}
+
 function extractHintKeyword(hintId: NodeId, context: CompilationContext): string | null {
 	const hintNode = context.nodes.get(hintId)
 	const valueToken = context.tokens.get(hintNode.tokenId)
@@ -411,10 +419,18 @@ function extractHintKeyword(hintId: NodeId, context: CompilationContext): string
 	const eqPos = beforeValue.lastIndexOf('=')
 	if (eqPos === -1) return null
 
-	const beforeEq = beforeValue.substring(0, eqPos).trim()
-	if (beforeEq.endsWith('min')) return 'min'
-	if (beforeEq.endsWith('max')) return 'max'
-	return beforeEq.endsWith('size') ? 'size' : null
+	return parseKeywordFromPrefix(beforeValue.substring(0, eqPos))
+}
+
+function processHintNode(
+	hintId: NodeId,
+	context: CompilationContext,
+	constraints: { min?: bigint; max?: bigint }
+): void {
+	const value = extractHintValue(hintId, context)
+	const keyword = extractHintKeyword(hintId, context)
+	if (keyword === 'min') constraints.min = value
+	else if (keyword === 'max') constraints.max = value
 }
 
 function extractConstraintsFromTypeHints(
@@ -423,11 +439,9 @@ function extractConstraintsFromTypeHints(
 ): { min?: bigint; max?: bigint } | null {
 	const constraints: { min?: bigint; max?: bigint } = {}
 	for (const [hintId, hintNode] of context.nodes.iterateChildren(typeHintsId)) {
-		if (hintNode.kind !== NodeKind.Hint) continue
-		const value = extractHintValue(hintId, context)
-		const keyword = extractHintKeyword(hintId, context)
-		if (keyword === 'min') constraints.min = value
-		else if (keyword === 'max') constraints.max = value
+		if (hintNode.kind === NodeKind.Hint) {
+			processHintNode(hintId, context, constraints)
+		}
 	}
 	return constraints
 }
