@@ -50,7 +50,12 @@ function generateListProgram(type: string, size: number, values: number[]): stri
 }
 
 /** Generate list program with index access */
-function generateListWithAccess(type: string, size: number, values: number[], index: number): string {
+function generateListWithAccess(
+	type: string,
+	size: number,
+	values: number[],
+	index: number
+): string {
 	const literal = generateListLiteral(type, values.slice(0, size))
 	return `arr: ${type}[]<size=${size}> = ${literal}\nx: ${type} = arr[${index}]\npanic\n`
 }
@@ -62,19 +67,15 @@ function generateListWithAccess(type: string, size: number, values: number[], in
 describe('list types/TypeStore properties', () => {
 	it('list type interning: same (elementType, size) → same TypeId', () => {
 		fc.assert(
-			fc.property(
-				primitiveTypeArb,
-				fc.integer({ max: 10, min: 1 }),
-				(elementType, size) => {
-					const store = new TypeStore()
-					const elementTypeId = primitiveToTypeId(elementType)
+			fc.property(primitiveTypeArb, fc.integer({ max: 10, min: 1 }), (elementType, size) => {
+				const store = new TypeStore()
+				const elementTypeId = primitiveToTypeId(elementType)
 
-					const id1 = store.registerListType(elementTypeId, size)
-					const id2 = store.registerListType(elementTypeId, size)
+				const id1 = store.registerListType(elementTypeId, size)
+				const id2 = store.registerListType(elementTypeId, size)
 
-					return id1 === id2
-				}
-			),
+				return id1 === id2
+			}),
 			{ numRuns: 200 }
 		)
 	})
@@ -83,9 +84,9 @@ describe('list types/TypeStore properties', () => {
 		fc.assert(
 			fc.property(
 				primitiveTypeArb,
-				fc.tuple(fc.integer({ max: 10, min: 1 }), fc.integer({ max: 10, min: 1 })).filter(
-					([a, b]) => a !== b
-				),
+				fc
+					.tuple(fc.integer({ max: 10, min: 1 }), fc.integer({ max: 10, min: 1 }))
+					.filter(([a, b]) => a !== b),
 				(elementType, [size1, size2]) => {
 					const store = new TypeStore()
 					const elementTypeId = primitiveToTypeId(elementType)
@@ -122,17 +123,13 @@ describe('list types/TypeStore properties', () => {
 
 	it('isListType returns true for registered list types', () => {
 		fc.assert(
-			fc.property(
-				primitiveTypeArb,
-				fc.integer({ max: 10, min: 1 }),
-				(elementType, size) => {
-					const store = new TypeStore()
-					const elementTypeId = primitiveToTypeId(elementType)
-					const listTypeId = store.registerListType(elementTypeId, size)
+			fc.property(primitiveTypeArb, fc.integer({ max: 10, min: 1 }), (elementType, size) => {
+				const store = new TypeStore()
+				const elementTypeId = primitiveToTypeId(elementType)
+				const listTypeId = store.registerListType(elementTypeId, size)
 
-					return store.isListType(listTypeId)
-				}
-			),
+				return store.isListType(listTypeId)
+			}),
 			{ numRuns: 200 }
 		)
 	})
@@ -151,34 +148,26 @@ describe('list types/TypeStore properties', () => {
 
 	it('getListSize returns correct size', () => {
 		fc.assert(
-			fc.property(
-				primitiveTypeArb,
-				fc.integer({ max: 100, min: 1 }),
-				(elementType, size) => {
-					const store = new TypeStore()
-					const elementTypeId = primitiveToTypeId(elementType)
-					const listTypeId = store.registerListType(elementTypeId, size)
+			fc.property(primitiveTypeArb, fc.integer({ max: 100, min: 1 }), (elementType, size) => {
+				const store = new TypeStore()
+				const elementTypeId = primitiveToTypeId(elementType)
+				const listTypeId = store.registerListType(elementTypeId, size)
 
-					return store.getListSize(listTypeId) === size
-				}
-			),
+				return store.getListSize(listTypeId) === size
+			}),
 			{ numRuns: 200 }
 		)
 	})
 
 	it('getListElementType returns correct element type', () => {
 		fc.assert(
-			fc.property(
-				primitiveTypeArb,
-				fc.integer({ max: 10, min: 1 }),
-				(elementType, size) => {
-					const store = new TypeStore()
-					const elementTypeId = primitiveToTypeId(elementType)
-					const listTypeId = store.registerListType(elementTypeId, size)
+			fc.property(primitiveTypeArb, fc.integer({ max: 10, min: 1 }), (elementType, size) => {
+				const store = new TypeStore()
+				const elementTypeId = primitiveToTypeId(elementType)
+				const listTypeId = store.registerListType(elementTypeId, size)
 
-					return store.getListElementType(listTypeId) === elementTypeId
-				}
-			),
+				return store.getListElementType(listTypeId) === elementTypeId
+			}),
 			{ numRuns: 200 }
 		)
 	})
@@ -606,23 +595,19 @@ describe('list types/arithmetic properties', () => {
 
 	it('comparison on list element produces i32 result', () => {
 		fc.assert(
-			fc.property(
-				primitiveTypeArb,
-				fc.integer({ max: 100, min: 0 }),
-				(type, listValue) => {
-					// Compare list element to itself to avoid type mismatch with literals
-					const source = `arr: ${type}[]<size=1> = [${literalForType(type, listValue)}]\nresult: i32 = arr[0] < arr[0]\npanic\n`
+			fc.property(primitiveTypeArb, fc.integer({ max: 100, min: 0 }), (type, listValue) => {
+				// Compare list element to itself to avoid type mismatch with literals
+				const source = `arr: ${type}[]<size=1> = [${literalForType(type, listValue)}]\nresult: i32 = arr[0] < arr[0]\npanic\n`
 
-					const ctx = new CompilationContext(source)
-					tokenize(ctx)
-					const parseResult = parse(ctx)
-					if (!parseResult.succeeded) return true
+				const ctx = new CompilationContext(source)
+				tokenize(ctx)
+				const parseResult = parse(ctx)
+				if (!parseResult.succeeded) return true
 
-					const checkResult = check(ctx)
-					// Comparison result is i32 - should succeed
-					return checkResult.succeeded
-				}
-			),
+				const checkResult = check(ctx)
+				// Comparison result is i32 - should succeed
+				return checkResult.succeeded
+			}),
 			{ numRuns: 50 }
 		)
 	})
