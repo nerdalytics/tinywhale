@@ -371,6 +371,69 @@ export class TypeStore {
 		return fields.find((f) => f.name === fieldName)
 	}
 
+	/** Interning map for list types: "elementTypeId:size" -> TypeId */
+	private readonly listTypeCache: Map<string, TypeId> = new Map()
+
+	/**
+	 * Register a list type with element type and size.
+	 * List types are interned: same element type + size = same TypeId.
+	 */
+	registerListType(elementTypeId: TypeId, size: number): TypeId {
+		const cacheKey = `${elementTypeId}:${size}`
+		const existing = this.listTypeCache.get(cacheKey)
+		if (existing !== undefined) {
+			return existing
+		}
+
+		const elementInfo = this.get(elementTypeId)
+		const name = `[${elementInfo.name}; ${size}]`
+
+		const id = typeId(this.types.length)
+		const info: TypeInfo = {
+			elementTypeId,
+			kind: TypeKind.List,
+			listSize: size,
+			name,
+			parseNodeId: null,
+			underlying: id, // Lists reference themselves
+		}
+		this.types.push(info)
+		this.listTypeCache.set(cacheKey, id)
+		return id
+	}
+
+	/**
+	 * Check if a type is a list type.
+	 */
+	isListType(id: TypeId): boolean {
+		const info = this.types[id]
+		return info?.kind === TypeKind.List
+	}
+
+	/**
+	 * Get the size of a list type.
+	 * Returns undefined if not a list type.
+	 */
+	getListSize(id: TypeId): number | undefined {
+		const info = this.types[id]
+		if (info?.kind !== TypeKind.List) {
+			return undefined
+		}
+		return info.listSize
+	}
+
+	/**
+	 * Get the element type of a list type.
+	 * Returns undefined if not a list type.
+	 */
+	getListElementType(id: TypeId): TypeId | undefined {
+		const info = this.types[id]
+		if (info?.kind !== TypeKind.List) {
+			return undefined
+		}
+		return info.elementTypeId
+	}
+
 	*[Symbol.iterator](): Generator<[TypeId, TypeInfo]> {
 		for (let i = 0; i < this.types.length; i++) {
 			const info = this.types[i]
