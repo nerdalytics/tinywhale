@@ -187,10 +187,13 @@ const KEYWORDS: Record<string, (typeof TokenKind)[keyof typeof TokenKind]> = {
 }
 
 const SIMPLE_OPERATORS: Record<string, TokenKind | undefined> = {
+	',': TokenKind.Comma,
 	':': TokenKind.Colon,
 	'.': TokenKind.Dot,
 	'(': TokenKind.LParen,
 	')': TokenKind.RParen,
+	'[': TokenKind.LBracket,
+	']': TokenKind.RBracket,
 	'*': TokenKind.Star,
 	'/': TokenKind.Slash,
 	'^': TokenKind.Caret,
