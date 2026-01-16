@@ -1498,6 +1498,33 @@ function checkListBaseAndIndex(
 }
 
 /**
+ * Try early resolution of index access via flattened symbols or bounds checking.
+ * Returns ExprResult if resolved, null if should continue to standard handling.
+ */
+function tryEarlyIndexResolution(
+	exprId: NodeId,
+	baseId: NodeId,
+	indexId: NodeId,
+	index: number,
+	state: CheckerState,
+	context: CompilationContext
+): ExprResult | null {
+	const symId = tryResolveFlattenedListSymbol(baseId, index, state, context)
+	if (symId !== null) return emitFlattenedVarRef(exprId, symId, state)
+
+	const listBoundsResult = checkListBindingBounds(baseId, indexId, index, state, context)
+	if (listBoundsResult.isListBinding) {
+		return { instId: null, typeId: BuiltinTypeId.Invalid }
+	}
+
+	if (!checkFlattenedBaseExists(baseId, state, context)) {
+		return { instId: null, typeId: BuiltinTypeId.Invalid }
+	}
+
+	return null
+}
+
+/**
  * Check an index access expression with type inference.
  * In postorder: [base..., indexExpr, IndexAccess]
  * For lists, validates index bounds and returns element type.
@@ -1514,23 +1541,9 @@ function checkIndexAccessInferred(
 	const index = extractValidatedIndex(indexId, indexNode, context)
 	if (index === null) return { instId: null, typeId: BuiltinTypeId.Invalid }
 
-	// Try flattened symbol resolution first (arr[0] → arr_0)
-	const symId = tryResolveFlattenedListSymbol(baseId, index, state, context)
-	if (symId !== null) return emitFlattenedVarRef(exprId, symId, state)
+	const earlyResult = tryEarlyIndexResolution(exprId, baseId, indexId, index, state, context)
+	if (earlyResult !== null) return earlyResult
 
-	// Check if base is a list binding with out of bounds access
-	const listBoundsResult = checkListBindingBounds(baseId, indexId, index, state, context)
-	if (listBoundsResult.isListBinding) {
-		// It's a list binding - bounds check was performed, error already emitted if out of bounds
-		return { instId: null, typeId: BuiltinTypeId.Invalid }
-	}
-
-	// Check for unknown base identifier
-	if (!checkFlattenedBaseExists(baseId, state, context)) {
-		return { instId: null, typeId: BuiltinTypeId.Invalid }
-	}
-
-	// Standard index access handling - infer base type
 	const baseResult = checkExpressionInferred(baseId, state, context)
 	if (!isValidExprResult(baseResult)) return baseResult
 
