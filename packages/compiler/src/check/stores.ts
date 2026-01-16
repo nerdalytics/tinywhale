@@ -113,6 +113,8 @@ export class SymbolStore {
 	private readonly nameToSymbol: Map<StringId, SymbolId> = new Map()
 	/** Next WASM local index to allocate */
 	private nextLocalIndex = 0
+	/** List binding metadata: base name StringId -> list TypeId */
+	private readonly listBindings: Map<StringId, TypeId> = new Map()
 
 	/**
 	 * Add a new symbol binding.
@@ -215,6 +217,10 @@ export class SymbolStore {
 			return []
 		}
 
+		// Store list binding metadata for bounds checking
+		const baseNameId = intern(baseName)
+		this.listBindings.set(baseNameId, listTypeId)
+
 		const symbolIds: SymbolId[] = []
 		for (let i = 0; i < size; i++) {
 			const flatName = `${baseName}_${i}`
@@ -227,6 +233,14 @@ export class SymbolStore {
 			symbolIds.push(symId)
 		}
 		return symbolIds
+	}
+
+	/**
+	 * Look up list binding metadata by base name.
+	 * Returns the list type ID if the name is a list binding, undefined otherwise.
+	 */
+	getListBinding(nameId: StringId): TypeId | undefined {
+		return this.listBindings.get(nameId)
 	}
 
 	*[Symbol.iterator](): Generator<[SymbolId, SymbolEntry]> {

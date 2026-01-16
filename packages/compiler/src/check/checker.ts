@@ -1376,6 +1376,36 @@ function tryResolveFlattenedListSymbol(
 }
 
 /**
+ * Check if base is a list binding and validate index bounds.
+ * Returns true if it's a list binding (valid or out of bounds).
+ * Returns false if it's not a list binding.
+ * When out of bounds, emits TWCHECK034.
+ */
+function checkListBindingBounds(
+	baseId: NodeId,
+	indexId: NodeId,
+	index: number,
+	state: CheckerState,
+	context: CompilationContext
+): { isListBinding: boolean; valid: boolean } {
+	const basePath = buildFlattenedBasePath(baseId, context)
+	if (basePath === null) return { isListBinding: false, valid: false }
+
+	const baseNameId = context.strings.intern(basePath)
+	const listTypeId = state.symbols.getListBinding(baseNameId)
+
+	if (listTypeId === undefined) return { isListBinding: false, valid: false }
+
+	// It's a list binding - check bounds
+	const listSize = state.types.getListSize(listTypeId)
+	if (listSize !== undefined && !validateListIndexBounds(indexId, index, listSize, context)) {
+		return { isListBinding: true, valid: false }
+	}
+
+	return { isListBinding: true, valid: true }
+}
+
+/**
  * Extract integer index value from an IntLiteral node.
  */
 function extractIndexValue(indexNode: ParseNode, context: CompilationContext): number {
@@ -1487,6 +1517,13 @@ function checkIndexAccessInferred(
 	// Try flattened symbol resolution first (arr[0] → arr_0)
 	const symId = tryResolveFlattenedListSymbol(baseId, index, state, context)
 	if (symId !== null) return emitFlattenedVarRef(exprId, symId, state)
+
+	// Check if base is a list binding with out of bounds access
+	const listBoundsResult = checkListBindingBounds(baseId, indexId, index, state, context)
+	if (listBoundsResult.isListBinding) {
+		// It's a list binding - bounds check was performed, error already emitted if out of bounds
+		return { instId: null, typeId: BuiltinTypeId.Invalid }
+	}
 
 	// Check for unknown base identifier
 	if (!checkFlattenedBaseExists(baseId, state, context)) {

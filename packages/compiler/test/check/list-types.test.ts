@@ -64,16 +64,18 @@ panic`
 
 	describe('error cases', () => {
 		describe('TWCHECK034: index out of bounds', () => {
-			it('errors when index equals list size (reports undefined variable)', () => {
-				// Note: Current implementation may report "undefined variable" when
-				// accessing list elements - this test documents current behavior
+			it('errors when index equals list size', () => {
 				const source = `arr: i32[]<size=1> = [42]
 x: i32 = arr[1]
 panic`
 				const ctx = prepareAndCheck(source)
 
-				// Should have errors - either TWCHECK034 or undefined variable
 				assert.ok(ctx.hasErrors(), 'should have errors for index == size')
+				const diags = ctx.getDiagnostics()
+				assert.ok(
+					diags.some((d) => d.def.code === 'TWCHECK034'),
+					'should emit TWCHECK034 for index out of bounds'
+				)
 			})
 
 			it('errors when index exceeds list size', () => {
@@ -83,6 +85,11 @@ panic`
 				const ctx = prepareAndCheck(source)
 
 				assert.ok(ctx.hasErrors(), 'should have errors for index > size')
+				const diags = ctx.getDiagnostics()
+				assert.ok(
+					diags.some((d) => d.def.code === 'TWCHECK034'),
+					'should emit TWCHECK034 for index out of bounds'
+				)
 			})
 		})
 
