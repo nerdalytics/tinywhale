@@ -1,0 +1,18 @@
+# TinyWhale: Type hints (refinement types) for integer constraints
+
+# Basic min constraint - value must be >= 0
+positive: i32<min=0> = 42
+
+# Basic max constraint - value must be <= 100
+limited: i32<max=100> = 75
+
+# Both constraints - value must be in range [0, 125]
+age: i32<min=0, max=125> = 30
+
+# Negative bounds are supported
+temperature: i32<min=-40, max=50> = 20
+
+# i64 also supports type hints
+big: i64<min=0> = 1000000
+
+panic
