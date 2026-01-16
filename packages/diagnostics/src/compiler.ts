@@ -269,6 +269,39 @@ export const TWCHECK033: DiagnosticDef = {
 	suggestion: 'Use the correct type name that matches the field declaration.',
 }
 
+export const TWCHECK034: DiagnosticDef = {
+	code: 'TWCHECK034',
+	description: 'The constant index exceeds the declared size of the list.',
+	message: 'index out of bounds: index {index} >= size {size}',
+	severity: DiagnosticSeverity.Error,
+	suggestion: 'Use an index between 0 and {maxIndex}.',
+}
+
+export const TWCHECK035: DiagnosticDef = {
+	code: 'TWCHECK035',
+	description:
+		'Variable indices cannot be statically verified to be within bounds without additional proof.',
+	message: 'cannot prove index bounds for variable access',
+	severity: DiagnosticSeverity.Error,
+	suggestion: 'Use a constant index or add bounds checking.',
+}
+
+export const TWCHECK036: DiagnosticDef = {
+	code: 'TWCHECK036',
+	description: 'List size annotations must specify a positive integer value.',
+	message: 'list size must be a positive integer',
+	severity: DiagnosticSeverity.Error,
+	suggestion: 'Use a positive integer like `<size=4>`.',
+}
+
+export const TWCHECK037: DiagnosticDef = {
+	code: 'TWCHECK037',
+	description: 'The number of elements in the list literal does not match the declared size.',
+	message: 'list literal length {found} does not match declared size {expected}',
+	severity: DiagnosticSeverity.Error,
+	suggestion: 'Provide exactly {expected} elements or change the size annotation.',
+}
+
 // =============================================================================
 // CHECKER WARNINGS (TWCHECK050-099)
 // =============================================================================
@@ -323,6 +356,10 @@ export const COMPILER_DIAGNOSTICS = {
 	TWCHECK031,
 	TWCHECK032,
 	TWCHECK033,
+	TWCHECK034,
+	TWCHECK035,
+	TWCHECK036,
+	TWCHECK037,
 	TWCHECK050,
 	TWGEN001,
 	TWLEX001,
