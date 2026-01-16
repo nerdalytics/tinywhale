@@ -351,14 +351,90 @@ function resolveUserDefinedType(
 	return typeId !== undefined ? { name: typeName, typeId } : null
 }
 
+function findHintedPrimitiveChild(
+	typeAnnotationId: NodeId,
+	context: CompilationContext
+): NodeId | null {
+	return findChildByKind(typeAnnotationId, NodeKind.HintedPrimitive, context)
+}
+
+function resolveHintedPrimitive(
+	hintedPrimitiveId: NodeId,
+	state: CheckerState,
+	context: CompilationContext
+): { name: string; typeId: TypeId } | null {
+	const hintedPrimitiveNode = context.nodes.get(hintedPrimitiveId)
+	const baseToken = context.tokens.get(hintedPrimitiveNode.tokenId)
+	const baseType = getTypeNameFromToken(baseToken.kind)
+	if (!baseType) return null
+
+	const typeHintsId = findChildByKind(hintedPrimitiveId, NodeKind.TypeHints, context)
+	if (typeHintsId === null) return baseType
+
+	const constraints = extractConstraintsFromTypeHints(typeHintsId, context)
+	const hasConstraints = constraints?.min !== undefined || constraints?.max !== undefined
+	if (!hasConstraints) return baseType
+
+	const refinedTypeId = state.types.registerRefinedType(baseType.typeId, constraints!)
+	return { name: state.types.typeName(refinedTypeId), typeId: refinedTypeId }
+}
+
+function extractHintValue(hintId: NodeId, context: CompilationContext): bigint {
+	const hintNode = context.nodes.get(hintId)
+	const valueToken = context.tokens.get(hintNode.tokenId)
+	const valueText = context.strings.get(valueToken.payload as StringId)
+	const line = context.getSourceLine(valueToken.line) ?? ''
+	const beforeValue = line.substring(0, valueToken.column - 1).trimEnd()
+	const isNegative = beforeValue.endsWith('-')
+	return isNegative ? -BigInt(valueText) : BigInt(valueText)
+}
+
+function extractHintKeyword(hintId: NodeId, context: CompilationContext): string | null {
+	const hintNode = context.nodes.get(hintId)
+	const valueToken = context.tokens.get(hintNode.tokenId)
+	const line = context.getSourceLine(valueToken.line)
+	if (!line) return null
+
+	const beforeValue = line.substring(0, valueToken.column - 1)
+	const eqPos = beforeValue.lastIndexOf('=')
+	if (eqPos === -1) return null
+
+	const beforeEq = beforeValue.substring(0, eqPos).trim()
+	if (beforeEq.endsWith('min')) return 'min'
+	if (beforeEq.endsWith('max')) return 'max'
+	return beforeEq.endsWith('size') ? 'size' : null
+}
+
+function extractConstraintsFromTypeHints(
+	typeHintsId: NodeId,
+	context: CompilationContext
+): { min?: bigint; max?: bigint } | null {
+	const constraints: { min?: bigint; max?: bigint } = {}
+	for (const [hintId, hintNode] of context.nodes.iterateChildren(typeHintsId)) {
+		if (hintNode.kind !== NodeKind.Hint) continue
+		const value = extractHintValue(hintId, context)
+		const keyword = extractHintKeyword(hintId, context)
+		if (keyword === 'min') constraints.min = value
+		else if (keyword === 'max') constraints.max = value
+	}
+	return constraints
+}
+
 function resolveTypeFromAnnotation(
 	typeAnnotationId: NodeId,
 	state: CheckerState,
 	context: CompilationContext
 ): { name: string; typeId: TypeId } | null {
+	// Check for list type first
 	const listTypeChildId = findListTypeChild(typeAnnotationId, context)
 	if (listTypeChildId !== null) {
 		return resolveListType(listTypeChildId, state, context)
+	}
+
+	// Check for hinted primitive (e.g., i32<min=0, max=100>)
+	const hintedPrimitiveId = findHintedPrimitiveChild(typeAnnotationId, context)
+	if (hintedPrimitiveId !== null) {
+		return resolveHintedPrimitive(hintedPrimitiveId, state, context)
 	}
 
 	const typeAnnotationNode = context.nodes.get(typeAnnotationId)
@@ -380,14 +456,31 @@ const INT_BOUNDS = {
 	i64: { max: BigInt('9223372036854775807'), min: BigInt('-9223372036854775808') },
 }
 
-function valueFitsInType(value: bigint, typeId: TypeId): boolean {
-	if (typeId === BuiltinTypeId.I32) {
+function fitsInBaseBounds(value: bigint, baseTypeId: TypeId): boolean {
+	if (baseTypeId === BuiltinTypeId.I32) {
 		return value >= INT_BOUNDS.i32.min && value <= INT_BOUNDS.i32.max
 	}
-	if (typeId === BuiltinTypeId.I64) {
+	if (baseTypeId === BuiltinTypeId.I64) {
 		return value >= INT_BOUNDS.i64.min && value <= INT_BOUNDS.i64.max
 	}
 	return false
+}
+
+function fitsInConstraints(value: bigint, constraints: { min?: bigint; max?: bigint }): boolean {
+	if (constraints.min !== undefined && value < constraints.min) return false
+	if (constraints.max !== undefined && value > constraints.max) return false
+	return true
+}
+
+function valueFitsInType(value: bigint, typeId: TypeId, state?: CheckerState): boolean {
+	const baseTypeId = state?.types.toWasmType(typeId) ?? typeId
+	if (!fitsInBaseBounds(value, baseTypeId)) return false
+
+	if (state?.types.isRefinedType(typeId)) {
+		const constraints = state.types.getConstraints(typeId)
+		if (constraints && !fitsInConstraints(value, constraints)) return false
+	}
+	return true
 }
 
 /**
@@ -586,7 +679,7 @@ function checkIntLiteralAsInt(
 	let value = parseIntegerLiteral(literalText)
 	if (negate) value = -value
 
-	if (!valueFitsInType(value, expectedType)) {
+	if (!valueFitsInType(value, expectedType, state)) {
 		const typeName = state.types.typeName(expectedType)
 		return emitIntBoundsError(nodeId, typeName, formatDisplayValue(literalText, negate), context)
 	}
