@@ -17,6 +17,7 @@ import {
 	type SymbolId,
 	scopeId,
 	symbolId,
+	type TypeConstraints,
 	type TypeId,
 	type TypeInfo,
 	TypeKind,
@@ -316,7 +317,7 @@ export class TypeStore {
 		if (!info) {
 			return BuiltinTypeId.Invalid
 		}
-		if (info.kind === TypeKind.Distinct) {
+		if (info.kind === TypeKind.Distinct || info.kind === TypeKind.Refined) {
 			return this.toWasmType(info.underlying)
 		}
 		return id
@@ -404,6 +405,70 @@ export class TypeStore {
 			return undefined
 		}
 		return info.elementTypeId
+	}
+
+	private readonly refinedTypeCache: Map<string, TypeId> = new Map()
+
+	/**
+	 * Register a refined type with constraints (min/max).
+	 * Refined types are interned - same base + constraints = same TypeId.
+	 */
+	registerRefinedType(baseTypeId: TypeId, constraints: TypeConstraints): TypeId {
+		const cacheKey = this.makeRefinedTypeCacheKey(baseTypeId, constraints)
+		const existing = this.refinedTypeCache.get(cacheKey)
+		if (existing !== undefined) {
+			return existing
+		}
+
+		const baseInfo = this.get(baseTypeId)
+		const name = this.makeRefinedTypeName(baseInfo.name, constraints)
+
+		const id = typeId(this.types.length)
+		const info: TypeInfo = {
+			constraints,
+			kind: TypeKind.Refined,
+			name,
+			parseNodeId: null,
+			underlying: baseTypeId,
+		}
+		this.types.push(info)
+		this.refinedTypeCache.set(cacheKey, id)
+		return id
+	}
+
+	private makeRefinedTypeCacheKey(baseTypeId: TypeId, constraints: TypeConstraints): string {
+		const parts = [`${baseTypeId}`]
+		if (constraints.min !== undefined) {
+			parts.push(`min=${constraints.min}`)
+		}
+		if (constraints.max !== undefined) {
+			parts.push(`max=${constraints.max}`)
+		}
+		return parts.join(':')
+	}
+
+	private makeRefinedTypeName(baseName: string, constraints: TypeConstraints): string {
+		const parts: string[] = []
+		if (constraints.min !== undefined) {
+			parts.push(`min=${constraints.min}`)
+		}
+		if (constraints.max !== undefined) {
+			parts.push(`max=${constraints.max}`)
+		}
+		return `${baseName}<${parts.join(', ')}>`
+	}
+
+	isRefinedType(id: TypeId): boolean {
+		const info = this.types[id]
+		return info?.kind === TypeKind.Refined
+	}
+
+	getConstraints(id: TypeId): TypeConstraints | undefined {
+		const info = this.types[id]
+		if (info?.kind !== TypeKind.Refined) {
+			return undefined
+		}
+		return info.constraints
 	}
 
 	*[Symbol.iterator](): Generator<[TypeId, TypeInfo]> {
