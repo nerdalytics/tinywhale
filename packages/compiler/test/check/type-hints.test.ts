@@ -262,3 +262,48 @@ describe('check/type-hints diagnostics', () => {
 		})
 	})
 })
+
+describe('check/type-hints type compatibility', () => {
+	it('errors when assigning i32 to i32<min=0> without cast', () => {
+		const source = `raw: i32 = 5
+x: i32<min=0> = raw
+panic`
+		const ctx = new CompilationContext(source)
+		tokenize(ctx)
+		parse(ctx)
+		check(ctx)
+
+		const diags = ctx.getDiagnostics()
+		assert.ok(
+			diags.some((d) => d.def.code === 'TWCHECK012'),
+			`expected TWCHECK012, got: ${diags.map((d) => d.def.code)}`
+		)
+	})
+
+	it('errors when assigning i32<min=0> to i32<min=0, max=100> without cast', () => {
+		const source = `x: i32<min=0> = 5
+y: i32<min=0, max=100> = x
+panic`
+		const ctx = new CompilationContext(source)
+		tokenize(ctx)
+		parse(ctx)
+		check(ctx)
+
+		const diags = ctx.getDiagnostics()
+		assert.ok(
+			diags.some((d) => d.def.code === 'TWCHECK012'),
+			`expected TWCHECK012, got: ${diags.map((d) => d.def.code)}`
+		)
+	})
+
+	it('allows assigning literal that satisfies constraints', () => {
+		const source = `x: i32<min=0, max=100> = 50
+panic`
+		const ctx = new CompilationContext(source)
+		tokenize(ctx)
+		parse(ctx)
+		const result = check(ctx)
+
+		assert.ok(result.succeeded)
+	})
+})
