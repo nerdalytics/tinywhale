@@ -251,13 +251,11 @@ function createNodeEmittingSemantics(
 		})
 	}
 
-	/** Check if node is a TypeRef wrapping a ListType */
 	function isListTypeRef(typeNode: Node): boolean {
 		if (typeNode.ctorName !== 'TypeRef') return false
 		return typeNode.child(0).ctorName === 'ListType'
 	}
 
-	/** Extract ListType from TypeRef wrapper and emit if present */
 	function maybeEmitListType(typeNode: Node): void {
 		if (!isListTypeRef(typeNode)) return
 		typeNode.child(0)['emitTypeAnnotation']()
@@ -324,7 +322,7 @@ function createNodeEmittingSemantics(
 				const baseSize = context.nodes.get(currentId).subtreeSize
 				currentId = context.nodes.add({
 					kind: NodeKind.IndexAccess,
-					subtreeSize: 1 + baseSize + 1, // base + index literal
+					subtreeSize: 1 + baseSize + 1,
 					tokenId: tid,
 				})
 			}
@@ -348,14 +346,9 @@ function createNodeEmittingSemantics(
 		},
 		ListLiteral(_lbracket: Node, elements: Node, _rbracket: Node): NodeId {
 			const startCount = context.nodes.count()
-			// Emit all elements first (postorder)
-			// ListElements = Expression (comma Expression)*
-			// child(0) = first Expression
-			// child(1) = _iter of commas
-			// child(2) = _iter of remaining Expressions
 			const firstExpr = elements.child(0)
 			firstExpr['emitExpression']()
-			const restExprs = elements.child(2) // The _iter of remaining Expressions
+			const restExprs = elements.child(2)
 			for (let i = 0; i < restExprs.numChildren; i++) {
 				restExprs.child(i)['emitExpression']()
 			}
@@ -473,7 +466,7 @@ function createNodeEmittingSemantics(
 			const tid = getTokenIdForOhmNode(this)
 			return context.nodes.add({
 				kind: NodeKind.LiteralPattern,
-				subtreeSize: 1, // Leaf - minus is part of pattern
+				subtreeSize: 1,
 				tokenId: tid,
 			})
 		},
@@ -595,7 +588,7 @@ function createNodeEmittingSemantics(
 			const startCount = context.nodes.count()
 			ident['emitExpression']()
 			typeAnnotation['emitTypeAnnotation']()
-			matchExpr['emitStatement']() // MatchExpr emits scrutinee + MatchExpr node
+			matchExpr['emitStatement']()
 			const childCount = context.nodes.count() - startCount
 
 			const lineNumber = getLineNumber(this)
@@ -636,13 +629,12 @@ function createNodeEmittingSemantics(
 			const tid = getTokenIdForOhmNode(this)
 			return context.nodes.add({
 				kind: NodeKind.TypeDecl,
-				subtreeSize: 1, // Will be updated when fields are processed
+				subtreeSize: 1,
 				tokenId: tid,
 			})
 		},
 		VariableBinding(ident: Node, typeAnnotation: Node, _equals: Node, optExpr: Node): NodeId {
 			const startCount = context.nodes.count()
-			// Emit children first (postorder: children before parent)
 			ident['emitExpression']()
 			typeAnnotation['emitTypeAnnotation']()
 

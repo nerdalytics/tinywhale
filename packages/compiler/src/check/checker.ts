@@ -198,10 +198,6 @@ function getTypeNameFromToken(tokenKind: TokenKind): { name: string; typeId: Typ
 	}
 }
 
-/**
- * Extract the size value from a SizeHint node.
- * SizeHint token contains the integer literal value.
- */
 function extractSizeFromSizeHint(sizeHintId: NodeId, context: CompilationContext): number | null {
 	const sizeHintNode = context.nodes.get(sizeHintId)
 	const sizeToken = context.tokens.get(sizeHintNode.tokenId)
@@ -210,11 +206,6 @@ function extractSizeFromSizeHint(sizeHintId: NodeId, context: CompilationContext
 	return Number.isNaN(size) ? null : size
 }
 
-/**
- * Resolve the element type from a ListType node.
- * ListType children (in postorder): [SizeHint] or [nestedListType, SizeHint]
- * The tokenId points to the element type keyword/identifier.
- */
 function resolveListElementType(
 	listTypeId: NodeId,
 	state: CheckerState,
@@ -223,13 +214,11 @@ function resolveListElementType(
 	const listTypeNode = context.nodes.get(listTypeId)
 	const elementToken = context.tokens.get(listTypeNode.tokenId)
 
-	// Try primitive types first
 	const primitiveType = getTypeNameFromToken(elementToken.kind)
 	if (primitiveType) {
 		return primitiveType.typeId
 	}
 
-	// Try user-defined types
 	if (elementToken.kind === TokenKind.Identifier) {
 		const typeName = context.strings.get(elementToken.payload as StringId)
 		return state.types.lookup(typeName) ?? null
@@ -238,9 +227,6 @@ function resolveListElementType(
 	return null
 }
 
-/**
- * Find a child node by kind.
- */
 function findChildByKind(
 	parentId: NodeId,
 	kind: NodeKind,
@@ -252,23 +238,14 @@ function findChildByKind(
 	return null
 }
 
-/**
- * Find SizeHint child from a ListType node.
- */
 function findSizeHintChild(listTypeId: NodeId, context: CompilationContext): NodeId | null {
 	return findChildByKind(listTypeId, NodeKind.SizeHint, context)
 }
 
-/**
- * Find nested ListType child from a ListType node.
- */
 function findNestedListTypeChild(listTypeId: NodeId, context: CompilationContext): NodeId | null {
 	return findChildByKind(listTypeId, NodeKind.ListType, context)
 }
 
-/**
- * Validate and extract list size from SizeHint.
- */
 function validateListSize(sizeHintId: NodeId, context: CompilationContext): number | null {
 	const size = extractSizeFromSizeHint(sizeHintId, context)
 	if (size === null) return null
@@ -281,9 +258,6 @@ function validateListSize(sizeHintId: NodeId, context: CompilationContext): numb
 	return size
 }
 
-/**
- * Emit unknown element type error for list.
- */
 function emitListElementTypeError(listTypeId: NodeId, context: CompilationContext): void {
 	const listTypeNode = context.nodes.get(listTypeId)
 	const elementToken = context.tokens.get(listTypeNode.tokenId)
@@ -294,9 +268,6 @@ function emitListElementTypeError(listTypeId: NodeId, context: CompilationContex
 	context.emitAtNode('TWCHECK010' as DiagnosticCode, listTypeId, { found: typeName })
 }
 
-/**
- * Resolve element type for a list (handles nested vs simple case).
- */
 function resolveListElementTypeForList(
 	listTypeId: NodeId,
 	nestedListTypeId: NodeId | null,
@@ -309,11 +280,6 @@ function resolveListElementTypeForList(
 	return resolveListElementType(listTypeId, state, context)
 }
 
-/**
- * Resolve type from a ListType node.
- * Handles nested list types and primitive/user-defined element types.
- * Returns null if the type is invalid.
- */
 function resolveListType(
 	listTypeId: NodeId,
 	state: CheckerState,
@@ -337,9 +303,6 @@ function resolveListType(
 	return { name: state.types.typeName(typeId), typeId }
 }
 
-/**
- * Find ListType child from a TypeAnnotation node (if any).
- */
 function findListTypeChild(typeAnnotationId: NodeId, context: CompilationContext): NodeId | null {
 	for (const [childId, child] of context.nodes.iterateChildren(typeAnnotationId)) {
 		if (child.kind === NodeKind.ListType) {
@@ -349,9 +312,6 @@ function findListTypeChild(typeAnnotationId: NodeId, context: CompilationContext
 	return null
 }
 
-/**
- * Resolve user-defined type from identifier token.
- */
 function resolveUserDefinedType(
 	typeName: string,
 	state: CheckerState
@@ -360,17 +320,11 @@ function resolveUserDefinedType(
 	return typeId !== undefined ? { name: typeName, typeId } : null
 }
 
-/**
- * Resolve type from a TypeAnnotation node.
- * Handles primitive types (i32, i64, f32, f64), user-defined record types, and list types.
- * Returns null if the type is unknown.
- */
 function resolveTypeFromAnnotation(
 	typeAnnotationId: NodeId,
 	state: CheckerState,
 	context: CompilationContext
 ): { name: string; typeId: TypeId } | null {
-	// Check for ListType child (for list type annotations)
 	const listTypeChildId = findListTypeChild(typeAnnotationId, context)
 	if (listTypeChildId !== null) {
 		return resolveListType(listTypeChildId, state, context)
@@ -390,10 +344,6 @@ function resolveTypeFromAnnotation(
 	return null
 }
 
-/**
- * Integer bounds for type checking literals.
- * All bounds use BigInt for consistent precision.
- */
 const INT_BOUNDS = {
 	i32: { max: BigInt(2147483647), min: BigInt(-2147483648) },
 	i64: { max: BigInt('9223372036854775807'), min: BigInt('-9223372036854775808') },
@@ -435,7 +385,6 @@ function isIntegerType(typeId: TypeId): boolean {
 	return typeId === BuiltinTypeId.I32 || typeId === BuiltinTypeId.I64
 }
 
-/** Operators that only work with integer types */
 function isIntegerOnlyOperator(tokenKind: TokenKind): boolean {
 	switch (tokenKind) {
 		case TokenKind.Percent:
@@ -453,7 +402,6 @@ function isIntegerOnlyOperator(tokenKind: TokenKind): boolean {
 	}
 }
 
-/** Operators that are comparisons (result is i32 regardless of operand types) */
 function isComparisonOperator(tokenKind: TokenKind): boolean {
 	switch (tokenKind) {
 		case TokenKind.LessThan:
@@ -585,7 +533,6 @@ function emitIntBoundsError(
 	return { instId: null, typeId: BuiltinTypeId.Invalid }
 }
 
-/** Parse integer literal text, handling scientific notation (e.g., 1e10) */
 function parseIntegerLiteral(text: string): bigint {
 	const expMatch = text.match(/^(\d+)[eE]([+-]?\d+)$/)
 	if (expMatch) {
@@ -706,11 +653,6 @@ function checkFloatLiteral(
 	return emitFloatConstInst(nodeId, expectedType, value, state, context)
 }
 
-/**
- * Check a unary expression (negation or bitwise NOT).
- * In postorder, the child is at exprNodeId - 1.
- * Operator is determined by the tokenId.
- */
 function checkBitwiseNot(
 	exprNodeId: NodeId,
 	childId: NodeId,
@@ -793,10 +735,6 @@ function checkUnaryExpr(
 	return checkUnaryNegate(exprNodeId, childId, child.kind, expectedType, state, context)
 }
 
-/**
- * Check a parenthesized expression.
- * In postorder, the child is at exprNodeId - 1.
- */
 function checkParenExpr(
 	exprNodeId: NodeId,
 	expectedType: TypeId,
@@ -807,12 +745,6 @@ function checkParenExpr(
 	return checkExpression(childId, expectedType, state, context)
 }
 
-/**
- * Check a binary expression.
- * In postorder: [left..., right..., BinaryExpr]
- * The right operand's root is at exprId - 1.
- * The left operand's root is at rightRootId - rightSubtreeSize.
- */
 interface BinaryOperands {
 	leftResult: ExprResult
 	rightResult: ExprResult
@@ -1357,10 +1289,6 @@ function emitFieldAccessInst(
 	return { instId, typeId: fieldInfo.typeId }
 }
 
-/**
- * Try to resolve a flattened list element symbol.
- * For arr[0] where arr is a list, returns the symbol for arr_0 if it exists.
- */
 function tryResolveFlattenedListSymbol(
 	baseId: NodeId,
 	index: number,
@@ -1375,12 +1303,6 @@ function tryResolveFlattenedListSymbol(
 	return state.symbols.lookupByName(flattenedNameId) ?? null
 }
 
-/**
- * Check if base is a list binding and validate index bounds.
- * Returns true if it's a list binding (valid or out of bounds).
- * Returns false if it's not a list binding.
- * When out of bounds, emits TWCHECK034.
- */
 function checkListBindingBounds(
 	baseId: NodeId,
 	indexId: NodeId,
@@ -1396,7 +1318,6 @@ function checkListBindingBounds(
 
 	if (listTypeId === undefined) return { isListBinding: false, valid: false }
 
-	// It's a list binding - check bounds
 	const listSize = state.types.getListSize(listTypeId)
 	if (listSize !== undefined && !validateListIndexBounds(indexId, index, listSize, context)) {
 		return { isListBinding: true, valid: false }
@@ -1405,18 +1326,12 @@ function checkListBindingBounds(
 	return { isListBinding: true, valid: true }
 }
 
-/**
- * Extract integer index value from an IntLiteral node.
- */
 function extractIndexValue(indexNode: ParseNode, context: CompilationContext): number {
 	const indexToken = context.tokens.get(indexNode.tokenId)
 	const indexText = context.strings.get(indexToken.payload as StringId)
 	return Number.parseInt(indexText, 10)
 }
 
-/**
- * Validate list index is within bounds.
- */
 function validateListIndexBounds(
 	indexId: NodeId,
 	index: number,
@@ -1434,9 +1349,6 @@ function validateListIndexBounds(
 	return true
 }
 
-/**
- * Emit index access instruction for standard (non-flattened) list access.
- */
 function emitIndexAccessInst(
 	exprId: NodeId,
 	baseResult: ExprResult,
@@ -1447,16 +1359,13 @@ function emitIndexAccessInst(
 	const instId = state.insts.add({
 		arg0: baseResult.instId as number,
 		arg1: index,
-		kind: InstKind.FieldAccess, // Reuse FieldAccess for element access
+		kind: InstKind.FieldAccess,
 		parseNodeId: exprId,
 		typeId: elementTypeId,
 	})
 	return { instId, typeId: elementTypeId }
 }
 
-/**
- * Validate index is IntLiteral and extract its value.
- */
 function extractValidatedIndex(
 	indexId: NodeId,
 	indexNode: ParseNode,
@@ -1469,9 +1378,6 @@ function extractValidatedIndex(
 	return extractIndexValue(indexNode, context)
 }
 
-/**
- * Validate base is a list type and return element access result.
- */
 function checkListBaseAndIndex(
 	exprId: NodeId,
 	indexId: NodeId,
@@ -1497,10 +1403,6 @@ function checkListBaseAndIndex(
 	return emitIndexAccessInst(exprId, baseResult, index, elementTypeId, state)
 }
 
-/**
- * Try early resolution of index access via flattened symbols or bounds checking.
- * Returns ExprResult if resolved, null if should continue to standard handling.
- */
 function tryEarlyIndexResolution(
 	exprId: NodeId,
 	baseId: NodeId,
@@ -1524,11 +1426,6 @@ function tryEarlyIndexResolution(
 	return null
 }
 
-/**
- * Check an index access expression with type inference.
- * In postorder: [base..., indexExpr, IndexAccess]
- * For lists, validates index bounds and returns element type.
- */
 function checkIndexAccessInferred(
 	exprId: NodeId,
 	state: CheckerState,
@@ -1550,10 +1447,6 @@ function checkIndexAccessInferred(
 	return checkListBaseAndIndex(exprId, indexId, baseResult, index, state, context)
 }
 
-/**
- * Check an index access expression with expected type.
- * Validates that the element type matches the expected type.
- */
 function checkIndexAccess(
 	exprId: NodeId,
 	expectedType: TypeId,
@@ -1633,10 +1526,6 @@ function checkFieldAccess(
 	return result
 }
 
-/**
- * Collect element expression IDs from a ListLiteral node.
- * Returns them in source order (reversed from postorder iteration).
- */
 function collectListElementIds(listLiteralId: NodeId, context: CompilationContext): NodeId[] {
 	const elementIds: NodeId[] = []
 	for (const [childId, child] of context.nodes.iterateChildren(listLiteralId)) {
@@ -1647,9 +1536,6 @@ function collectListElementIds(listLiteralId: NodeId, context: CompilationContex
 	return elementIds.reverse()
 }
 
-/**
- * Validate list literal element count matches expected size.
- */
 function validateListLiteralSize(
 	exprId: NodeId,
 	actualCount: number,
@@ -1666,9 +1552,6 @@ function validateListLiteralSize(
 	return true
 }
 
-/**
- * Type-check list literal elements and collect results.
- */
 function checkListElements(
 	elementIds: NodeId[],
 	elementTypeId: TypeId,
@@ -1687,9 +1570,6 @@ function checkListElements(
 	return { hasError, results }
 }
 
-/**
- * Validate expected type is a list type and extract metadata.
- */
 function validateListExpectedType(
 	exprId: NodeId,
 	expectedType: TypeId,
@@ -1709,10 +1589,6 @@ function validateListExpectedType(
 	return { elementTypeId, expectedSize }
 }
 
-/**
- * Check a list literal expression with expected type.
- * Validates element count matches expected size and type-checks each element.
- */
 function checkListLiteral(
 	exprId: NodeId,
 	expectedType: TypeId,
@@ -1724,17 +1600,14 @@ function checkListLiteral(
 
 	const { elementTypeId, expectedSize } = listMeta
 
-	// Collect element IDs and validate count
 	const elementIds = collectListElementIds(exprId, context)
 	if (!validateListLiteralSize(exprId, elementIds.length, expectedSize, context)) {
 		return { instId: null, typeId: BuiltinTypeId.Invalid }
 	}
 
-	// Type-check each element
 	const { hasError, results } = checkListElements(elementIds, elementTypeId, state, context)
 	if (hasError) return { instId: null, typeId: BuiltinTypeId.Invalid }
 
-	// For list literals, we don't emit a single instruction - the bindings handle storage
 	return { instId: results[0]?.instId ?? null, typeId: expectedType }
 }
 
@@ -1894,9 +1767,6 @@ function extractBindingIdentInfo(identId: NodeId, context: CompilationContext): 
 	return identToken.payload as StringId
 }
 
-/**
- * Emit a simple variable binding (non-record, non-list).
- */
 function emitSimpleBinding(
 	bindingId: NodeId,
 	exprId: NodeId,
@@ -1923,9 +1793,6 @@ function emitSimpleBinding(
 	})
 }
 
-/**
- * Check if expression is a list literal and type is a list.
- */
 function isListLiteralBinding(
 	exprId: NodeId,
 	declaredType: TypeId,
@@ -1984,9 +1851,6 @@ function processVariableBinding(
 	emitSimpleBinding(bindingId, exprId as NodeId, declaredType, nameId, state, context)
 }
 
-/**
- * Emit Bind instructions for flattened list element symbols.
- */
 function emitListElementBindings(
 	symbolIds: SymbolId[],
 	elementResults: ExprResult[],
@@ -2009,11 +1873,6 @@ function emitListElementBindings(
 	}
 }
 
-/**
- * Process a list literal binding.
- * Creates flattened symbols for each element (arr_0, arr_1, etc.)
- * and emits Bind instructions for each.
- */
 function processListLiteralBinding(
 	bindingId: NodeId,
 	listLiteralId: NodeId,
@@ -2026,15 +1885,12 @@ function processListLiteralBinding(
 	const elementTypeId = state.types.getListElementType(listTypeId)
 	if (expectedSize === undefined || elementTypeId === undefined) return
 
-	// Collect element IDs and validate size
 	const elementIds = collectListElementIds(listLiteralId, context)
 	if (!validateListLiteralSize(listLiteralId, elementIds.length, expectedSize, context)) return
 
-	// Type-check each element
 	const { hasError, results } = checkListElements(elementIds, elementTypeId, state, context)
 	if (hasError) return
 
-	// Create flattened symbols and emit bindings
 	const baseName = context.strings.get(nameId)
 	const symbolIds = state.symbols.declareListBinding(
 		baseName,

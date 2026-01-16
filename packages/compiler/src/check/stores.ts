@@ -109,17 +109,10 @@ export class ScopeStore {
  */
 export class SymbolStore {
 	private readonly symbols: SymbolEntry[] = []
-	/** Current binding per name (overwrites on shadowing) */
 	private readonly nameToSymbol: Map<StringId, SymbolId> = new Map()
-	/** Next WASM local index to allocate */
 	private nextLocalIndex = 0
-	/** List binding metadata: base name StringId -> list TypeId */
 	private readonly listBindings: Map<StringId, TypeId> = new Map()
 
-	/**
-	 * Add a new symbol binding.
-	 * Allocates a fresh local index and overwrites any previous binding of the same name.
-	 */
 	add(entry: Omit<SymbolEntry, 'localIndex'>): SymbolId {
 		const localIndex = this.nextLocalIndex++
 		const id = symbolId(this.symbols.length)
@@ -129,17 +122,10 @@ export class SymbolStore {
 		return id
 	}
 
-	/**
-	 * Look up the current binding for a name.
-	 * Returns undefined if the name has not been bound.
-	 */
 	lookupByName(nameId: StringId): SymbolId | undefined {
 		return this.nameToSymbol.get(nameId)
 	}
 
-	/**
-	 * Get symbol entry by ID.
-	 */
 	get(id: SymbolId): SymbolEntry {
 		const entry = this.symbols[id]
 		if (entry === undefined) {
@@ -148,16 +134,10 @@ export class SymbolStore {
 		return entry
 	}
 
-	/**
-	 * Get total number of symbols (= number of WASM locals needed).
-	 */
 	count(): number {
 		return this.symbols.length
 	}
 
-	/**
-	 * Get the number of WASM locals needed.
-	 */
 	localCount(): number {
 		return this.nextLocalIndex
 	}
@@ -217,7 +197,6 @@ export class SymbolStore {
 			return []
 		}
 
-		// Store list binding metadata for bounds checking
 		const baseNameId = intern(baseName)
 		this.listBindings.set(baseNameId, listTypeId)
 
@@ -235,10 +214,6 @@ export class SymbolStore {
 		return symbolIds
 	}
 
-	/**
-	 * Look up list binding metadata by base name.
-	 * Returns the list type ID if the name is a list binding, undefined otherwise.
-	 */
 	getListBinding(nameId: StringId): TypeId | undefined {
 		return this.listBindings.get(nameId)
 	}
@@ -269,15 +244,12 @@ export class TypeStore {
 		this.bootstrapBuiltins()
 	}
 
-	/**
-	 * Initialize builtin types at fixed indices.
-	 */
 	private bootstrapBuiltins(): void {
-		this.addBuiltin(TypeKind.None, 'none') // 0
-		this.addBuiltin(TypeKind.I32, 'i32') // 1
-		this.addBuiltin(TypeKind.I64, 'i64') // 2
-		this.addBuiltin(TypeKind.F32, 'f32') // 3
-		this.addBuiltin(TypeKind.F64, 'f64') // 4
+		this.addBuiltin(TypeKind.None, 'none')
+		this.addBuiltin(TypeKind.I32, 'i32')
+		this.addBuiltin(TypeKind.I64, 'i64')
+		this.addBuiltin(TypeKind.F32, 'f32')
+		this.addBuiltin(TypeKind.F64, 'f64')
 	}
 
 	private addBuiltin(kind: TypeKind, name: string): void {
@@ -286,21 +258,15 @@ export class TypeStore {
 			kind,
 			name,
 			parseNodeId: null,
-			underlying: id, // Builtins reference themselves
+			underlying: id,
 		}
 		this.types.push(info)
 		this.nameToId.set(name, id)
 	}
 
 	/**
-	 * Declare a distinct (nominal) type.
 	 * Every call returns a FRESH TypeId, different from the underlying.
-	 *
-	 * Example: `type UserId = i32` creates a distinct type where:
-	 * - TypeId is fresh (e.g., 5)
-	 * - underlying is i32's TypeId (1)
-	 * - UserId ≠ i32 at compile time
-	 * - At WASM level, UserId is just i32
+	 * Example: `type UserId = i32` creates distinct type where UserId ≠ i32 at compile time.
 	 */
 	declareDistinct(name: string, underlying: TypeId, parseNodeId: NodeId): TypeId {
 		const id = typeId(this.types.length)
@@ -315,18 +281,10 @@ export class TypeStore {
 		return id
 	}
 
-	/**
-	 * Look up a type by name.
-	 * Returns undefined if not found.
-	 */
 	lookup(name: string): TypeId | undefined {
 		return this.nameToId.get(name)
 	}
 
-	/**
-	 * Get type info by ID.
-	 * Throws if ID is invalid.
-	 */
 	get(id: TypeId): TypeInfo {
 		if (id === BuiltinTypeId.Invalid) {
 			throw new Error('Cannot get TypeInfo for Invalid sentinel')
@@ -338,17 +296,10 @@ export class TypeStore {
 		return info
 	}
 
-	/**
-	 * Check if two types are equal.
-	 * O(1) integer comparison - the core of nominal typing.
-	 */
 	areEqual(a: TypeId, b: TypeId): boolean {
 		return a === b
 	}
 
-	/**
-	 * Get human-readable type name for diagnostics.
-	 */
 	typeName(id: TypeId): string {
 		if (id === BuiltinTypeId.Invalid) {
 			return '<invalid>'
@@ -357,10 +308,6 @@ export class TypeStore {
 		return info?.name ?? `<unknown type ${id}>`
 	}
 
-	/**
-	 * Unwrap distinct types to get the underlying WASM primitive.
-	 * Used for code generation where UserId becomes i32.
-	 */
 	toWasmType(id: TypeId): TypeId {
 		if (id === BuiltinTypeId.Invalid) {
 			return BuiltinTypeId.Invalid
@@ -383,9 +330,6 @@ export class TypeStore {
 		return id >= 0 && id < this.types.length
 	}
 
-	/**
-	 * Register a record type with fields.
-	 */
 	registerRecordType(name: string, fields: FieldInfo[], parseNodeId: NodeId | null): TypeId {
 		const id = typeId(this.types.length)
 		const info: TypeInfo = {
@@ -393,44 +337,30 @@ export class TypeStore {
 			kind: TypeKind.Record,
 			name,
 			parseNodeId,
-			underlying: id, // Records reference themselves
+			underlying: id,
 		}
 		this.types.push(info)
 		this.nameToId.set(name, id)
 		return id
 	}
 
-	/**
-	 * Check if a type is a record type.
-	 */
 	isRecordType(id: TypeId): boolean {
 		const info = this.types[id]
 		return info?.kind === TypeKind.Record
 	}
 
-	/**
-	 * Get all fields of a record type.
-	 */
 	getFields(id: TypeId): readonly FieldInfo[] {
 		const info = this.types[id]
 		return info?.fields ?? []
 	}
 
-	/**
-	 * Get a specific field by name.
-	 */
 	getField(id: TypeId, fieldName: string): FieldInfo | undefined {
 		const fields = this.getFields(id)
 		return fields.find((f) => f.name === fieldName)
 	}
 
-	/** Interning map for list types: "elementTypeId:size" -> TypeId */
 	private readonly listTypeCache: Map<string, TypeId> = new Map()
 
-	/**
-	 * Register a list type with element type and size.
-	 * List types are interned: same element type + size = same TypeId.
-	 */
 	registerListType(elementTypeId: TypeId, size: number): TypeId {
 		const cacheKey = `${elementTypeId}:${size}`
 		const existing = this.listTypeCache.get(cacheKey)
@@ -448,25 +378,18 @@ export class TypeStore {
 			listSize: size,
 			name,
 			parseNodeId: null,
-			underlying: id, // Lists reference themselves
+			underlying: id,
 		}
 		this.types.push(info)
 		this.listTypeCache.set(cacheKey, id)
 		return id
 	}
 
-	/**
-	 * Check if a type is a list type.
-	 */
 	isListType(id: TypeId): boolean {
 		const info = this.types[id]
 		return info?.kind === TypeKind.List
 	}
 
-	/**
-	 * Get the size of a list type.
-	 * Returns undefined if not a list type.
-	 */
 	getListSize(id: TypeId): number | undefined {
 		const info = this.types[id]
 		if (info?.kind !== TypeKind.List) {
@@ -475,10 +398,6 @@ export class TypeStore {
 		return info.listSize
 	}
 
-	/**
-	 * Get the element type of a list type.
-	 * Returns undefined if not a list type.
-	 */
 	getListElementType(id: TypeId): TypeId | undefined {
 		const info = this.types[id]
 		if (info?.kind !== TypeKind.List) {
