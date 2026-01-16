@@ -256,9 +256,17 @@ function createNodeEmittingSemantics(
 		return typeNode.child(0).ctorName === 'ListType'
 	}
 
-	function maybeEmitListType(typeNode: Node): void {
-		if (!isListTypeRef(typeNode)) return
-		typeNode.child(0)['emitTypeAnnotation']()
+	function isHintedPrimitiveRef(typeNode: Node): boolean {
+		if (typeNode.ctorName !== 'TypeRef') return false
+		return typeNode.child(0).ctorName === 'HintedPrimitive'
+	}
+
+	function maybeEmitComplexType(typeNode: Node): void {
+		if (isListTypeRef(typeNode)) {
+			typeNode.child(0)['emitTypeAnnotation']()
+		} else if (isHintedPrimitiveRef(typeNode)) {
+			typeNode.child(0)['emitTypeAnnotation']()
+		}
 	}
 
 	semantics.addOperation<NodeId>('emitExpression', {
@@ -412,10 +420,39 @@ function createNodeEmittingSemantics(
 	})
 
 	semantics.addOperation<NodeId>('emitTypeAnnotation', {
-		ListType(elementType: Node, _lbracket: Node, _rbracket: Node, sizeHint: Node): NodeId {
+		Hint(_keyword: Node, _equals: Node, _optMinus: Node, value: Node): NodeId {
+			// Store the value token - this allows extracting the numeric value
+			// The keyword type (min/max/size) can be determined from context
+			// (for list size hints, we just need the value)
+			const valueTid = getTokenIdForOhmNode(value)
+			return context.nodes.add({
+				kind: NodeKind.Hint,
+				subtreeSize: 1,
+				tokenId: valueTid,
+			})
+		},
+		HintedPrimitive(_typeKeyword: Node, typeHints: Node): NodeId {
 			const startCount = context.nodes.count()
-			maybeEmitListType(elementType)
-			sizeHint['emitTypeAnnotation']()
+			typeHints['emitTypeAnnotation']()
+			const childCount = context.nodes.count() - startCount
+
+			const tid = getTokenIdForOhmNode(this)
+			return context.nodes.add({
+				kind: NodeKind.HintedPrimitive,
+				subtreeSize: 1 + childCount,
+				tokenId: tid,
+			})
+		},
+		ListType(elementType: Node, suffixes: Node): NodeId {
+			const startCount = context.nodes.count()
+			// Handle hinted primitives as base element type
+			if (elementType.ctorName === 'HintedPrimitive') {
+				elementType['emitTypeAnnotation']()
+			}
+			// Emit each list type suffix (each is []<size=N>)
+			for (let i = 0; i < suffixes.numChildren; i++) {
+				suffixes.child(i)['emitTypeAnnotation']()
+			}
 			const childCount = context.nodes.count() - startCount
 
 			const tid = getTokenIdForOhmNode(this)
@@ -425,28 +462,35 @@ function createNodeEmittingSemantics(
 				tokenId: tid,
 			})
 		},
-		SizeHint(
-			_lessThan: Node,
-			_sizeKeyword: Node,
-			_equals: Node,
-			sizeLiteral: Node,
-			_greaterThan: Node
-		): NodeId {
-			const tid = getTokenIdForOhmNode(sizeLiteral)
-			return context.nodes.add({
-				kind: NodeKind.SizeHint,
-				subtreeSize: 1,
-				tokenId: tid,
-			})
+		ListTypeSuffix(_lbracket: Node, _rbracket: Node, typeHints: Node): NodeId {
+			return typeHints['emitTypeAnnotation']()
 		},
 		TypeAnnotation(_colon: Node, typeRef: Node): NodeId {
 			const startCount = context.nodes.count()
-			maybeEmitListType(typeRef)
+			maybeEmitComplexType(typeRef)
 			const childCount = context.nodes.count() - startCount
 
 			const tid = getTokenIdForOhmNode(typeRef)
 			return context.nodes.add({
 				kind: NodeKind.TypeAnnotation,
+				subtreeSize: 1 + childCount,
+				tokenId: tid,
+			})
+		},
+		TypeHints(_lessThan: Node, hintList: Node, _greaterThan: Node): NodeId {
+			const startCount = context.nodes.count()
+			// Emit first hint
+			hintList.child(0)['emitTypeAnnotation']()
+			// Emit rest hints (skipping comma separators)
+			const restHints = hintList.child(2)
+			for (let i = 0; i < restHints.numChildren; i++) {
+				restHints.child(i)['emitTypeAnnotation']()
+			}
+			const childCount = context.nodes.count() - startCount
+
+			const tid = getTokenIdForOhmNode(this)
+			return context.nodes.add({
+				kind: NodeKind.TypeHints,
 				subtreeSize: 1 + childCount,
 				tokenId: tid,
 			})

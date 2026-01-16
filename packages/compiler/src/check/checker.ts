@@ -206,6 +206,23 @@ function extractSizeFromSizeHint(sizeHintId: NodeId, context: CompilationContext
 	return Number.isNaN(size) ? null : size
 }
 
+/**
+ * Extract size from a TypeHints node (new grammar structure).
+ * TypeHints contains Hint children, we find the first one and extract its value.
+ * For list types, there should be exactly one hint (the size).
+ */
+function extractSizeFromTypeHints(typeHintsId: NodeId, context: CompilationContext): number | null {
+	// Find the first Hint child
+	const hintId = findChildByKind(typeHintsId, NodeKind.Hint, context)
+	if (hintId === null) return null
+
+	const hintNode = context.nodes.get(hintId)
+	const valueToken = context.tokens.get(hintNode.tokenId)
+	const valueText = context.strings.get(valueToken.payload as StringId)
+	const size = Number.parseInt(valueText, 10)
+	return Number.isNaN(size) ? null : size
+}
+
 function resolveListElementType(
 	listTypeId: NodeId,
 	state: CheckerState,
@@ -239,6 +256,11 @@ function findChildByKind(
 }
 
 function findSizeHintChild(listTypeId: NodeId, context: CompilationContext): NodeId | null {
+	// First try new grammar structure (TypeHints)
+	const typeHintsId = findChildByKind(listTypeId, NodeKind.TypeHints, context)
+	if (typeHintsId !== null) return typeHintsId
+
+	// Fall back to old grammar structure (SizeHint) for compatibility
 	return findChildByKind(listTypeId, NodeKind.SizeHint, context)
 }
 
@@ -247,7 +269,16 @@ function findNestedListTypeChild(listTypeId: NodeId, context: CompilationContext
 }
 
 function validateListSize(sizeHintId: NodeId, context: CompilationContext): number | null {
-	const size = extractSizeFromSizeHint(sizeHintId, context)
+	const node = context.nodes.get(sizeHintId)
+
+	// Determine which extraction method to use based on node kind
+	let size: number | null
+	if (node.kind === NodeKind.TypeHints) {
+		size = extractSizeFromTypeHints(sizeHintId, context)
+	} else {
+		size = extractSizeFromSizeHint(sizeHintId, context)
+	}
+
 	if (size === null) return null
 
 	if (size <= 0) {
