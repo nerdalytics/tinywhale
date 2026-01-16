@@ -190,6 +190,45 @@ export class SymbolStore {
 		return symbolIds
 	}
 
+	/**
+	 * Create flattened symbols for a list binding.
+	 * For arr: [i32; 3] creates $arr_0, $arr_1, $arr_2 locals.
+	 *
+	 * @param baseName - The variable name (e.g., "arr")
+	 * @param listTypeId - The list type ID
+	 * @param parseNodeId - Parse node of the binding for diagnostics
+	 * @param intern - Function to intern strings (e.g., context.strings.intern)
+	 * @param types - TypeStore to resolve list metadata
+	 * @returns Array of SymbolIds for the flattened locals
+	 */
+	declareListBinding(
+		baseName: string,
+		listTypeId: TypeId,
+		parseNodeId: NodeId,
+		intern: (name: string) => StringId,
+		types: TypeStore
+	): SymbolId[] {
+		const size = types.getListSize(listTypeId)
+		const elementTypeId = types.getListElementType(listTypeId)
+
+		if (size === undefined || elementTypeId === undefined) {
+			return []
+		}
+
+		const symbolIds: SymbolId[] = []
+		for (let i = 0; i < size; i++) {
+			const flatName = `${baseName}_${i}`
+			const nameId = intern(flatName)
+			const symId = this.add({
+				nameId,
+				parseNodeId,
+				typeId: elementTypeId,
+			})
+			symbolIds.push(symId)
+		}
+		return symbolIds
+	}
+
 	*[Symbol.iterator](): Generator<[SymbolId, SymbolEntry]> {
 		for (let i = 0; i < this.symbols.length; i++) {
 			const entry = this.symbols[i]
