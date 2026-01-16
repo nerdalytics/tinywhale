@@ -12,6 +12,7 @@ export const TokenKind = {
 	BangEqual: 37,
 	Caret: 25,
 	Colon: 3,
+	Comma: 43,
 	Dedent: 1,
 	Dot: 42,
 
@@ -31,6 +32,7 @@ export const TokenKind = {
 	Identifier: 100,
 	Indent: 0,
 	IntLiteral: 101,
+	LBracket: 44,
 	LessEqual: 34,
 	LessLess: 31,
 	LessThan: 27,
@@ -47,6 +49,7 @@ export const TokenKind = {
 	PipePipe: 39,
 
 	Plus: 20,
+	RBracket: 45,
 	RParen: 41,
 	Slash: 22,
 	Star: 21,

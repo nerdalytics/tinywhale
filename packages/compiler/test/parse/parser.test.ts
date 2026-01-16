@@ -3,7 +3,7 @@ import { describe, it } from 'node:test'
 import { CompilationContext } from '../../src/core/context.ts'
 import { type NodeId, NodeKind } from '../../src/core/nodes.ts'
 import { tokenize } from '../../src/lex/tokenizer.ts'
-import { parse } from '../../src/parse/parser.ts'
+import { matchOnly, parse } from '../../src/parse/parser.ts'
 
 function tokenizeAndParse(source: string): CompilationContext {
 	const ctx = new CompilationContext(source)
@@ -694,6 +694,189 @@ describe('parse/parser', () => {
 		it('should parse multiple keyword-like identifiers', () => {
 			const ctx = tokenizeAndParse('panicLevel:i32 = 1\nmatchCount:i32 = panicLevel')
 			assert.strictEqual(ctx.hasErrors(), false)
+		})
+	})
+
+	describe('list type parsing', () => {
+		it('should parse list type with size hint', () => {
+			const source = 'arr: i32[]<size=4> = [1, 2, 3, 4]\npanic'
+			const ctx = new CompilationContext(source)
+			tokenize(ctx)
+			const result = matchOnly(ctx)
+			assert.ok(result, 'should match list type syntax')
+		})
+
+		it('should parse nested list type (list of lists)', () => {
+			const source = 'matrix: i32[]<size=4>[]<size=2> = [[1, 2, 3, 4], [5, 6, 7, 8]]\npanic'
+			const ctx = new CompilationContext(source)
+			tokenize(ctx)
+			const result = matchOnly(ctx)
+			assert.ok(result, 'should match nested list type syntax')
+		})
+
+		it('should parse list type with i64 element type', () => {
+			const source = 'arr: i64[]<size=2> = [1, 2]\npanic'
+			const ctx = new CompilationContext(source)
+			tokenize(ctx)
+			const result = matchOnly(ctx)
+			assert.ok(result, 'should match i64 list type syntax')
+		})
+
+		it('should parse list type with f32 element type', () => {
+			const source = 'arr: f32[]<size=2> = [1.0, 2.0]\npanic'
+			const ctx = new CompilationContext(source)
+			tokenize(ctx)
+			const result = matchOnly(ctx)
+			assert.ok(result, 'should match f32 list type syntax')
+		})
+
+		it('should parse list type with f64 element type', () => {
+			const source = 'arr: f64[]<size=2> = [1.0, 2.0]\npanic'
+			const ctx = new CompilationContext(source)
+			tokenize(ctx)
+			const result = matchOnly(ctx)
+			assert.ok(result, 'should match f64 list type syntax')
+		})
+	})
+
+	describe('list literal parsing', () => {
+		it('should parse list literal', () => {
+			const source = 'arr: i32[]<size=4> = [1, 2, 3, 4]\npanic'
+			const ctx = new CompilationContext(source)
+			tokenize(ctx)
+			const result = matchOnly(ctx)
+			assert.ok(result, 'should match list literal syntax')
+		})
+
+		it('should parse nested list literal', () => {
+			const source = 'matrix: i32[]<size=2>[]<size=2> = [[1, 2], [3, 4]]\npanic'
+			const ctx = new CompilationContext(source)
+			tokenize(ctx)
+			const result = matchOnly(ctx)
+			assert.ok(result, 'should match nested list literal syntax')
+		})
+
+		it('should parse list literal with single element', () => {
+			const source = 'arr: i32[]<size=1> = [42]\npanic'
+			const ctx = new CompilationContext(source)
+			tokenize(ctx)
+			const result = matchOnly(ctx)
+			assert.ok(result, 'should match single element list')
+		})
+
+		it('should parse list literal with expression elements', () => {
+			const source = 'arr: i32[]<size=2> = [1 + 2, 3 * 4]\npanic'
+			const ctx = new CompilationContext(source)
+			tokenize(ctx)
+			const result = matchOnly(ctx)
+			assert.ok(result, 'should match list with expression elements')
+		})
+	})
+
+	describe('index access parsing', () => {
+		it('should parse index access', () => {
+			const source = 'x: i32 = arr[0]\npanic'
+			const ctx = new CompilationContext(source)
+			tokenize(ctx)
+			const result = matchOnly(ctx)
+			assert.ok(result, 'should match index access syntax')
+		})
+
+		it('should parse chained index access', () => {
+			const source = 'x: i32 = matrix[0][1]\npanic'
+			const ctx = new CompilationContext(source)
+			tokenize(ctx)
+			const result = matchOnly(ctx)
+			assert.ok(result, 'should match chained index access syntax')
+		})
+
+		it('should parse triple chained index access', () => {
+			const source = 'x: i32 = cube[0][1][2]\npanic'
+			const ctx = new CompilationContext(source)
+			tokenize(ctx)
+			const result = matchOnly(ctx)
+			assert.ok(result, 'should match triple chained index access')
+		})
+
+		it('should parse index access with larger index', () => {
+			const source = 'x: i32 = arr[99]\npanic'
+			const ctx = new CompilationContext(source)
+			tokenize(ctx)
+			const result = matchOnly(ctx)
+			assert.ok(result, 'should match index access with larger index')
+		})
+	})
+
+	describe('list in record type parsing', () => {
+		it('should parse record type with list field', () => {
+			const source = `type Foo
+    items: i32[]<size=3>
+panic`
+			const ctx = new CompilationContext(source)
+			tokenize(ctx)
+			const result = matchOnly(ctx)
+			assert.ok(result, 'should match record type with list field')
+		})
+
+		it('should parse record type with multiple list fields', () => {
+			const source = `type Data
+    xs: i32[]<size=4>
+    ys: f64[]<size=4>
+panic`
+			const ctx = new CompilationContext(source)
+			tokenize(ctx)
+			const result = matchOnly(ctx)
+			assert.ok(result, 'should match record type with multiple list fields')
+		})
+
+		it('should parse record type with nested list field', () => {
+			const source = `type Matrix
+    data: i32[]<size=3>[]<size=3>
+panic`
+			const ctx = new CompilationContext(source)
+			tokenize(ctx)
+			const result = matchOnly(ctx)
+			assert.ok(result, 'should match record type with nested list field')
+		})
+	})
+
+	describe('list literal in record init parsing', () => {
+		it('should parse record initialization with list field', () => {
+			const source = `type Foo
+    items: i32[]<size=3>
+f: Foo =
+    items: [1, 2, 3]
+panic`
+			const ctx = new CompilationContext(source)
+			tokenize(ctx)
+			const result = matchOnly(ctx)
+			assert.ok(result, 'should match record init with list field')
+		})
+
+		it('should parse record initialization with nested list field', () => {
+			const source = `type Matrix
+    data: i32[]<size=2>[]<size=2>
+m: Matrix =
+    data: [[1, 2], [3, 4]]
+panic`
+			const ctx = new CompilationContext(source)
+			tokenize(ctx)
+			const result = matchOnly(ctx)
+			assert.ok(result, 'should match record init with nested list field')
+		})
+
+		it('should parse record initialization with multiple list fields', () => {
+			const source = `type Data
+    xs: i32[]<size=2>
+    ys: i32[]<size=2>
+d: Data =
+    xs: [1, 2]
+    ys: [3, 4]
+panic`
+			const ctx = new CompilationContext(source)
+			tokenize(ctx)
+			const result = matchOnly(ctx)
+			assert.ok(result, 'should match record init with multiple list fields')
 		})
 	})
 })

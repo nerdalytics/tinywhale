@@ -33,7 +33,12 @@ TinyWhale {
   NestedRecordInit = upperIdentifier
 
   // Type reference (primitives or user-defined)
-  TypeRef = upperIdentifier | typeKeyword
+  TypeRef = ListType | upperIdentifier | typeKeyword
+
+  // List type with size hint: i32[]<size=4>
+  ListType = TypeRef lbracket rbracket SizeHint
+  SizeHint = lessThan sizeKeyword equals intLiteral greaterThan
+  sizeKeyword = "size" ~identifierPart
 
   // Upper-case identifier for type names
   upperIdentifier = upper (alnum | "_")*
@@ -72,17 +77,28 @@ TinyWhale {
   UnaryExpr = unaryOp UnaryExpr  -- unary
             | PrimaryExpr        -- primary
 
-  PrimaryExpr = FieldAccess
+  PrimaryExpr = PostfixExpr
               | lparen Expression rparen  -- paren
+              | ListLiteral
               | identifier
               | floatLiteral
               | intLiteral
 
+  // Postfix expressions: field access and index access
+  PostfixExpr = IndexAccess | FieldAccess
   FieldAccess = PrimaryExprBase (dot lowerIdentifier)+
+  IndexAccess = PostfixBase (lbracket intLiteral rbracket)+
+  PostfixBase = FieldAccess | PrimaryExprBase
+
   PrimaryExprBase = lparen Expression rparen  -- paren
+                  | ListLiteral
                   | identifier
                   | floatLiteral
                   | intLiteral
+
+  // List literal: [1, 2, 3]
+  ListLiteral = lbracket ListElements rbracket
+  ListElements = Expression (comma Expression)*
 
   // Operator groups
   compareOp = lessEqual | greaterEqual | lessThan | greaterThan | equalEqual | bangEqual
@@ -146,6 +162,11 @@ TinyWhale {
   // Grouping
   lparen = "("
   rparen = ")"
+  lbracket = "["
+  rbracket = "]"
+
+  // List separator
+  comma = ","
 
   // Field access
   dot = "."

@@ -93,6 +93,8 @@ export const TypeKind = {
 	I32: 1,
 	/** 64-bit signed integer */
 	I64: 2,
+	/** Fixed-size list type */
+	List: 7,
 	/** No value (for instructions that don't produce a result) */
 	None: 0,
 	/** Record type with named fields */
@@ -143,6 +145,10 @@ export interface TypeInfo {
 	readonly parseNodeId: NodeId | null
 	/** For Record types: field definitions */
 	readonly fields?: readonly FieldInfo[]
+	/** For List types: element type */
+	readonly elementTypeId?: TypeId
+	/** For List types: fixed size */
+	readonly listSize?: number
 }
 
 /**

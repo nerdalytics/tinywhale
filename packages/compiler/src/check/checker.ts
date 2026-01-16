@@ -198,39 +198,152 @@ function getTypeNameFromToken(tokenKind: TokenKind): { name: string; typeId: Typ
 	}
 }
 
-/**
- * Resolve type from a TypeAnnotation node.
- * Handles both primitive types (i32, i64, f32, f64) and user-defined record types.
- * Returns null if the type is unknown.
- */
-function resolveTypeFromAnnotation(
-	typeAnnotationId: NodeId,
+function extractSizeFromSizeHint(sizeHintId: NodeId, context: CompilationContext): number | null {
+	const sizeHintNode = context.nodes.get(sizeHintId)
+	const sizeToken = context.tokens.get(sizeHintNode.tokenId)
+	const sizeText = context.strings.get(sizeToken.payload as StringId)
+	const size = Number.parseInt(sizeText, 10)
+	return Number.isNaN(size) ? null : size
+}
+
+function resolveListElementType(
+	listTypeId: NodeId,
 	state: CheckerState,
 	context: CompilationContext
-): { name: string; typeId: TypeId } | null {
-	const typeAnnotationNode = context.nodes.get(typeAnnotationId)
-	const typeToken = context.tokens.get(typeAnnotationNode.tokenId)
+): TypeId | null {
+	const listTypeNode = context.nodes.get(listTypeId)
+	const elementToken = context.tokens.get(listTypeNode.tokenId)
 
-	const primitiveType = getTypeNameFromToken(typeToken.kind)
+	const primitiveType = getTypeNameFromToken(elementToken.kind)
 	if (primitiveType) {
-		return primitiveType
+		return primitiveType.typeId
 	}
 
-	if (typeToken.kind === TokenKind.Identifier) {
-		const typeName = context.strings.get(typeToken.payload as StringId)
-		const typeId = state.types.lookup(typeName)
-		if (typeId !== undefined) {
-			return { name: typeName, typeId }
-		}
+	if (elementToken.kind === TokenKind.Identifier) {
+		const typeName = context.strings.get(elementToken.payload as StringId)
+		return state.types.lookup(typeName) ?? null
 	}
 
 	return null
 }
 
-/**
- * Integer bounds for type checking literals.
- * All bounds use BigInt for consistent precision.
- */
+function findChildByKind(
+	parentId: NodeId,
+	kind: NodeKind,
+	context: CompilationContext
+): NodeId | null {
+	for (const [childId, child] of context.nodes.iterateChildren(parentId)) {
+		if (child.kind === kind) return childId
+	}
+	return null
+}
+
+function findSizeHintChild(listTypeId: NodeId, context: CompilationContext): NodeId | null {
+	return findChildByKind(listTypeId, NodeKind.SizeHint, context)
+}
+
+function findNestedListTypeChild(listTypeId: NodeId, context: CompilationContext): NodeId | null {
+	return findChildByKind(listTypeId, NodeKind.ListType, context)
+}
+
+function validateListSize(sizeHintId: NodeId, context: CompilationContext): number | null {
+	const size = extractSizeFromSizeHint(sizeHintId, context)
+	if (size === null) return null
+
+	if (size <= 0) {
+		context.emitAtNode('TWCHECK036' as DiagnosticCode, sizeHintId)
+		return null
+	}
+
+	return size
+}
+
+function emitListElementTypeError(listTypeId: NodeId, context: CompilationContext): void {
+	const listTypeNode = context.nodes.get(listTypeId)
+	const elementToken = context.tokens.get(listTypeNode.tokenId)
+	const typeName =
+		elementToken.kind === TokenKind.Identifier
+			? context.strings.get(elementToken.payload as StringId)
+			: 'unknown'
+	context.emitAtNode('TWCHECK010' as DiagnosticCode, listTypeId, { found: typeName })
+}
+
+function resolveListElementTypeForList(
+	listTypeId: NodeId,
+	nestedListTypeId: NodeId | null,
+	state: CheckerState,
+	context: CompilationContext
+): TypeId | null {
+	if (nestedListTypeId !== null) {
+		return resolveListType(nestedListTypeId, state, context)?.typeId ?? null
+	}
+	return resolveListElementType(listTypeId, state, context)
+}
+
+function resolveListType(
+	listTypeId: NodeId,
+	state: CheckerState,
+	context: CompilationContext
+): { name: string; typeId: TypeId } | null {
+	const sizeHintId = findSizeHintChild(listTypeId, context)
+	if (sizeHintId === null) return null
+
+	const size = validateListSize(sizeHintId, context)
+	if (size === null) return null
+
+	const nestedListTypeId = findNestedListTypeChild(listTypeId, context)
+	const elementTypeId = resolveListElementTypeForList(listTypeId, nestedListTypeId, state, context)
+
+	if (elementTypeId === null) {
+		emitListElementTypeError(listTypeId, context)
+		return null
+	}
+
+	const typeId = state.types.registerListType(elementTypeId, size)
+	return { name: state.types.typeName(typeId), typeId }
+}
+
+function findListTypeChild(typeAnnotationId: NodeId, context: CompilationContext): NodeId | null {
+	for (const [childId, child] of context.nodes.iterateChildren(typeAnnotationId)) {
+		if (child.kind === NodeKind.ListType) {
+			return childId
+		}
+	}
+	return null
+}
+
+function resolveUserDefinedType(
+	typeName: string,
+	state: CheckerState
+): { name: string; typeId: TypeId } | null {
+	const typeId = state.types.lookup(typeName)
+	return typeId !== undefined ? { name: typeName, typeId } : null
+}
+
+function resolveTypeFromAnnotation(
+	typeAnnotationId: NodeId,
+	state: CheckerState,
+	context: CompilationContext
+): { name: string; typeId: TypeId } | null {
+	const listTypeChildId = findListTypeChild(typeAnnotationId, context)
+	if (listTypeChildId !== null) {
+		return resolveListType(listTypeChildId, state, context)
+	}
+
+	const typeAnnotationNode = context.nodes.get(typeAnnotationId)
+	const typeToken = context.tokens.get(typeAnnotationNode.tokenId)
+
+	const primitiveType = getTypeNameFromToken(typeToken.kind)
+	if (primitiveType) return primitiveType
+
+	if (typeToken.kind === TokenKind.Identifier) {
+		const typeName = context.strings.get(typeToken.payload as StringId)
+		return resolveUserDefinedType(typeName, state)
+	}
+
+	return null
+}
+
 const INT_BOUNDS = {
 	i32: { max: BigInt(2147483647), min: BigInt(-2147483648) },
 	i64: { max: BigInt('9223372036854775807'), min: BigInt('-9223372036854775808') },
@@ -272,7 +385,6 @@ function isIntegerType(typeId: TypeId): boolean {
 	return typeId === BuiltinTypeId.I32 || typeId === BuiltinTypeId.I64
 }
 
-/** Operators that only work with integer types */
 function isIntegerOnlyOperator(tokenKind: TokenKind): boolean {
 	switch (tokenKind) {
 		case TokenKind.Percent:
@@ -290,7 +402,6 @@ function isIntegerOnlyOperator(tokenKind: TokenKind): boolean {
 	}
 }
 
-/** Operators that are comparisons (result is i32 regardless of operand types) */
 function isComparisonOperator(tokenKind: TokenKind): boolean {
 	switch (tokenKind) {
 		case TokenKind.LessThan:
@@ -422,7 +533,6 @@ function emitIntBoundsError(
 	return { instId: null, typeId: BuiltinTypeId.Invalid }
 }
 
-/** Parse integer literal text, handling scientific notation (e.g., 1e10) */
 function parseIntegerLiteral(text: string): bigint {
 	const expMatch = text.match(/^(\d+)[eE]([+-]?\d+)$/)
 	if (expMatch) {
@@ -543,11 +653,6 @@ function checkFloatLiteral(
 	return emitFloatConstInst(nodeId, expectedType, value, state, context)
 }
 
-/**
- * Check a unary expression (negation or bitwise NOT).
- * In postorder, the child is at exprNodeId - 1.
- * Operator is determined by the tokenId.
- */
 function checkBitwiseNot(
 	exprNodeId: NodeId,
 	childId: NodeId,
@@ -630,10 +735,6 @@ function checkUnaryExpr(
 	return checkUnaryNegate(exprNodeId, childId, child.kind, expectedType, state, context)
 }
 
-/**
- * Check a parenthesized expression.
- * In postorder, the child is at exprNodeId - 1.
- */
 function checkParenExpr(
 	exprNodeId: NodeId,
 	expectedType: TypeId,
@@ -644,12 +745,6 @@ function checkParenExpr(
 	return checkExpression(childId, expectedType, state, context)
 }
 
-/**
- * Check a binary expression.
- * In postorder: [left..., right..., BinaryExpr]
- * The right operand's root is at exprId - 1.
- * The left operand's root is at rightRootId - rightSubtreeSize.
- */
 interface BinaryOperands {
 	leftResult: ExprResult
 	rightResult: ExprResult
@@ -1194,6 +1289,184 @@ function emitFieldAccessInst(
 	return { instId, typeId: fieldInfo.typeId }
 }
 
+function tryResolveFlattenedListSymbol(
+	baseId: NodeId,
+	index: number,
+	state: CheckerState,
+	context: CompilationContext
+): SymbolId | null {
+	const basePath = buildFlattenedBasePath(baseId, context)
+	if (basePath === null) return null
+
+	const flattenedName = `${basePath}_${index}`
+	const flattenedNameId = context.strings.intern(flattenedName)
+	return state.symbols.lookupByName(flattenedNameId) ?? null
+}
+
+function checkListBindingBounds(
+	baseId: NodeId,
+	indexId: NodeId,
+	index: number,
+	state: CheckerState,
+	context: CompilationContext
+): { isListBinding: boolean; valid: boolean } {
+	const basePath = buildFlattenedBasePath(baseId, context)
+	if (basePath === null) return { isListBinding: false, valid: false }
+
+	const baseNameId = context.strings.intern(basePath)
+	const listTypeId = state.symbols.getListBinding(baseNameId)
+
+	if (listTypeId === undefined) return { isListBinding: false, valid: false }
+
+	const listSize = state.types.getListSize(listTypeId)
+	if (listSize !== undefined && !validateListIndexBounds(indexId, index, listSize, context)) {
+		return { isListBinding: true, valid: false }
+	}
+
+	return { isListBinding: true, valid: true }
+}
+
+function extractIndexValue(indexNode: ParseNode, context: CompilationContext): number {
+	const indexToken = context.tokens.get(indexNode.tokenId)
+	const indexText = context.strings.get(indexToken.payload as StringId)
+	return Number.parseInt(indexText, 10)
+}
+
+function validateListIndexBounds(
+	indexId: NodeId,
+	index: number,
+	listSize: number,
+	context: CompilationContext
+): boolean {
+	if (index < 0 || index >= listSize) {
+		context.emitAtNode('TWCHECK034' as DiagnosticCode, indexId, {
+			index: index.toString(),
+			maxIndex: (listSize - 1).toString(),
+			size: listSize.toString(),
+		})
+		return false
+	}
+	return true
+}
+
+function emitIndexAccessInst(
+	exprId: NodeId,
+	baseResult: ExprResult,
+	index: number,
+	elementTypeId: TypeId,
+	state: CheckerState
+): ExprResult {
+	const instId = state.insts.add({
+		arg0: baseResult.instId as number,
+		arg1: index,
+		kind: InstKind.FieldAccess,
+		parseNodeId: exprId,
+		typeId: elementTypeId,
+	})
+	return { instId, typeId: elementTypeId }
+}
+
+function extractValidatedIndex(
+	indexId: NodeId,
+	indexNode: ParseNode,
+	context: CompilationContext
+): number | null {
+	if (indexNode.kind !== NodeKind.IntLiteral) {
+		context.emitAtNode('TWCHECK035' as DiagnosticCode, indexId)
+		return null
+	}
+	return extractIndexValue(indexNode, context)
+}
+
+function checkListBaseAndIndex(
+	exprId: NodeId,
+	indexId: NodeId,
+	baseResult: ExprResult,
+	index: number,
+	state: CheckerState,
+	context: CompilationContext
+): ExprResult {
+	if (!state.types.isListType(baseResult.typeId)) {
+		const typeName = state.types.typeName(baseResult.typeId)
+		context.emitAtNode('TWCHECK031' as DiagnosticCode, exprId, { name: `[${index}]`, typeName })
+		return { instId: null, typeId: BuiltinTypeId.Invalid }
+	}
+
+	const listSize = state.types.getListSize(baseResult.typeId)
+	if (listSize !== undefined && !validateListIndexBounds(indexId, index, listSize, context)) {
+		return { instId: null, typeId: BuiltinTypeId.Invalid }
+	}
+
+	const elementTypeId = state.types.getListElementType(baseResult.typeId)
+	if (elementTypeId === undefined) return { instId: null, typeId: BuiltinTypeId.Invalid }
+
+	return emitIndexAccessInst(exprId, baseResult, index, elementTypeId, state)
+}
+
+function tryEarlyIndexResolution(
+	exprId: NodeId,
+	baseId: NodeId,
+	indexId: NodeId,
+	index: number,
+	state: CheckerState,
+	context: CompilationContext
+): ExprResult | null {
+	const symId = tryResolveFlattenedListSymbol(baseId, index, state, context)
+	if (symId !== null) return emitFlattenedVarRef(exprId, symId, state)
+
+	const listBoundsResult = checkListBindingBounds(baseId, indexId, index, state, context)
+	if (listBoundsResult.isListBinding) {
+		return { instId: null, typeId: BuiltinTypeId.Invalid }
+	}
+
+	if (!checkFlattenedBaseExists(baseId, state, context)) {
+		return { instId: null, typeId: BuiltinTypeId.Invalid }
+	}
+
+	return null
+}
+
+function checkIndexAccessInferred(
+	exprId: NodeId,
+	state: CheckerState,
+	context: CompilationContext
+): ExprResult {
+	const indexId = prevNodeId(exprId)
+	const indexNode = context.nodes.get(indexId)
+	const baseId = offsetNodeId(indexId, -indexNode.subtreeSize)
+
+	const index = extractValidatedIndex(indexId, indexNode, context)
+	if (index === null) return { instId: null, typeId: BuiltinTypeId.Invalid }
+
+	const earlyResult = tryEarlyIndexResolution(exprId, baseId, indexId, index, state, context)
+	if (earlyResult !== null) return earlyResult
+
+	const baseResult = checkExpressionInferred(baseId, state, context)
+	if (!isValidExprResult(baseResult)) return baseResult
+
+	return checkListBaseAndIndex(exprId, indexId, baseResult, index, state, context)
+}
+
+function checkIndexAccess(
+	exprId: NodeId,
+	expectedType: TypeId,
+	state: CheckerState,
+	context: CompilationContext
+): ExprResult {
+	const result = checkIndexAccessInferred(exprId, state, context)
+	if (!isValidExprResult(result)) return result
+
+	// Check that the element type matches the expected type
+	if (!state.types.areEqual(result.typeId, expectedType)) {
+		const expected = state.types.typeName(expectedType)
+		const found = state.types.typeName(result.typeId)
+		context.emitAtNode('TWCHECK012' as DiagnosticCode, exprId, { expected, found })
+		return { instId: null, typeId: BuiltinTypeId.Invalid }
+	}
+
+	return result
+}
+
 /**
  * Check a field access expression with type inference.
  * In postorder: [base..., FieldAccess]
@@ -1253,6 +1526,91 @@ function checkFieldAccess(
 	return result
 }
 
+function collectListElementIds(listLiteralId: NodeId, context: CompilationContext): NodeId[] {
+	const elementIds: NodeId[] = []
+	for (const [childId, child] of context.nodes.iterateChildren(listLiteralId)) {
+		if (isExpressionNode(child.kind)) {
+			elementIds.push(childId)
+		}
+	}
+	return elementIds.reverse()
+}
+
+function validateListLiteralSize(
+	exprId: NodeId,
+	actualCount: number,
+	expectedSize: number,
+	context: CompilationContext
+): boolean {
+	if (actualCount !== expectedSize) {
+		context.emitAtNode('TWCHECK037' as DiagnosticCode, exprId, {
+			expected: expectedSize.toString(),
+			found: actualCount.toString(),
+		})
+		return false
+	}
+	return true
+}
+
+function checkListElements(
+	elementIds: NodeId[],
+	elementTypeId: TypeId,
+	state: CheckerState,
+	context: CompilationContext
+): { results: ExprResult[]; hasError: boolean } {
+	const results: ExprResult[] = []
+	let hasError = false
+
+	for (const elemId of elementIds) {
+		const result = checkExpression(elemId, elementTypeId, state, context)
+		if (!isValidExprResult(result)) hasError = true
+		results.push(result)
+	}
+
+	return { hasError, results }
+}
+
+function validateListExpectedType(
+	exprId: NodeId,
+	expectedType: TypeId,
+	state: CheckerState,
+	context: CompilationContext
+): { expectedSize: number; elementTypeId: TypeId } | null {
+	if (!state.types.isListType(expectedType)) {
+		const expected = state.types.typeName(expectedType)
+		context.emitAtNode('TWCHECK012' as DiagnosticCode, exprId, { expected, found: 'list literal' })
+		return null
+	}
+
+	const expectedSize = state.types.getListSize(expectedType)
+	const elementTypeId = state.types.getListElementType(expectedType)
+	if (expectedSize === undefined || elementTypeId === undefined) return null
+
+	return { elementTypeId, expectedSize }
+}
+
+function checkListLiteral(
+	exprId: NodeId,
+	expectedType: TypeId,
+	state: CheckerState,
+	context: CompilationContext
+): ExprResult {
+	const listMeta = validateListExpectedType(exprId, expectedType, state, context)
+	if (!listMeta) return { instId: null, typeId: BuiltinTypeId.Invalid }
+
+	const { elementTypeId, expectedSize } = listMeta
+
+	const elementIds = collectListElementIds(exprId, context)
+	if (!validateListLiteralSize(exprId, elementIds.length, expectedSize, context)) {
+		return { instId: null, typeId: BuiltinTypeId.Invalid }
+	}
+
+	const { hasError, results } = checkListElements(elementIds, elementTypeId, state, context)
+	if (hasError) return { instId: null, typeId: BuiltinTypeId.Invalid }
+
+	return { instId: results[0]?.instId ?? null, typeId: expectedType }
+}
+
 function checkExpressionInferred(
 	exprId: NodeId,
 	state: CheckerState,
@@ -1277,6 +1635,8 @@ function checkExpressionInferred(
 			return checkCompareChain(exprId, BuiltinTypeId.I32, state, context)
 		case NodeKind.FieldAccess:
 			return checkFieldAccessInferred(exprId, state, context)
+		case NodeKind.IndexAccess:
+			return checkIndexAccessInferred(exprId, state, context)
 		default:
 			return { instId: null, typeId: BuiltinTypeId.Invalid }
 	}
@@ -1307,6 +1667,10 @@ function checkExpression(
 			return checkCompareChain(exprId, expectedType, state, context)
 		case NodeKind.FieldAccess:
 			return checkFieldAccess(exprId, expectedType, state, context)
+		case NodeKind.IndexAccess:
+			return checkIndexAccess(exprId, expectedType, state, context)
+		case NodeKind.ListLiteral:
+			return checkListLiteral(exprId, expectedType, state, context)
 		default:
 			// Should be unreachable - all expression kinds should be handled
 			console.assert(false, 'checkExpression: unhandled expression kind %d', node.kind)
@@ -1390,6 +1754,56 @@ function processRecordLiteralBinding(
 }
 
 /**
+ * Extract binding identifier info from nodes.
+ */
+function extractBindingIdentInfo(identId: NodeId, context: CompilationContext): StringId {
+	const identNode = context.nodes.get(identId)
+	console.assert(
+		identNode.kind === NodeKind.Identifier,
+		'VariableBinding: expected Identifier, found %d',
+		identNode.kind
+	)
+	const identToken = context.tokens.get(identNode.tokenId)
+	return identToken.payload as StringId
+}
+
+function emitSimpleBinding(
+	bindingId: NodeId,
+	exprId: NodeId,
+	declaredType: TypeId,
+	nameId: StringId,
+	state: CheckerState,
+	context: CompilationContext
+): void {
+	const exprResult = checkExpression(exprId, declaredType, state, context)
+	if (!isValidExprResult(exprResult)) return
+
+	const symId = state.symbols.add({
+		nameId,
+		parseNodeId: bindingId,
+		typeId: declaredType,
+	})
+
+	state.insts.add({
+		arg0: symId as number,
+		arg1: exprResult.instId as number,
+		kind: InstKind.Bind,
+		parseNodeId: bindingId,
+		typeId: declaredType,
+	})
+}
+
+function isListLiteralBinding(
+	exprId: NodeId,
+	declaredType: TypeId,
+	state: CheckerState,
+	context: CompilationContext
+): boolean {
+	const exprNode = context.nodes.get(exprId)
+	return exprNode.kind === NodeKind.ListLiteral && state.types.isListType(declaredType)
+}
+
+/**
  * Process a VariableBinding statement.
  * Syntax: identifier TypeAnnotation = Expression?
  * In postorder with expression: [Identifier, TypeAnnotation, Expression..., VariableBinding]
@@ -1406,16 +1820,7 @@ function processVariableBinding(
 	if (!nodes) return
 
 	const { exprId, hasExpression, identId, typeAnnotationId } = nodes
-
-	const identNode = context.nodes.get(identId)
-	console.assert(
-		identNode.kind === NodeKind.Identifier,
-		'VariableBinding: expected Identifier, found %d',
-		identNode.kind
-	)
-
-	const identToken = context.tokens.get(identNode.tokenId)
-	const nameId = identToken.payload as StringId
+	const nameId = extractBindingIdentInfo(identId, context)
 
 	const typeInfo = resolveTypeFromAnnotation(typeAnnotationId, state, context)
 	if (!typeInfo) {
@@ -1438,22 +1843,64 @@ function processVariableBinding(
 		return
 	}
 
-	const exprResult = checkExpression(exprId as NodeId, declaredType, state, context)
-	if (!isValidExprResult(exprResult)) return
+	if (isListLiteralBinding(exprId as NodeId, declaredType, state, context)) {
+		processListLiteralBinding(bindingId, exprId as NodeId, declaredType, nameId, state, context)
+		return
+	}
 
-	const symId = state.symbols.add({
-		nameId,
-		parseNodeId: bindingId,
-		typeId: declaredType,
-	})
+	emitSimpleBinding(bindingId, exprId as NodeId, declaredType, nameId, state, context)
+}
 
-	state.insts.add({
-		arg0: symId as number,
-		arg1: exprResult.instId as number,
-		kind: InstKind.Bind,
-		parseNodeId: bindingId,
-		typeId: declaredType,
-	})
+function emitListElementBindings(
+	symbolIds: SymbolId[],
+	elementResults: ExprResult[],
+	bindingId: NodeId,
+	elementTypeId: TypeId,
+	state: CheckerState
+): void {
+	for (let i = 0; i < symbolIds.length; i++) {
+		const symId = symbolIds[i]
+		const elemResult = elementResults[i]
+		if (symId !== undefined && elemResult && isValidExprResult(elemResult)) {
+			state.insts.add({
+				arg0: symId as number,
+				arg1: elemResult.instId as number,
+				kind: InstKind.Bind,
+				parseNodeId: bindingId,
+				typeId: elementTypeId,
+			})
+		}
+	}
+}
+
+function processListLiteralBinding(
+	bindingId: NodeId,
+	listLiteralId: NodeId,
+	listTypeId: TypeId,
+	nameId: StringId,
+	state: CheckerState,
+	context: CompilationContext
+): void {
+	const expectedSize = state.types.getListSize(listTypeId)
+	const elementTypeId = state.types.getListElementType(listTypeId)
+	if (expectedSize === undefined || elementTypeId === undefined) return
+
+	const elementIds = collectListElementIds(listLiteralId, context)
+	if (!validateListLiteralSize(listLiteralId, elementIds.length, expectedSize, context)) return
+
+	const { hasError, results } = checkListElements(elementIds, elementTypeId, state, context)
+	if (hasError) return
+
+	const baseName = context.strings.get(nameId)
+	const symbolIds = state.symbols.declareListBinding(
+		baseName,
+		listTypeId,
+		bindingId,
+		(name) => context.strings.intern(name),
+		state.types
+	)
+
+	emitListElementBindings(symbolIds, results, bindingId, elementTypeId, state)
 }
 
 /**
