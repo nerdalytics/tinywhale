@@ -1,0 +1,5 @@
+# Fixed-size list example
+nums: i32[]<size=4> = [10, 20, 30, 40]
+first: i32 = nums[0]
+last: i32 = nums[3]
+panic

@@ -1,0 +1,6 @@
+# List element arithmetic
+values: i32[]<size=3> = [100, 200, 50]
+sum_first_two: i32 = values[0] + values[1]
+difference: i32 = values[0] - values[2]
+doubled: i32 = values[1] * 2
+panic
