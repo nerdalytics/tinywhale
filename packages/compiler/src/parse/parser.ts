@@ -95,6 +95,12 @@ function tokenToOhmString(token: Token, context: CompilationContext): string | n
 			return '.'
 		case TokenKind.Bang:
 			return '!'
+		case TokenKind.LBracket:
+			return '['
+		case TokenKind.RBracket:
+			return ']'
+		case TokenKind.Comma:
+			return ','
 		default:
 			return null
 	}
@@ -245,6 +251,18 @@ function createNodeEmittingSemantics(
 		})
 	}
 
+	/** Check if node is a TypeRef wrapping a ListType */
+	function isListTypeRef(typeNode: Node): boolean {
+		if (typeNode.ctorName !== 'TypeRef') return false
+		return typeNode.child(0).ctorName === 'ListType'
+	}
+
+	/** Extract ListType from TypeRef wrapper and emit if present */
+	function maybeEmitListType(typeNode: Node): void {
+		if (!isListTypeRef(typeNode)) return
+		typeNode.child(0)['emitTypeAnnotation']()
+	}
+
 	semantics.addOperation<NodeId>('emitExpression', {
 		AddExpr(first: Node, ops: Node, rest: Node): NodeId {
 			return emitBinaryChain(first, ops, rest)
@@ -296,6 +314,22 @@ function createNodeEmittingSemantics(
 				tokenId: tid,
 			})
 		},
+		IndexAccess(base: Node, _lbrackets: Node, indices: Node, _rbrackets: Node): NodeId {
+			let currentId = base['emitExpression']() as NodeId
+
+			for (let i = 0; i < indices.numChildren; i++) {
+				const indexNode = indices.child(i)
+				indexNode['emitExpression']()
+				const tid = getTokenIdForOhmNode(indexNode)
+				const baseSize = context.nodes.get(currentId).subtreeSize
+				currentId = context.nodes.add({
+					kind: NodeKind.IndexAccess,
+					subtreeSize: 1 + baseSize + 1, // base + index literal
+					tokenId: tid,
+				})
+			}
+			return currentId
+		},
 		identifier(_firstChar: Node, _restChars: Node): NodeId {
 			const tid = getTokenIdForOhmNode(this)
 			return context.nodes.add({
@@ -312,6 +346,24 @@ function createNodeEmittingSemantics(
 				tokenId: tid,
 			})
 		},
+		ListLiteral(_lbracket: Node, elements: Node, _rbracket: Node): NodeId {
+			const startCount = context.nodes.count()
+			// Emit all elements first (postorder)
+			const firstExpr = elements.child(0)
+			firstExpr['emitExpression']()
+			const restExprs = elements.child(1) // (comma Expression)*
+			for (let i = 0; i < restExprs.numChildren; i++) {
+				restExprs.child(i)['emitExpression']()
+			}
+			const childCount = context.nodes.count() - startCount
+
+			const tid = getTokenIdForOhmNode(this)
+			return context.nodes.add({
+				kind: NodeKind.ListLiteral,
+				subtreeSize: 1 + childCount,
+				tokenId: tid,
+			})
+		},
 		LogicalAndExpr(first: Node, ops: Node, rest: Node): NodeId {
 			return emitBinaryChain(first, ops, rest)
 		},
@@ -321,7 +373,23 @@ function createNodeEmittingSemantics(
 		MulExpr(first: Node, ops: Node, rest: Node): NodeId {
 			return emitBinaryChain(first, ops, rest)
 		},
+		PostfixBase(expr: Node): NodeId {
+			return expr['emitExpression']()
+		},
+		PostfixExpr(expr: Node): NodeId {
+			return expr['emitExpression']()
+		},
 		PrimaryExpr_paren(_lparen: Node, expr: Node, _rparen: Node): NodeId {
+			const childId = expr['emitExpression']() as NodeId
+			const tid = getTokenIdForOhmNode(this)
+			const childSize = context.nodes.get(childId).subtreeSize
+			return context.nodes.add({
+				kind: NodeKind.ParenExpr,
+				subtreeSize: 1 + childSize,
+				tokenId: tid,
+			})
+		},
+		PrimaryExprBase_paren(_lparen: Node, expr: Node, _rparen: Node): NodeId {
 			const childId = expr['emitExpression']() as NodeId
 			const tid = getTokenIdForOhmNode(this)
 			const childSize = context.nodes.get(childId).subtreeSize
@@ -347,11 +415,42 @@ function createNodeEmittingSemantics(
 	})
 
 	semantics.addOperation<NodeId>('emitTypeAnnotation', {
-		TypeAnnotation(_colon: Node, typeName: Node): NodeId {
-			const tid = getTokenIdForOhmNode(typeName)
+		ListType(elementType: Node, _lbracket: Node, _rbracket: Node, sizeHint: Node): NodeId {
+			const startCount = context.nodes.count()
+			maybeEmitListType(elementType)
+			sizeHint['emitTypeAnnotation']()
+			const childCount = context.nodes.count() - startCount
+
+			const tid = getTokenIdForOhmNode(this)
+			return context.nodes.add({
+				kind: NodeKind.ListType,
+				subtreeSize: 1 + childCount,
+				tokenId: tid,
+			})
+		},
+		SizeHint(
+			_lessThan: Node,
+			_sizeKeyword: Node,
+			_equals: Node,
+			sizeLiteral: Node,
+			_greaterThan: Node
+		): NodeId {
+			const tid = getTokenIdForOhmNode(sizeLiteral)
+			return context.nodes.add({
+				kind: NodeKind.SizeHint,
+				subtreeSize: 1,
+				tokenId: tid,
+			})
+		},
+		TypeAnnotation(_colon: Node, typeRef: Node): NodeId {
+			const startCount = context.nodes.count()
+			maybeEmitListType(typeRef)
+			const childCount = context.nodes.count() - startCount
+
+			const tid = getTokenIdForOhmNode(typeRef)
 			return context.nodes.add({
 				kind: NodeKind.TypeAnnotation,
-				subtreeSize: 1,
+				subtreeSize: 1 + childCount,
 				tokenId: tid,
 			})
 		},
