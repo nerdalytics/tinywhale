@@ -21,7 +21,10 @@ export const NodeKind = {
 
 	Identifier: 100,
 	IndentedLine: 0,
+	IndexAccess: 111,
 	IntLiteral: 101,
+	ListLiteral: 112,
+	ListType: 151,
 	LiteralPattern: 201,
 	MatchArm: 13,
 	MatchExpr: 12,
@@ -36,6 +39,7 @@ export const NodeKind = {
 	RecordLiteral: 107,
 	RootLine: 2,
 
+	SizeHint: 152,
 	TypeAnnotation: 150,
 	TypeDecl: 50,
 	UnaryExpr: 102,
