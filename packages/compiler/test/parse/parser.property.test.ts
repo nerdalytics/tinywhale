@@ -158,13 +158,14 @@ describe('parse/parser properties', () => {
 							const childRangeStart = id - node.subtreeSize + 1
 							// Child range must be valid (non-negative start)
 							if (childRangeStart < 0) return false
-							// Verify children's subtreeSizes sum correctly
+							// Verify direct children's subtreeSizes sum correctly
+							// Must iterate BACKWARD from id-1 (immediate predecessor is always a direct child)
 							let childSizeSum = 0
-							let pos = childRangeStart
-							while (pos < id) {
+							let pos = id - 1
+							while (pos >= childRangeStart) {
 								const child = ctx.nodes.get(pos as never)
 								childSizeSum += child.subtreeSize
-								pos += child.subtreeSize
+								pos -= child.subtreeSize
 							}
 							// childSizeSum should equal subtreeSize - 1
 							if (childSizeSum !== node.subtreeSize - 1) return false
