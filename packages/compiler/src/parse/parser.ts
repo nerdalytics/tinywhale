@@ -349,9 +349,13 @@ function createNodeEmittingSemantics(
 		ListLiteral(_lbracket: Node, elements: Node, _rbracket: Node): NodeId {
 			const startCount = context.nodes.count()
 			// Emit all elements first (postorder)
+			// ListElements = Expression (comma Expression)*
+			// child(0) = first Expression
+			// child(1) = _iter of commas
+			// child(2) = _iter of remaining Expressions
 			const firstExpr = elements.child(0)
 			firstExpr['emitExpression']()
-			const restExprs = elements.child(1) // (comma Expression)*
+			const restExprs = elements.child(2) // The _iter of remaining Expressions
 			for (let i = 0; i < restExprs.numChildren; i++) {
 				restExprs.child(i)['emitExpression']()
 			}
