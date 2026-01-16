@@ -302,6 +302,30 @@ export const TWCHECK037: DiagnosticDef = {
 	suggestion: 'Provide exactly {expected} elements or change the size annotation.',
 }
 
+export const TWCHECK040: DiagnosticDef = {
+	code: 'TWCHECK040',
+	description: 'Type hints min/max can only be applied to integer types (i32, i64).',
+	message: 'cannot apply min/max constraints to `{type}`',
+	severity: DiagnosticSeverity.Error,
+	suggestion: 'Remove the type hints or change the type to i32 or i64.',
+}
+
+export const TWCHECK041: DiagnosticDef = {
+	code: 'TWCHECK041',
+	description: 'The literal value does not satisfy the type constraints.',
+	message: 'value {value} violates constraint {constraint}',
+	severity: DiagnosticSeverity.Error,
+	suggestion: 'Use a value that satisfies {constraint}.',
+}
+
+export const TWCHECK042: DiagnosticDef = {
+	code: 'TWCHECK042',
+	description: 'Cannot statically verify that value satisfies type constraints.',
+	message: 'cannot prove constraint {constraint} for expression',
+	severity: DiagnosticSeverity.Warning,
+	suggestion: 'Add explicit bounds checking or use `as` with a pattern guard.',
+}
+
 // =============================================================================
 // CHECKER WARNINGS (TWCHECK050-099)
 // =============================================================================
@@ -360,6 +384,9 @@ export const COMPILER_DIAGNOSTICS = {
 	TWCHECK035,
 	TWCHECK036,
 	TWCHECK037,
+	TWCHECK040,
+	TWCHECK041,
+	TWCHECK042,
 	TWCHECK050,
 	TWGEN001,
 	TWLEX001,

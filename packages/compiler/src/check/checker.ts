@@ -358,6 +358,10 @@ function findHintedPrimitiveChild(
 	return findChildByKind(typeAnnotationId, NodeKind.HintedPrimitive, context)
 }
 
+function hasMinOrMaxConstraint(constraints: { min?: bigint; max?: bigint } | null): boolean {
+	return constraints?.min !== undefined || constraints?.max !== undefined
+}
+
 function resolveHintedPrimitive(
 	hintedPrimitiveId: NodeId,
 	state: CheckerState,
@@ -372,9 +376,17 @@ function resolveHintedPrimitive(
 	if (typeHintsId === null) return baseType
 
 	const constraints = extractConstraintsFromTypeHints(typeHintsId, context)
-	const hasConstraints = constraints?.min !== undefined || constraints?.max !== undefined
-	if (!hasConstraints) return baseType
+	if (!hasMinOrMaxConstraint(constraints)) return baseType
 
+	// min/max constraints can only be applied to integer types
+	if (!isIntegerType(baseType.typeId)) {
+		context.emitAtNode('TWCHECK040' as DiagnosticCode, hintedPrimitiveId, {
+			type: baseType.name,
+		})
+		return null
+	}
+
+	// biome-ignore lint/style/noNonNullAssertion: constraints verified by hasMinOrMaxConstraint
 	const refinedTypeId = state.types.registerRefinedType(baseType.typeId, constraints!)
 	return { name: state.types.typeName(refinedTypeId), typeId: refinedTypeId }
 }
@@ -469,17 +481,6 @@ function fitsInBaseBounds(value: bigint, baseTypeId: TypeId): boolean {
 function fitsInConstraints(value: bigint, constraints: { min?: bigint; max?: bigint }): boolean {
 	if (constraints.min !== undefined && value < constraints.min) return false
 	if (constraints.max !== undefined && value > constraints.max) return false
-	return true
-}
-
-function valueFitsInType(value: bigint, typeId: TypeId, state?: CheckerState): boolean {
-	const baseTypeId = state?.types.toWasmType(typeId) ?? typeId
-	if (!fitsInBaseBounds(value, baseTypeId)) return false
-
-	if (state?.types.isRefinedType(typeId)) {
-		const constraints = state.types.getConstraints(typeId)
-		if (constraints && !fitsInConstraints(value, constraints)) return false
-	}
 	return true
 }
 
@@ -668,6 +669,38 @@ function parseIntegerLiteral(text: string): bigint {
 	return BigInt(text)
 }
 
+function emitConstraintViolationError(
+	nodeId: NodeId,
+	value: bigint,
+	constraints: { min?: bigint; max?: bigint },
+	context: CompilationContext
+): ExprResult {
+	let constraint: string
+	if (constraints.min !== undefined && value < constraints.min) {
+		constraint = `min=${constraints.min}`
+	} else {
+		constraint = `max=${constraints.max}`
+	}
+	context.emitAtNode('TWCHECK041' as DiagnosticCode, nodeId, {
+		constraint,
+		value: value.toString(),
+	})
+	return { instId: null, typeId: BuiltinTypeId.Invalid }
+}
+
+function checkRefinementConstraints(
+	nodeId: NodeId,
+	value: bigint,
+	expectedType: TypeId,
+	state: CheckerState,
+	context: CompilationContext
+): ExprResult | null {
+	if (!state.types.isRefinedType(expectedType)) return null
+	const constraints = state.types.getConstraints(expectedType)
+	if (!constraints || fitsInConstraints(value, constraints)) return null
+	return emitConstraintViolationError(nodeId, value, constraints, context)
+}
+
 function checkIntLiteralAsInt(
 	nodeId: NodeId,
 	expectedType: TypeId,
@@ -679,10 +712,17 @@ function checkIntLiteralAsInt(
 	let value = parseIntegerLiteral(literalText)
 	if (negate) value = -value
 
-	if (!valueFitsInType(value, expectedType, state)) {
+	// Check base type bounds (TWCHECK014)
+	const baseTypeId = state.types.toWasmType(expectedType)
+	if (!fitsInBaseBounds(value, baseTypeId)) {
 		const typeName = state.types.typeName(expectedType)
 		return emitIntBoundsError(nodeId, typeName, formatDisplayValue(literalText, negate), context)
 	}
+
+	// Check refinement constraints (TWCHECK041)
+	const constraintError = checkRefinementConstraints(nodeId, value, expectedType, state, context)
+	if (constraintError) return constraintError
+
 	return emitIntConstInst(nodeId, expectedType, value, state)
 }
 

@@ -61,10 +61,25 @@ describe('check/type-hints TypeStore', () => {
 // Arbitraries for property tests
 const integerBaseTypeArb = fc.constantFrom(BuiltinTypeId.I32, BuiltinTypeId.I64)
 
-const constraintsArb = fc.record({
-	max: fc.option(fc.bigInt({ max: 1000n, min: -1000n }), { nil: undefined }),
-	min: fc.option(fc.bigInt({ max: 1000n, min: -1000n }), { nil: undefined }),
-})
+const constraintsArb = fc
+	.record({
+		max: fc.option(fc.bigInt({ max: 1000n, min: -1000n }), { nil: undefined }),
+		min: fc.option(fc.bigInt({ max: 1000n, min: -1000n }), { nil: undefined }),
+	})
+	.map(({ min, max }) => {
+		const result: { min?: bigint; max?: bigint } = {}
+		if (min !== undefined) result.min = min
+		if (max !== undefined) result.max = max
+		return result
+	})
+
+function compileAndCheck(source: string): CompilationContext {
+	const ctx = new CompilationContext(source)
+	tokenize(ctx)
+	parse(ctx)
+	check(ctx)
+	return ctx
+}
 
 describe('check/type-hints TypeStore properties', () => {
 	it('refined types with identical constraints are always interned', () => {
@@ -152,14 +167,6 @@ describe('check/type-hints TypeStore properties', () => {
 })
 
 describe('check/type-hints resolution', () => {
-	function compileAndCheck(source: string): CompilationContext {
-		const ctx = new CompilationContext(source)
-		tokenize(ctx)
-		parse(ctx)
-		check(ctx)
-		return ctx
-	}
-
 	it('resolves i32<min=0> to refined type', () => {
 		const ctx = compileAndCheck('x: i32<min=0> = 5\npanic')
 		assert.ok(
@@ -187,5 +194,71 @@ describe('check/type-hints resolution', () => {
 	it('refined type assignment is compatible with literal in range', () => {
 		const ctx = compileAndCheck('x: i32<min=0, max=100> = 50\npanic')
 		assert.ok(!ctx.hasErrors(), 'literal 50 should be valid for i32<min=0, max=100>')
+	})
+})
+
+describe('check/type-hints diagnostics', () => {
+	describe('TWCHECK040: invalid hint target', () => {
+		it('errors when applying min/max to f32', () => {
+			const ctx = compileAndCheck('x: f32<min=0> = 5.0\npanic')
+
+			const diags = ctx.getDiagnostics()
+			assert.ok(
+				diags.some((d) => d.def.code === 'TWCHECK040'),
+				`expected TWCHECK040, got: ${diags.map((d) => d.def.code)}`
+			)
+		})
+
+		it('errors when applying min/max to f64', () => {
+			const ctx = compileAndCheck('x: f64<max=100> = 50.0\npanic')
+
+			const diags = ctx.getDiagnostics()
+			assert.ok(
+				diags.some((d) => d.def.code === 'TWCHECK040'),
+				`expected TWCHECK040, got: ${diags.map((d) => d.def.code)}`
+			)
+		})
+	})
+
+	describe('TWCHECK041: literal constraint violation', () => {
+		it('errors when literal violates min constraint', () => {
+			const ctx = compileAndCheck('x: i32<min=0> = -1\npanic')
+
+			const diags = ctx.getDiagnostics()
+			assert.ok(
+				diags.some((d) => d.def.code === 'TWCHECK041'),
+				`expected TWCHECK041, got: ${diags.map((d) => d.def.code)}`
+			)
+		})
+
+		it('errors when literal violates max constraint', () => {
+			const ctx = compileAndCheck('x: i32<max=100> = 101\npanic')
+
+			const diags = ctx.getDiagnostics()
+			assert.ok(
+				diags.some((d) => d.def.code === 'TWCHECK041'),
+				`expected TWCHECK041, got: ${diags.map((d) => d.def.code)}`
+			)
+		})
+
+		it('errors when literal violates both min and max', () => {
+			const ctx = compileAndCheck('x: i32<min=0, max=100> = -5\npanic')
+
+			const diags = ctx.getDiagnostics()
+			assert.ok(
+				diags.some((d) => d.def.code === 'TWCHECK041'),
+				`expected TWCHECK041, got: ${diags.map((d) => d.def.code)}`
+			)
+		})
+
+		it('errors when literal exceeds max with min also defined', () => {
+			const ctx = compileAndCheck('x: i32<min=0, max=100> = 150\npanic')
+
+			const diags = ctx.getDiagnostics()
+			assert.ok(
+				diags.some((d) => d.def.code === 'TWCHECK041'),
+				`expected TWCHECK041, got: ${diags.map((d) => d.def.code)}`
+			)
+		})
 	})
 })
