@@ -13,17 +13,12 @@ import type { CompilationContext, StringId } from '../core/context.ts'
 import type { DiagnosticCode } from '../core/diagnostics.ts'
 import { type NodeId, NodeKind, nodeId, offsetNodeId, prevNodeId } from '../core/nodes.ts'
 import { nextTokenId, type Token, TokenKind } from '../core/tokens.ts'
-import {
-	checkExpression,
-	checkListElements,
-	collectListElementIds,
-	validateListLiteralSize,
-} from './expressions.ts'
+import { processVariableBinding } from './bindings.ts'
+import { checkExpression } from './expressions.ts'
 import {
 	type BlockContext,
 	type CheckerState,
 	currentBlockContext,
-	type ExprResult,
 	isInNestedRecordInitContext,
 	isInRecordInitContext,
 	isInRecordLiteralContext,
@@ -36,7 +31,7 @@ import {
 	type TypeDeclContext,
 } from './state.ts'
 import { InstStore, ScopeStore, SymbolStore, TypeStore } from './stores.ts'
-import { getTypeNameFromToken, resolveTypeFromAnnotation } from './type-resolution.ts'
+import { getTypeNameFromToken } from './type-resolution.ts'
 import {
 	BuiltinTypeId,
 	type CheckResult,
@@ -68,63 +63,10 @@ function getStatementFromLine(
 }
 
 /**
- * Result of extracting binding nodes from a VariableBinding.
- */
-interface BindingNodes {
-	identId: NodeId
-	typeAnnotationId: NodeId
-	exprId: NodeId | null
-	hasExpression: boolean
-}
-
-/**
- * Extract the node positions for identifier, type annotation, and optional expression
- * from a VariableBinding node in postorder storage.
- */
-function extractBindingNodes(bindingId: NodeId, context: CompilationContext): BindingNodes | null {
-	const prevId = prevNodeId(bindingId)
-	const prevNode = context.nodes.get(prevId)
-
-	if (prevNode.kind === NodeKind.TypeAnnotation) {
-		const typeAnnotationId = prevId
-		const identId = offsetNodeId(typeAnnotationId, -prevNode.subtreeSize)
-		return { exprId: null, hasExpression: false, identId, typeAnnotationId }
-	}
-
-	if (isExpressionNode(prevNode.kind)) {
-		const typeAnnotationId = offsetNodeId(prevId, -prevNode.subtreeSize)
-		const typeAnnotationNode = context.nodes.get(typeAnnotationId)
-		const identId = offsetNodeId(typeAnnotationId, -typeAnnotationNode.subtreeSize)
-		return { exprId: prevId, hasExpression: true, identId, typeAnnotationId }
-	}
-
-	console.assert(
-		false,
-		'VariableBinding: expected TypeAnnotation or expression, found %d',
-		prevNode.kind
-	)
-	return null
-}
-
-/**
- * Emit unknown type error with the type name from the annotation.
- */
-function emitUnknownTypeError(typeAnnotationId: NodeId, context: CompilationContext): void {
-	const typeAnnotationNode = context.nodes.get(typeAnnotationId)
-	const typeToken = context.tokens.get(typeAnnotationNode.tokenId)
-	const typeName =
-		typeToken.kind === TokenKind.Identifier
-			? context.strings.get(typeToken.payload as StringId)
-			: 'unknown'
-	context.emitAtNode('TWCHECK010' as DiagnosticCode, typeAnnotationId, {
-		found: typeName,
-	})
-}
-
-/**
  * Handle record literal binding (no expression, record type).
+ * Called when processVariableBinding returns record literal info.
  */
-function processRecordLiteralBinding(
+function handleRecordLiteralBinding(
 	bindingId: NodeId,
 	typeAnnotationId: NodeId,
 	declaredType: TypeId,
@@ -143,153 +85,26 @@ function processRecordLiteralBinding(
 }
 
 /**
- * Extract binding identifier info from nodes.
+ * Process a variable binding, handling record literals locally.
  */
-function extractBindingIdentInfo(identId: NodeId, context: CompilationContext): StringId {
-	const identNode = context.nodes.get(identId)
-	console.assert(
-		identNode.kind === NodeKind.Identifier,
-		'VariableBinding: expected Identifier, found %d',
-		identNode.kind
-	)
-	const identToken = context.tokens.get(identNode.tokenId)
-	return identToken.payload as StringId
-}
-
-function emitSimpleBinding(
-	bindingId: NodeId,
-	exprId: NodeId,
-	declaredType: TypeId,
-	nameId: StringId,
-	state: CheckerState,
-	context: CompilationContext
-): void {
-	const exprResult = checkExpression(exprId, declaredType, state, context)
-	if (!isValidExprResult(exprResult)) return
-
-	const symId = state.symbols.add({
-		nameId,
-		parseNodeId: bindingId,
-		typeId: declaredType,
-	})
-
-	state.insts.add({
-		arg0: symId as number,
-		arg1: exprResult.instId as number,
-		kind: InstKind.Bind,
-		parseNodeId: bindingId,
-		typeId: declaredType,
-	})
-}
-
-function isListLiteralBinding(
-	exprId: NodeId,
-	declaredType: TypeId,
-	state: CheckerState,
-	context: CompilationContext
-): boolean {
-	const exprNode = context.nodes.get(exprId)
-	return exprNode.kind === NodeKind.ListLiteral && state.types.isListType(declaredType)
-}
-
-/**
- * Process a VariableBinding statement.
- * Syntax: identifier TypeAnnotation = Expression?
- * In postorder with expression: [Identifier, TypeAnnotation, Expression..., VariableBinding]
- * In postorder without expression: [Identifier, TypeAnnotation, VariableBinding]
- *
- * When Expression is absent (record literal mode), the indented lines contain FieldInit nodes.
- */
-function processVariableBinding(
+function handleVariableBinding(
 	bindingId: NodeId,
 	state: CheckerState,
 	context: CompilationContext
 ): void {
-	const nodes = extractBindingNodes(bindingId, context)
-	if (!nodes) return
-
-	const { exprId, hasExpression, identId, typeAnnotationId } = nodes
-	const nameId = extractBindingIdentInfo(identId, context)
-
-	const typeInfo = resolveTypeFromAnnotation(typeAnnotationId, state, context)
-	if (!typeInfo) {
-		emitUnknownTypeError(typeAnnotationId, context)
-		return
-	}
-
-	const declaredType = typeInfo.typeId
-
-	if (!hasExpression) {
-		processRecordLiteralBinding(
+	const result = processVariableBinding(bindingId, state, context)
+	if (result) {
+		// Record literal case - handle locally since startRecordLiteral is in this module
+		handleRecordLiteralBinding(
 			bindingId,
-			typeAnnotationId,
-			declaredType,
-			typeInfo,
-			nameId,
+			result.typeAnnotationId,
+			result.declaredType,
+			result.typeInfo,
+			result.nameId,
 			state,
 			context
 		)
-		return
 	}
-
-	if (isListLiteralBinding(exprId as NodeId, declaredType, state, context)) {
-		processListLiteralBinding(bindingId, exprId as NodeId, declaredType, nameId, state, context)
-		return
-	}
-
-	emitSimpleBinding(bindingId, exprId as NodeId, declaredType, nameId, state, context)
-}
-
-function emitListElementBindings(
-	symbolIds: SymbolId[],
-	elementResults: ExprResult[],
-	bindingId: NodeId,
-	elementTypeId: TypeId,
-	state: CheckerState
-): void {
-	for (let i = 0; i < symbolIds.length; i++) {
-		const symId = symbolIds[i]
-		const elemResult = elementResults[i]
-		if (symId !== undefined && elemResult && isValidExprResult(elemResult)) {
-			state.insts.add({
-				arg0: symId as number,
-				arg1: elemResult.instId as number,
-				kind: InstKind.Bind,
-				parseNodeId: bindingId,
-				typeId: elementTypeId,
-			})
-		}
-	}
-}
-
-function processListLiteralBinding(
-	bindingId: NodeId,
-	listLiteralId: NodeId,
-	listTypeId: TypeId,
-	nameId: StringId,
-	state: CheckerState,
-	context: CompilationContext
-): void {
-	const expectedSize = state.types.getListSize(listTypeId)
-	const elementTypeId = state.types.getListElementType(listTypeId)
-	if (expectedSize === undefined || elementTypeId === undefined) return
-
-	const elementIds = collectListElementIds(listLiteralId, context)
-	if (!validateListLiteralSize(listLiteralId, elementIds.length, expectedSize, context)) return
-
-	const { hasError, results } = checkListElements(elementIds, elementTypeId, state, context)
-	if (hasError) return
-
-	const baseName = context.strings.get(nameId)
-	const symbolIds = state.symbols.declareListBinding(
-		baseName,
-		listTypeId,
-		bindingId,
-		(name) => context.strings.intern(name),
-		state.types
-	)
-
-	emitListElementBindings(symbolIds, results, bindingId, elementTypeId, state)
 }
 
 /**
@@ -1192,7 +1007,7 @@ function startMatchBinding(
 ): void {
 	const nodes = extractMatchBindingNodes(bindingId, context)
 	if (!nodes) {
-		processVariableBinding(bindingId, state, context)
+		handleVariableBinding(bindingId, state, context)
 		return
 	}
 
@@ -1233,7 +1048,7 @@ function emitStatement(
 				if (matchExprNode.kind === NodeKind.MatchExpr) {
 					startMatchBinding(stmtId, state, context)
 				} else {
-					processVariableBinding(stmtId, state, context)
+					handleVariableBinding(stmtId, state, context)
 				}
 			}
 			break
