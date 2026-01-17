@@ -20,12 +20,7 @@ import {
 	processFieldDecl,
 	startTypeDecl,
 } from './declarations.ts'
-import {
-	finalizeMatch,
-	getMatchArmFromLine,
-	processMatchArm,
-	startMatchBinding,
-} from './match.ts'
+import { finalizeMatch, getMatchArmFromLine, processMatchArm, startMatchBinding } from './match.ts'
 import {
 	extractFieldInitName,
 	finalizeNestedRecordInit,

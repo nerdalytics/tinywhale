@@ -14,7 +14,7 @@
 import type { CompilationContext, StringId } from '../core/context.ts'
 import type { DiagnosticCode } from '../core/diagnostics.ts'
 import type { NodeId } from '../core/nodes.ts'
-import { NodeKind } from '../core/nodes.ts'
+import { NodeKind, prevNodeId } from '../core/nodes.ts'
 import { TokenKind } from '../core/tokens.ts'
 import { resolveUserDefinedFieldType } from './declarations.ts'
 import { checkExpression } from './expressions.ts'
@@ -26,9 +26,9 @@ import {
 	popBlockContext,
 	pushBlockContext,
 	type RecordLiteralContext,
+	type TypeDeclContext,
 } from './state.ts'
 import { type FieldInfo, InstKind, type SymbolId, type TypeId } from './types.ts'
-import { prevNodeId } from '../core/nodes.ts'
 
 // ============================================================================
 // Field Init Detection
@@ -176,40 +176,46 @@ export function processFieldInitInNestedContext(
 }
 
 /**
+ * Extract field info from a FieldInit with NestedRecordInit for type declaration.
+ * Returns null if context is wrong, type name is missing, or type resolution fails.
+ */
+function extractTypeDeclFieldInfo(
+	fieldInitId: NodeId,
+	state: CheckerState,
+	context: CompilationContext
+): { ctx: TypeDeclContext; fieldName: string; typeId: TypeId } | null {
+	const ctx = currentBlockContext(state)
+	if (!ctx || ctx.kind !== 'TypeDecl') return null
+
+	const typeName = getNestedRecordTypeName(fieldInitId, context)
+	if (!typeName) return null
+
+	const typeId = resolveUserDefinedFieldType(typeName, fieldInitId, state, context)
+	if (typeId === null) return null
+
+	const fieldName = extractFieldInitName(fieldInitId, context)
+	return { ctx, fieldName, typeId }
+}
+
+/**
  * Process a FieldInit with NestedRecordInit as a type declaration field.
  * This handles the case where a user-defined type field is parsed as FieldInit.
- *
- * NOTE: This function requires resolveUserDefinedFieldType and addFieldToTypeDeclContext
- * from declarations.ts, which creates a dependency. To avoid circular imports,
- * this function is implemented in declarations.ts instead.
  */
 export function processFieldInitAsTypeField(
 	fieldInitId: NodeId,
 	state: CheckerState,
 	context: CompilationContext
 ): void {
-	const ctx = currentBlockContext(state)
-	if (!ctx || ctx.kind !== 'TypeDecl') return
+	const info = extractTypeDeclFieldInfo(fieldInitId, state, context)
+	if (!info) return
 
-	const fieldInitNode = context.nodes.get(fieldInitId)
-	const fieldToken = context.tokens.get(fieldInitNode.tokenId)
-	const fieldName = context.strings.get(fieldToken.payload as StringId)
-
-	const typeName = getNestedRecordTypeName(fieldInitId, context)
-	if (!typeName) return
-
-	// Use resolveUserDefinedFieldType to check for self-reference cycles
-	const typeId = resolveUserDefinedFieldType(typeName, fieldInitId, state, context)
-	if (typeId === null) return
-
-	// Duplicate field check
-	if (ctx.fieldNames.has(fieldName)) {
-		context.emitAtNode('TWCHECK026' as DiagnosticCode, fieldInitId, { name: fieldName })
+	if (info.ctx.fieldNames.has(info.fieldName)) {
+		context.emitAtNode('TWCHECK026' as DiagnosticCode, fieldInitId, { name: info.fieldName })
 		return
 	}
 
-	ctx.fieldNames.add(fieldName)
-	ctx.fields.push({ name: fieldName, nodeId: fieldInitId, typeId })
+	info.ctx.fieldNames.add(info.fieldName)
+	info.ctx.fields.push({ name: info.fieldName, nodeId: fieldInitId, typeId: info.typeId })
 }
 
 // ============================================================================
