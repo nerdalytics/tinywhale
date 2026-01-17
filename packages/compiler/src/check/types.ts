@@ -99,6 +99,8 @@ export const TypeKind = {
 	None: 0,
 	/** Record type with named fields */
 	Record: 6,
+	/** Refined type with constraints (min/max) */
+	Refined: 8,
 } as const
 
 export type TypeKind = (typeof TypeKind)[keyof typeof TypeKind]
@@ -132,6 +134,15 @@ export interface FieldInfo {
 }
 
 /**
+ * Constraints for refined types (min/max bounds).
+ * Uses bigint to support both i32 and i64 ranges.
+ */
+export interface TypeConstraints {
+	readonly min?: bigint
+	readonly max?: bigint
+}
+
+/**
  * Information about a type stored in TypeStore.
  */
 export interface TypeInfo {
@@ -149,6 +160,8 @@ export interface TypeInfo {
 	readonly elementTypeId?: TypeId
 	/** For List types: fixed size */
 	readonly listSize?: number
+	/** For Refined types: constraint metadata (min/max) */
+	readonly constraints?: TypeConstraints
 }
 
 /**

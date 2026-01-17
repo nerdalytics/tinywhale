@@ -206,6 +206,23 @@ function extractSizeFromSizeHint(sizeHintId: NodeId, context: CompilationContext
 	return Number.isNaN(size) ? null : size
 }
 
+/**
+ * Extract size from a TypeHints node (new grammar structure).
+ * TypeHints contains Hint children, we find the first one and extract its value.
+ * For list types, there should be exactly one hint (the size).
+ */
+function extractSizeFromTypeHints(typeHintsId: NodeId, context: CompilationContext): number | null {
+	// Find the first Hint child
+	const hintId = findChildByKind(typeHintsId, NodeKind.Hint, context)
+	if (hintId === null) return null
+
+	const hintNode = context.nodes.get(hintId)
+	const valueToken = context.tokens.get(hintNode.tokenId)
+	const valueText = context.strings.get(valueToken.payload as StringId)
+	const size = Number.parseInt(valueText, 10)
+	return Number.isNaN(size) ? null : size
+}
+
 function resolveListElementType(
 	listTypeId: NodeId,
 	state: CheckerState,
@@ -239,6 +256,11 @@ function findChildByKind(
 }
 
 function findSizeHintChild(listTypeId: NodeId, context: CompilationContext): NodeId | null {
+	// First try new grammar structure (TypeHints)
+	const typeHintsId = findChildByKind(listTypeId, NodeKind.TypeHints, context)
+	if (typeHintsId !== null) return typeHintsId
+
+	// Fall back to old grammar structure (SizeHint) for compatibility
 	return findChildByKind(listTypeId, NodeKind.SizeHint, context)
 }
 
@@ -247,7 +269,16 @@ function findNestedListTypeChild(listTypeId: NodeId, context: CompilationContext
 }
 
 function validateListSize(sizeHintId: NodeId, context: CompilationContext): number | null {
-	const size = extractSizeFromSizeHint(sizeHintId, context)
+	const node = context.nodes.get(sizeHintId)
+
+	// Determine which extraction method to use based on node kind
+	let size: number | null
+	if (node.kind === NodeKind.TypeHints) {
+		size = extractSizeFromTypeHints(sizeHintId, context)
+	} else {
+		size = extractSizeFromSizeHint(sizeHintId, context)
+	}
+
 	if (size === null) return null
 
 	if (size <= 0) {
@@ -320,6 +351,101 @@ function resolveUserDefinedType(
 	return typeId !== undefined ? { name: typeName, typeId } : null
 }
 
+function findHintedPrimitiveChild(
+	typeAnnotationId: NodeId,
+	context: CompilationContext
+): NodeId | null {
+	return findChildByKind(typeAnnotationId, NodeKind.HintedPrimitive, context)
+}
+
+function hasMinOrMaxConstraint(constraints: { min?: bigint; max?: bigint } | null): boolean {
+	return constraints?.min !== undefined || constraints?.max !== undefined
+}
+
+function resolveHintedPrimitive(
+	hintedPrimitiveId: NodeId,
+	state: CheckerState,
+	context: CompilationContext
+): { name: string; typeId: TypeId } | null {
+	const hintedPrimitiveNode = context.nodes.get(hintedPrimitiveId)
+	const baseToken = context.tokens.get(hintedPrimitiveNode.tokenId)
+	const baseType = getTypeNameFromToken(baseToken.kind)
+	if (!baseType) return null
+
+	const typeHintsId = findChildByKind(hintedPrimitiveId, NodeKind.TypeHints, context)
+	if (typeHintsId === null) return baseType
+
+	const constraints = extractConstraintsFromTypeHints(typeHintsId, context)
+	if (!hasMinOrMaxConstraint(constraints)) return baseType
+
+	// min/max constraints can only be applied to integer types
+	if (!isIntegerType(baseType.typeId)) {
+		context.emitAtNode('TWCHECK040' as DiagnosticCode, hintedPrimitiveId, {
+			type: baseType.name,
+		})
+		return null
+	}
+
+	// biome-ignore lint/style/noNonNullAssertion: constraints verified by hasMinOrMaxConstraint
+	const refinedTypeId = state.types.registerRefinedType(baseType.typeId, constraints!)
+	return { name: state.types.typeName(refinedTypeId), typeId: refinedTypeId }
+}
+
+function extractHintValue(hintId: NodeId, context: CompilationContext): bigint {
+	const hintNode = context.nodes.get(hintId)
+	const valueToken = context.tokens.get(hintNode.tokenId)
+	const valueText = context.strings.get(valueToken.payload as StringId)
+	const line = context.getSourceLine(valueToken.line) ?? ''
+	const beforeValue = line.substring(0, valueToken.column - 1).trimEnd()
+	const isNegative = beforeValue.endsWith('-')
+	return isNegative ? -BigInt(valueText) : BigInt(valueText)
+}
+
+function parseKeywordFromPrefix(prefix: string): string | null {
+	const trimmed = prefix.trim()
+	if (trimmed.endsWith('min')) return 'min'
+	if (trimmed.endsWith('max')) return 'max'
+	if (trimmed.endsWith('size')) return 'size'
+	return null
+}
+
+function extractHintKeyword(hintId: NodeId, context: CompilationContext): string | null {
+	const hintNode = context.nodes.get(hintId)
+	const valueToken = context.tokens.get(hintNode.tokenId)
+	const line = context.getSourceLine(valueToken.line)
+	if (!line) return null
+
+	const beforeValue = line.substring(0, valueToken.column - 1)
+	const eqPos = beforeValue.lastIndexOf('=')
+	if (eqPos === -1) return null
+
+	return parseKeywordFromPrefix(beforeValue.substring(0, eqPos))
+}
+
+function processHintNode(
+	hintId: NodeId,
+	context: CompilationContext,
+	constraints: { min?: bigint; max?: bigint }
+): void {
+	const value = extractHintValue(hintId, context)
+	const keyword = extractHintKeyword(hintId, context)
+	if (keyword === 'min') constraints.min = value
+	else if (keyword === 'max') constraints.max = value
+}
+
+function extractConstraintsFromTypeHints(
+	typeHintsId: NodeId,
+	context: CompilationContext
+): { min?: bigint; max?: bigint } | null {
+	const constraints: { min?: bigint; max?: bigint } = {}
+	for (const [hintId, hintNode] of context.nodes.iterateChildren(typeHintsId)) {
+		if (hintNode.kind === NodeKind.Hint) {
+			processHintNode(hintId, context, constraints)
+		}
+	}
+	return constraints
+}
+
 function resolveTypeFromAnnotation(
 	typeAnnotationId: NodeId,
 	state: CheckerState,
@@ -328,6 +454,11 @@ function resolveTypeFromAnnotation(
 	const listTypeChildId = findListTypeChild(typeAnnotationId, context)
 	if (listTypeChildId !== null) {
 		return resolveListType(listTypeChildId, state, context)
+	}
+
+	const hintedPrimitiveId = findHintedPrimitiveChild(typeAnnotationId, context)
+	if (hintedPrimitiveId !== null) {
+		return resolveHintedPrimitive(hintedPrimitiveId, state, context)
 	}
 
 	const typeAnnotationNode = context.nodes.get(typeAnnotationId)
@@ -349,14 +480,20 @@ const INT_BOUNDS = {
 	i64: { max: BigInt('9223372036854775807'), min: BigInt('-9223372036854775808') },
 }
 
-function valueFitsInType(value: bigint, typeId: TypeId): boolean {
-	if (typeId === BuiltinTypeId.I32) {
+function fitsInBaseBounds(value: bigint, baseTypeId: TypeId): boolean {
+	if (baseTypeId === BuiltinTypeId.I32) {
 		return value >= INT_BOUNDS.i32.min && value <= INT_BOUNDS.i32.max
 	}
-	if (typeId === BuiltinTypeId.I64) {
+	if (baseTypeId === BuiltinTypeId.I64) {
 		return value >= INT_BOUNDS.i64.min && value <= INT_BOUNDS.i64.max
 	}
 	return false
+}
+
+function fitsInConstraints(value: bigint, constraints: { min?: bigint; max?: bigint }): boolean {
+	if (constraints.min !== undefined && value < constraints.min) return false
+	if (constraints.max !== undefined && value > constraints.max) return false
+	return true
 }
 
 /**
@@ -544,6 +681,38 @@ function parseIntegerLiteral(text: string): bigint {
 	return BigInt(text)
 }
 
+function emitConstraintViolationError(
+	nodeId: NodeId,
+	value: bigint,
+	constraints: { min?: bigint; max?: bigint },
+	context: CompilationContext
+): ExprResult {
+	let constraint: string
+	if (constraints.min !== undefined && value < constraints.min) {
+		constraint = `min=${constraints.min}`
+	} else {
+		constraint = `max=${constraints.max}`
+	}
+	context.emitAtNode('TWCHECK041' as DiagnosticCode, nodeId, {
+		constraint,
+		value: value.toString(),
+	})
+	return { instId: null, typeId: BuiltinTypeId.Invalid }
+}
+
+function checkRefinementConstraints(
+	nodeId: NodeId,
+	value: bigint,
+	expectedType: TypeId,
+	state: CheckerState,
+	context: CompilationContext
+): ExprResult | null {
+	if (!state.types.isRefinedType(expectedType)) return null
+	const constraints = state.types.getConstraints(expectedType)
+	if (!constraints || fitsInConstraints(value, constraints)) return null
+	return emitConstraintViolationError(nodeId, value, constraints, context)
+}
+
 function checkIntLiteralAsInt(
 	nodeId: NodeId,
 	expectedType: TypeId,
@@ -555,10 +724,17 @@ function checkIntLiteralAsInt(
 	let value = parseIntegerLiteral(literalText)
 	if (negate) value = -value
 
-	if (!valueFitsInType(value, expectedType)) {
+	// Check base type bounds (TWCHECK014)
+	const baseTypeId = state.types.toWasmType(expectedType)
+	if (!fitsInBaseBounds(value, baseTypeId)) {
 		const typeName = state.types.typeName(expectedType)
 		return emitIntBoundsError(nodeId, typeName, formatDisplayValue(literalText, negate), context)
 	}
+
+	// Check refinement constraints (TWCHECK041)
+	const constraintError = checkRefinementConstraints(nodeId, value, expectedType, state, context)
+	if (constraintError) return constraintError
+
 	return emitIntConstInst(nodeId, expectedType, value, state)
 }
 
@@ -1456,7 +1632,6 @@ function checkIndexAccess(
 	const result = checkIndexAccessInferred(exprId, state, context)
 	if (!isValidExprResult(result)) return result
 
-	// Check that the element type matches the expected type
 	if (!state.types.areEqual(result.typeId, expectedType)) {
 		const expected = state.types.typeName(expectedType)
 		const found = state.types.typeName(result.typeId)
@@ -1486,16 +1661,13 @@ function checkFieldAccessInferred(
 	const fieldToken = context.tokens.get(node.tokenId)
 	const fieldName = context.strings.get(fieldToken.payload as StringId)
 
-	// Try flattened symbol resolution first (p.x → p_x)
 	const flattened = tryResolveFlattenedSymbol(baseId, fieldName, state, context)
 	if (flattened) return emitFlattenedVarRef(exprId, flattened.symId, state)
 
-	// Check for unknown base identifier
 	if (!checkFlattenedBaseExists(baseId, state, context)) {
 		return { instId: null, typeId: BuiltinTypeId.Invalid }
 	}
 
-	// Standard field access handling
 	const baseResult = checkExpressionInferred(baseId, state, context)
 	if (!isValidExprResult(baseResult)) return baseResult
 
@@ -1515,7 +1687,6 @@ function checkFieldAccess(
 	const result = checkFieldAccessInferred(exprId, state, context)
 	if (!isValidExprResult(result)) return result
 
-	// Check that the field type matches the expected type
 	if (!state.types.areEqual(result.typeId, expectedType)) {
 		const expected = state.types.typeName(expectedType)
 		const found = state.types.typeName(result.typeId)
@@ -1672,7 +1843,6 @@ function checkExpression(
 		case NodeKind.ListLiteral:
 			return checkListLiteral(exprId, expectedType, state, context)
 		default:
-			// Should be unreachable - all expression kinds should be handled
 			console.assert(false, 'checkExpression: unhandled expression kind %d', node.kind)
 			return { instId: null, typeId: BuiltinTypeId.Invalid }
 	}

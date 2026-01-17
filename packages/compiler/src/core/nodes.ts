@@ -19,6 +19,9 @@ export const NodeKind = {
 	FieldInit: 108,
 	FloatLiteral: 103,
 
+	Hint: 153,
+	HintedPrimitive: 154,
+
 	Identifier: 100,
 	IndentedLine: 0,
 	IndexAccess: 111,
@@ -38,10 +41,10 @@ export const NodeKind = {
 	Program: 255,
 	RecordLiteral: 107,
 	RootLine: 2,
-
 	SizeHint: 152,
 	TypeAnnotation: 150,
 	TypeDecl: 50,
+	TypeHints: 155,
 	UnaryExpr: 102,
 	VariableBinding: 11,
 
