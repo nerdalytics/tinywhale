@@ -20,6 +20,22 @@ import {
 	prevNodeId,
 } from '../core/nodes.ts'
 import { nextTokenId, type Token, TokenKind } from '../core/tokens.ts'
+import {
+	type BlockContext,
+	type CheckerState,
+	currentBlockContext,
+	type ExprResult,
+	isInNestedRecordInitContext,
+	isInRecordInitContext,
+	isInRecordLiteralContext,
+	isInTypeDeclContext,
+	type MatchContext,
+	type NestedRecordInitContext,
+	popBlockContext,
+	pushBlockContext,
+	type RecordLiteralContext,
+	type TypeDeclContext,
+} from './state.ts'
 import { InstStore, ScopeStore, SymbolStore, TypeStore } from './stores.ts'
 import {
 	BuiltinTypeId,
@@ -31,53 +47,22 @@ import {
 	type TypeId,
 } from './types.ts'
 import {
-	type BlockContext,
-	type CheckerState,
-	type ExprResult,
-	type MatchContext,
-	type NestedRecordInitContext,
-	type RecordLiteralContext,
-	type TypeDeclContext,
-	currentBlockContext,
-	isInNestedRecordInitContext,
-	isInRecordInitContext,
-	isInRecordLiteralContext,
-	isInTypeDeclContext,
-	popBlockContext,
-	pushBlockContext,
-} from './state.ts'
-
-function isValidExprResult(result: ExprResult): result is { typeId: TypeId; instId: InstId } {
-	return result.typeId !== BuiltinTypeId.Invalid && result.instId !== null
-}
-
-function isTerminator(kind: NodeKind): boolean {
-	return kind === NodeKind.PanicStatement
-}
-
-/**
- * Checks if a node kind represents a statement.
- * Statement kinds are in range 10-99.
- */
-function isStatementNode(kind: NodeKind): boolean {
-	return kind >= 10 && kind < 100
-}
-
-/**
- * Checks if a node kind represents an expression.
- * Expression kinds are in range 100-149.
- */
-function isExpressionNode(kind: NodeKind): boolean {
-	return kind >= 100 && kind < 150
-}
-
-/**
- * Checks if a node kind represents a pattern.
- * Pattern kinds are in range 200-249.
- */
-function isPatternNode(kind: NodeKind): boolean {
-	return kind >= 200 && kind < 250
-}
+	fitsInBaseBounds,
+	fitsInConstraints,
+	getOperatorName,
+	isComparisonOperator,
+	isExpressionNode,
+	isFloatType,
+	isIntegerOnlyOperator,
+	isIntegerType,
+	isLogicalOperator,
+	isPatternNode,
+	isStatementNode,
+	isTerminator,
+	isValidExprResult,
+	isValidF32,
+	splitBigIntTo32BitParts,
+} from './utils.ts'
 
 function getStatementFromLine(
 	lineId: NodeId,
@@ -381,133 +366,6 @@ function resolveTypeFromAnnotation(
 	}
 
 	return null
-}
-
-const INT_BOUNDS = {
-	i32: { max: BigInt(2147483647), min: BigInt(-2147483648) },
-	i64: { max: BigInt('9223372036854775807'), min: BigInt('-9223372036854775808') },
-}
-
-function fitsInBaseBounds(value: bigint, baseTypeId: TypeId): boolean {
-	if (baseTypeId === BuiltinTypeId.I32) {
-		return value >= INT_BOUNDS.i32.min && value <= INT_BOUNDS.i32.max
-	}
-	if (baseTypeId === BuiltinTypeId.I64) {
-		return value >= INT_BOUNDS.i64.min && value <= INT_BOUNDS.i64.max
-	}
-	return false
-}
-
-function fitsInConstraints(value: bigint, constraints: { min?: bigint; max?: bigint }): boolean {
-	if (constraints.min !== undefined && value < constraints.min) return false
-	if (constraints.max !== undefined && value > constraints.max) return false
-	return true
-}
-
-/**
- * Split a BigInt value into low and high 32-bit parts for codegen.
- * Uses two's complement representation for negative values.
- */
-function splitBigIntTo32BitParts(value: bigint, typeId: TypeId): { low: number; high: number } {
-	if (typeId === BuiltinTypeId.I32) {
-		return { high: 0, low: Number(BigInt.asIntN(32, value)) }
-	}
-	const low = Number(BigInt.asIntN(32, value))
-	const high = Number(BigInt.asIntN(32, value >> 32n))
-	return { high, low }
-}
-
-function isValidF32(value: number): boolean {
-	const f32Value = Math.fround(value)
-	return Number.isFinite(f32Value) || !Number.isFinite(value)
-}
-
-function isFloatType(typeId: TypeId): boolean {
-	return typeId === BuiltinTypeId.F32 || typeId === BuiltinTypeId.F64
-}
-
-function isIntegerType(typeId: TypeId): boolean {
-	return typeId === BuiltinTypeId.I32 || typeId === BuiltinTypeId.I64
-}
-
-function isIntegerOnlyOperator(tokenKind: TokenKind): boolean {
-	switch (tokenKind) {
-		case TokenKind.Percent:
-		case TokenKind.PercentPercent:
-		case TokenKind.Ampersand:
-		case TokenKind.Pipe:
-		case TokenKind.Caret:
-		case TokenKind.Tilde:
-		case TokenKind.LessLess:
-		case TokenKind.GreaterGreater:
-		case TokenKind.GreaterGreaterGreater:
-			return true
-		default:
-			return false
-	}
-}
-
-function isComparisonOperator(tokenKind: TokenKind): boolean {
-	switch (tokenKind) {
-		case TokenKind.LessThan:
-		case TokenKind.LessEqual:
-		case TokenKind.GreaterThan:
-		case TokenKind.GreaterEqual:
-		case TokenKind.EqualEqual:
-		case TokenKind.BangEqual:
-			return true
-		default:
-			return false
-	}
-}
-
-function getOperatorName(tokenKind: TokenKind): string {
-	switch (tokenKind) {
-		case TokenKind.Plus:
-			return '+'
-		case TokenKind.Minus:
-			return '-'
-		case TokenKind.Star:
-			return '*'
-		case TokenKind.Slash:
-			return '/'
-		case TokenKind.Percent:
-			return '%'
-		case TokenKind.PercentPercent:
-			return '%%'
-		case TokenKind.Ampersand:
-			return '&'
-		case TokenKind.Pipe:
-			return '|'
-		case TokenKind.Caret:
-			return '^'
-		case TokenKind.Tilde:
-			return '~'
-		case TokenKind.LessLess:
-			return '<<'
-		case TokenKind.GreaterGreater:
-			return '>>'
-		case TokenKind.GreaterGreaterGreater:
-			return '>>>'
-		case TokenKind.LessThan:
-			return '<'
-		case TokenKind.LessEqual:
-			return '<='
-		case TokenKind.GreaterThan:
-			return '>'
-		case TokenKind.GreaterEqual:
-			return '>='
-		case TokenKind.EqualEqual:
-			return '=='
-		case TokenKind.BangEqual:
-			return '!='
-		case TokenKind.AmpersandAmpersand:
-			return '&&'
-		case TokenKind.PipePipe:
-			return '||'
-		default:
-			return '?'
-	}
 }
 
 function applyNegation(value: number, negate: boolean): number {
@@ -1188,10 +1046,6 @@ function validateIntegerOnlyOperator(
 		type: state.types.typeName(operandType),
 	})
 	return false
-}
-
-function isLogicalOperator(kind: TokenKind): boolean {
-	return kind === TokenKind.AmpersandAmpersand || kind === TokenKind.PipePipe
 }
 
 function emitBinaryOpInferred(
