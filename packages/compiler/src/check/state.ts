@@ -10,8 +10,7 @@
  */
 
 import type { StringId } from '../core/context.ts'
-import type { NodeId } from '../core/nodes.ts'
-import type { NodeKind } from '../core/nodes.ts'
+import type { NodeId, NodeKind } from '../core/nodes.ts'
 import type { InstStore, ScopeStore, SymbolStore, TypeStore } from './stores.ts'
 import type { InstId, Scope, TypeId } from './types.ts'
 

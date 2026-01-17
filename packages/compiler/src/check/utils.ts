@@ -16,7 +16,9 @@ import { BuiltinTypeId, type InstId, type TypeId } from './types.ts'
 /**
  * Type guard to check if an expression result is valid.
  */
-export function isValidExprResult(result: ExprResult): result is { typeId: TypeId; instId: InstId } {
+export function isValidExprResult(
+	result: ExprResult
+): result is { typeId: TypeId; instId: InstId } {
 	return result.typeId !== BuiltinTypeId.Invalid && result.instId !== null
 }
 
@@ -75,7 +77,10 @@ export function fitsInBaseBounds(value: bigint, baseTypeId: TypeId): boolean {
 /**
  * Checks if a value fits within the given constraints.
  */
-export function fitsInConstraints(value: bigint, constraints: { min?: bigint; max?: bigint }): boolean {
+export function fitsInConstraints(
+	value: bigint,
+	constraints: { min?: bigint; max?: bigint }
+): boolean {
 	if (constraints.min !== undefined && value < constraints.min) return false
 	if (constraints.max !== undefined && value > constraints.max) return false
 	return true
@@ -85,7 +90,10 @@ export function fitsInConstraints(value: bigint, constraints: { min?: bigint; ma
  * Split a BigInt value into low and high 32-bit parts for codegen.
  * Uses two's complement representation for negative values.
  */
-export function splitBigIntTo32BitParts(value: bigint, typeId: TypeId): { low: number; high: number } {
+export function splitBigIntTo32BitParts(
+	value: bigint,
+	typeId: TypeId
+): { low: number; high: number } {
 	if (typeId === BuiltinTypeId.I32) {
 		return { high: 0, low: Number(BigInt.asIntN(32, value)) }
 	}

@@ -26,7 +26,9 @@ import { fitsInConstraints, isIntegerType, splitBigIntTo32BitParts } from './uti
 /**
  * Get primitive type from token kind.
  */
-export function getTypeNameFromToken(tokenKind: TokenKind): { name: string; typeId: TypeId } | null {
+export function getTypeNameFromToken(
+	tokenKind: TokenKind
+): { name: string; typeId: TypeId } | null {
 	switch (tokenKind) {
 		case TokenKind.I32:
 			return { name: 'i32', typeId: BuiltinTypeId.I32 }
