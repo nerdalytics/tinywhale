@@ -11,7 +11,7 @@
 
 import type { CompilationContext, StringId } from '../core/context.ts'
 import type { DiagnosticCode } from '../core/diagnostics.ts'
-import { type NodeId, NodeKind, nodeId, offsetNodeId, prevNodeId } from '../core/nodes.ts'
+import { type NodeId, NodeKind, nodeId, prevNodeId } from '../core/nodes.ts'
 import { processVariableBinding } from './bindings.ts'
 import {
 	finalizeTypeDecl,
@@ -20,7 +20,12 @@ import {
 	processFieldDecl,
 	startTypeDecl,
 } from './declarations.ts'
-import { checkExpression } from './expressions.ts'
+import {
+	finalizeMatch,
+	getMatchArmFromLine,
+	processMatchArm,
+	startMatchBinding,
+} from './match.ts'
 import {
 	extractFieldInitName,
 	finalizeNestedRecordInit,
@@ -41,25 +46,10 @@ import {
 	isInRecordInitContext,
 	isInRecordLiteralContext,
 	isInTypeDeclContext,
-	type MatchContext,
 } from './state.ts'
 import { InstStore, ScopeStore, SymbolStore, TypeStore } from './stores.ts'
-import { getTypeNameFromToken } from './type-resolution.ts'
-import {
-	BuiltinTypeId,
-	type CheckResult,
-	type InstId,
-	InstKind,
-	type TypeId,
-} from './types.ts'
-import {
-	isExpressionNode,
-	isIntegerType,
-	isPatternNode,
-	isStatementNode,
-	isTerminator,
-	isValidExprResult,
-} from './utils.ts'
+import { BuiltinTypeId, type CheckResult, InstKind, type TypeId } from './types.ts'
+import { isStatementNode, isTerminator } from './utils.ts'
 
 function getStatementFromLine(
 	lineId: NodeId,
@@ -118,280 +108,6 @@ function handleVariableBinding(
 	}
 }
 
-function getMatchArmFromLine(
-	lineId: NodeId,
-	context: CompilationContext
-): { id: NodeId; kind: NodeKind } | null {
-	for (const [childId, child] of context.nodes.iterateChildren(lineId)) {
-		if (child.kind === NodeKind.MatchArm) {
-			return { id: childId, kind: child.kind }
-		}
-	}
-	return null
-}
-
-function validateLiteralPattern(
-	patternId: NodeId,
-	scrutineeType: TypeId,
-	state: CheckerState,
-	context: CompilationContext
-): void {
-	if (!isIntegerType(scrutineeType)) {
-		context.emitAtNode('TWCHECK018' as DiagnosticCode, patternId, {
-			patternType: 'integer literal',
-			scrutineeType: state.types.typeName(scrutineeType),
-		})
-	}
-}
-
-function checkOrPatternChildren(
-	patternId: NodeId,
-	scrutineeType: TypeId,
-	state: CheckerState,
-	context: CompilationContext
-): void {
-	for (const [childId, child] of context.nodes.iterateChildren(patternId)) {
-		if (isPatternNode(child.kind)) {
-			checkPattern(childId, scrutineeType, state, context)
-		}
-	}
-}
-
-function checkPattern(
-	patternId: NodeId,
-	scrutineeType: TypeId,
-	state: CheckerState,
-	context: CompilationContext
-): NodeId {
-	const patternNode = context.nodes.get(patternId)
-
-	switch (patternNode.kind) {
-		case NodeKind.LiteralPattern:
-			validateLiteralPattern(patternId, scrutineeType, state, context)
-			break
-		case NodeKind.OrPattern:
-			checkOrPatternChildren(patternId, scrutineeType, state, context)
-			break
-	}
-
-	return patternId
-}
-
-/**
- * Process a MatchArm node.
- * In postorder: [Pattern..., Expression..., MatchArm]
- */
-function processMatchArm(armId: NodeId, state: CheckerState, context: CompilationContext): void {
-	if (!state.matchContext) {
-		context.emitAtNode('TWCHECK019' as DiagnosticCode, armId)
-		return
-	}
-
-	// In postorder, children are before parent. We need to find the pattern and expression.
-	// The expression is the last child (closest to MatchArm).
-	// Pattern(s) come before the expression.
-	const exprId = prevNodeId(armId)
-	const exprNode = context.nodes.get(exprId)
-
-	if (!isExpressionNode(exprNode.kind)) {
-		return
-	}
-
-	// Pattern is before the expression's subtree
-	const patternId = offsetNodeId(exprId, -exprNode.subtreeSize)
-	const patternNode = context.nodes.get(patternId)
-
-	if (!isPatternNode(patternNode.kind)) {
-		return
-	}
-
-	checkPattern(patternId, state.matchContext.scrutinee.typeId, state, context)
-
-	const bodyResult = checkExpression(exprId, state.matchContext.expectedType, state, context)
-
-	if (isValidExprResult(bodyResult)) {
-		state.matchContext.arms.push({
-			bodyInstId: bodyResult.instId,
-			patternNodeId: patternId,
-		})
-	}
-}
-
-function isSimpleCatchAll(kind: NodeKind): boolean {
-	return kind === NodeKind.WildcardPattern || kind === NodeKind.BindingPattern
-}
-
-function orPatternContainsCatchAll(patternId: NodeId, context: CompilationContext): boolean {
-	for (const [childId, child] of context.nodes.iterateChildren(patternId)) {
-		if (isPatternNode(child.kind) && isCatchAllPattern(childId, context)) {
-			return true
-		}
-	}
-	return false
-}
-
-/**
- * Check if a pattern is a catch-all (wildcard or binding).
- * For OrPattern, recursively checks if any child is a catch-all.
- */
-function isCatchAllPattern(patternId: NodeId, context: CompilationContext): boolean {
-	const pattern = context.nodes.get(patternId)
-
-	if (isSimpleCatchAll(pattern.kind)) return true
-	if (pattern.kind === NodeKind.OrPattern) return orPatternContainsCatchAll(patternId, context)
-	return false
-}
-
-function checkMatchExhaustiveness(
-	arms: MatchContext['arms'],
-	matchNodeId: NodeId,
-	context: CompilationContext
-): void {
-	const lastArm = arms[arms.length - 1]
-	if (!lastArm || !isCatchAllPattern(lastArm.patternNodeId, context)) {
-		context.emitAtNode('TWCHECK020' as DiagnosticCode, matchNodeId)
-	}
-}
-
-function emitMatchArmInsts(
-	arms: MatchContext['arms'],
-	matchNodeId: NodeId,
-	expectedType: TypeId,
-	state: CheckerState
-): void {
-	for (const arm of arms) {
-		state.insts.add({
-			arg0: arm.patternNodeId as number,
-			arg1: arm.bodyInstId as number,
-			kind: InstKind.MatchArm,
-			parseNodeId: matchNodeId,
-			typeId: expectedType,
-		})
-	}
-}
-
-function createMatchBinding(
-	matchCtx: MatchContext,
-	matchInstId: InstId,
-	state: CheckerState
-): void {
-	const symId = state.symbols.add({
-		nameId: matchCtx.bindingNameId,
-		parseNodeId: matchCtx.bindingNodeId,
-		typeId: matchCtx.expectedType,
-	})
-	state.insts.add({
-		arg0: symId as number,
-		arg1: matchInstId as number,
-		kind: InstKind.Bind,
-		parseNodeId: matchCtx.bindingNodeId,
-		typeId: matchCtx.expectedType,
-	})
-}
-
-function finalizeMatch(state: CheckerState, context: CompilationContext): void {
-	if (!state.matchContext) return
-
-	const { arms, expectedType, matchNodeId, scrutinee } = state.matchContext
-
-	checkMatchExhaustiveness(arms, matchNodeId, context)
-
-	// scrutinee.instId null check (matchContext only set after valid typeId check)
-	if (scrutinee.instId === null) return
-
-	emitMatchArmInsts(arms, matchNodeId, expectedType, state)
-
-	const matchInstId = state.insts.add({
-		arg0: scrutinee.instId as number,
-		arg1: arms.length,
-		kind: InstKind.Match,
-		parseNodeId: matchNodeId,
-		typeId: expectedType,
-	})
-
-	createMatchBinding(state.matchContext, matchInstId, state)
-	state.matchContext = null
-}
-
-interface MatchBindingNodes {
-	identId: NodeId
-	typeAnnotationId: NodeId
-	scrutineeId: NodeId
-	bindingNameId: StringId
-	expectedType: TypeId
-}
-
-/** Extract raw positional nodes from match binding, returns null if structure invalid */
-function extractMatchBindingPositionalNodes(
-	bindingId: NodeId,
-	context: CompilationContext
-): {
-	matchExprNode: ReturnType<typeof context.nodes.get>
-	scrutineeId: NodeId
-	typeAnnotationId: NodeId
-	identId: NodeId
-} | null {
-	const matchExprId = prevNodeId(bindingId)
-	const matchExprNode = context.nodes.get(matchExprId)
-	if (matchExprNode.kind !== NodeKind.MatchExpr) return null
-
-	const scrutineeId = prevNodeId(matchExprId)
-	if (!isExpressionNode(context.nodes.get(scrutineeId).kind)) return null
-
-	const typeAnnotationId = offsetNodeId(matchExprId, -matchExprNode.subtreeSize)
-	if (context.nodes.get(typeAnnotationId).kind !== NodeKind.TypeAnnotation) return null
-
-	const identId = offsetNodeId(typeAnnotationId, -context.nodes.get(typeAnnotationId).subtreeSize)
-	if (context.nodes.get(identId).kind !== NodeKind.Identifier) return null
-
-	return { identId, matchExprNode, scrutineeId, typeAnnotationId }
-}
-
-function extractMatchBindingNodes(
-	bindingId: NodeId,
-	context: CompilationContext
-): MatchBindingNodes | null {
-	const positional = extractMatchBindingPositionalNodes(bindingId, context)
-	if (!positional) return null
-
-	const { identId, scrutineeId, typeAnnotationId } = positional
-	const bindingNameId = context.tokens.get(context.nodes.get(identId).tokenId).payload as StringId
-	const typeToken = context.tokens.get(context.nodes.get(typeAnnotationId).tokenId)
-	const typeInfo = getTypeNameFromToken(typeToken.kind)
-
-	if (!typeInfo) {
-		context.emitAtNode('TWCHECK010' as DiagnosticCode, typeAnnotationId, { found: 'unknown' })
-		return null
-	}
-
-	return { bindingNameId, expectedType: typeInfo.typeId, identId, scrutineeId, typeAnnotationId }
-}
-
-function startMatchBinding(
-	bindingId: NodeId,
-	state: CheckerState,
-	context: CompilationContext
-): void {
-	const nodes = extractMatchBindingNodes(bindingId, context)
-	if (!nodes) {
-		handleVariableBinding(bindingId, state, context)
-		return
-	}
-
-	const scrutineeResult = checkExpression(nodes.scrutineeId, nodes.expectedType, state, context)
-	if (scrutineeResult.typeId === BuiltinTypeId.Invalid) return
-
-	state.matchContext = {
-		arms: [],
-		bindingNameId: nodes.bindingNameId,
-		bindingNodeId: bindingId,
-		expectedType: nodes.expectedType,
-		matchNodeId: bindingId,
-		scrutinee: scrutineeResult,
-		scrutineeNodeId: nodes.scrutineeId,
-	}
-}
-
 function emitStatement(
 	stmtId: NodeId,
 	stmtKind: NodeKind,
@@ -413,7 +129,7 @@ function emitStatement(
 				const matchExprId = prevNodeId(stmtId)
 				const matchExprNode = context.nodes.get(matchExprId)
 				if (matchExprNode.kind === NodeKind.MatchExpr) {
-					startMatchBinding(stmtId, state, context)
+					startMatchBinding(stmtId, state, context, handleVariableBinding)
 				} else {
 					handleVariableBinding(stmtId, state, context)
 				}
