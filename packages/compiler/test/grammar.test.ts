@@ -11,7 +11,6 @@ import {
 	analyzeRedundancy,
 	analyzeShadows,
 	analyzeSyntacticRules,
-	findNullableRules,
 	findUnreachableRules,
 } from '@tinywhale/grammar-test'
 
