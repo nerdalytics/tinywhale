@@ -1,0 +1,38 @@
+{
+	"author": "",
+	"dependencies": {
+		"ohm-js": "17.3.0"
+	},
+	"description": "Generic Ohm.js grammar testing framework and library",
+	"devDependencies": {
+		"@types/node": "25.0.9",
+		"typescript": "5.9.3"
+	},
+	"exports": {
+		".": {
+			"default": "./dist/index.js",
+			"types": "./dist/index.d.ts"
+		}
+	},
+	"files": [
+		"dist"
+	],
+	"keywords": [
+		"grammar",
+		"ohm",
+		"static-analysis",
+		"testing",
+		"library"
+	],
+	"license": "MIT",
+	"main": "./dist/index.js",
+	"name": "@tinywhale/grammar-test",
+	"scripts": {
+		"build": "tsc -p tsconfig.build.json",
+		"clean": "rm -rf dist",
+		"test": "node --experimental-strip-types --test test/**/*.test.ts"
+	},
+	"type": "module",
+	"types": "./dist/index.d.ts",
+	"version": "0.0.0"
+}

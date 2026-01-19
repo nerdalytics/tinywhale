@@ -1,0 +1,14 @@
+# Ignore every file and folder
+*
+*/
+
+# Allow list for the current folder
+!.gitignore
+!biome.json
+!package.json
+!src/
+!src/**
+!test/
+!test/**
+!tsconfig.build.json
+!tsconfig.json
