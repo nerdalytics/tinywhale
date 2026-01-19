@@ -1,0 +1,41 @@
+{
+	"author": "",
+	"bin": {
+		"tinywhale-lsp": "./dist/cli.js"
+	},
+	"dependencies": {
+		"@adonisjs/ace": "13.4.0",
+		"@tinywhale/lsp": "workspace:*"
+	},
+	"description": "TinyWhale Language Server CLI",
+	"devDependencies": {
+		"@types/node": "25.0.9",
+		"typescript": "5.9.3"
+	},
+	"exports": {
+		".": {
+			"default": "./dist/index.js",
+			"types": "./dist/index.d.ts"
+		}
+	},
+	"files": [
+		"dist"
+	],
+	"keywords": [
+		"cli",
+		"language-server",
+		"lsp",
+		"tinywhale"
+	],
+	"license": "MIT",
+	"main": "./dist/index.js",
+	"name": "@tinywhale/cli-lsp",
+	"scripts": {
+		"build": "tsc -p tsconfig.build.json",
+		"clean": "rm -rf dist",
+		"test": "echo 'No tests configured yet'"
+	},
+	"type": "module",
+	"types": "./dist/index.d.ts",
+	"version": "0.0.0"
+}

@@ -42,9 +42,28 @@ importers:
 
   packages/cli-grammar-test:
     dependencies:
+      '@adonisjs/ace':
+        specifier: 13.4.0
+        version: 13.4.0
       ohm-js:
         specifier: 17.3.0
         version: 17.3.0
+    devDependencies:
+      '@types/node':
+        specifier: 25.0.9
+        version: 25.0.9
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+
+  packages/cli-lsp:
+    dependencies:
+      '@adonisjs/ace':
+        specifier: 13.4.0
+        version: 13.4.0
+      '@tinywhale/lsp':
+        specifier: workspace:*
+        version: link:../lsp
     devDependencies:
       '@types/node':
         specifier: 25.0.9
