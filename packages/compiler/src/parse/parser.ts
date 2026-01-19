@@ -701,10 +701,10 @@ function createNodeEmittingSemantics(
 			ident['emitExpression']()
 
 			// Emit type annotation node with possible complex type children
-			if (typeRef.ctorName === 'ListType') {
-				typeRef['emitTypeAnnotation']()
-			} else if (typeRef.ctorName === 'HintedPrimitive') {
-				typeRef['emitTypeAnnotation']()
+			// typeRef is PrimitiveTypeRef, need to check its child for the actual type
+			const innerType = typeRef.child(0)
+			if (innerType.ctorName === 'ListType' || innerType.ctorName === 'HintedPrimitive') {
+				innerType['emitTypeAnnotation']()
 			}
 
 			const tid = getTokenIdForOhmNode(typeRef)

@@ -12,7 +12,11 @@
 import type { CompilationContext, StringId } from '../core/context.ts'
 import type { DiagnosticCode } from '../core/diagnostics.ts'
 import { type NodeId, NodeKind, nodeId, prevNodeId } from '../core/nodes.ts'
-import { processVariableBinding } from './bindings.ts'
+import {
+	processPrimitiveBinding,
+	processRecordBinding,
+	processVariableBinding,
+} from './bindings.ts'
 import {
 	finalizeTypeDecl,
 	getFieldDeclFromLine,
@@ -103,6 +107,29 @@ function handleVariableBinding(
 	}
 }
 
+/**
+ * Process a record binding (no expression, record type).
+ * Called for RecordBinding nodes from the grammar.
+ */
+function handleRecordBinding(
+	bindingId: NodeId,
+	state: CheckerState,
+	context: CompilationContext
+): void {
+	const result = processRecordBinding(bindingId, state, context)
+	if (result) {
+		handleRecordLiteralBinding(
+			bindingId,
+			result.typeAnnotationId,
+			result.declaredType,
+			result.typeInfo,
+			result.nameId,
+			state,
+			context
+		)
+	}
+}
+
 function emitStatement(
 	stmtId: NodeId,
 	stmtKind: NodeKind,
@@ -118,6 +145,12 @@ function emitStatement(
 				parseNodeId: stmtId,
 				typeId: BuiltinTypeId.None,
 			})
+			break
+		case NodeKind.PrimitiveBinding:
+			processPrimitiveBinding(stmtId, state, context)
+			break
+		case NodeKind.RecordBinding:
+			handleRecordBinding(stmtId, state, context)
 			break
 		case NodeKind.VariableBinding:
 			{
