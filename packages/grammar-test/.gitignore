@@ -5,6 +5,8 @@
 # Allow list for the current folder
 !.gitignore
 !biome.json
+!examples/
+!examples/**
 !package.json
 !src/
 !src/**
