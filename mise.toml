@@ -41,8 +41,8 @@ hide = true
 run = """
 cd packages/compiler && npx @ohm-js/cli generateBundles --withTypes --esm 'src/parse/*.ohm'
 pnpm -r build
-pnpm exec biome check --max-diagnostics 100
-pnpm exec tsc
+pnpm -r exec biome check --max-diagnostics 100
+pnpm -r exec tsc
 pnpm -r test
 """
 

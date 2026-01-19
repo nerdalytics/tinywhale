@@ -78,7 +78,7 @@ function runSemanticTest(tc: TestCase): { message: string; passed: boolean } {
 	}
 }
 
-function semanticTests(_name: string, tests: TestCase[]) {
+function semanticTests(tests: TestCase[]) {
 	return async (t: { test: (name: string, fn: () => void) => Promise<void> }) => {
 		for (const tc of tests) {
 			const testName = tc.description || tc.input.slice(0, 50).replace(/\n/g, '\\n')
@@ -97,7 +97,7 @@ function semanticTests(_name: string, tests: TestCase[]) {
 test('Semantic Specs', async (t) => {
 	await t.test(
 		'Basic Statements',
-		semanticTests('Basic Statements', [
+		semanticTests([
 			{ description: 'panic statement', expect: 'valid', input: 'panic' },
 			{ description: 'multiple panic statements', expect: 'valid', input: 'panic\npanic' },
 			{ description: 'i32 binding', expect: 'valid', input: 'x:i32 = 1' },
@@ -110,7 +110,7 @@ test('Semantic Specs', async (t) => {
 
 	await t.test(
 		'Type Hints',
-		semanticTests('Type Hints', [
+		semanticTests([
 			{ description: 'min constraint satisfied', expect: 'valid', input: 'x:i32<min=0> = 5' },
 			{ description: 'max constraint satisfied', expect: 'valid', input: 'x:i32<max=100> = 50' },
 			{
@@ -135,7 +135,7 @@ test('Semantic Specs', async (t) => {
 
 	await t.test(
 		'Record Types',
-		semanticTests('Record Types', [
+		semanticTests([
 			{
 				description: 'simple record with fields',
 				expect: 'valid',
@@ -156,7 +156,7 @@ test('Semantic Specs', async (t) => {
 
 	await t.test(
 		'Single-Level Lists',
-		semanticTests('Single-Level Lists', [
+		semanticTests([
 			{ description: 'i32 list literal', expect: 'valid', input: 'arr:i32[]<size=3> = [1, 2, 3]' },
 			{ description: 'i64 list literal', expect: 'valid', input: 'arr:i64[]<size=2> = [1, 2]' },
 			{ description: 'f32 list literal', expect: 'valid', input: 'arr:f32[]<size=2> = [1.0, 2.0]' },
@@ -180,7 +180,7 @@ test('Semantic Specs', async (t) => {
 
 	await t.test(
 		'Nested Lists (Grammar-Only)',
-		semanticTests('Nested Lists', [
+		semanticTests([
 			{
 				description: 'nested list literal not supported - expected i32, found list literal',
 				errorCode: 'TWCHECK012',
@@ -192,7 +192,7 @@ test('Semantic Specs', async (t) => {
 
 	await t.test(
 		'Chained Index Access (Grammar-Only)',
-		semanticTests('Chained Index Access', [
+		semanticTests([
 			{
 				description: 'chained index on flat list - cannot index into i32 result',
 				errorCode: 'TWCHECK031',
@@ -204,7 +204,7 @@ test('Semantic Specs', async (t) => {
 
 	await t.test(
 		'Field Access',
-		semanticTests('Field Access', [
+		semanticTests([
 			{
 				description: 'simple field access',
 				expect: 'valid',
@@ -221,7 +221,7 @@ test('Semantic Specs', async (t) => {
 
 	await t.test(
 		'Match Expressions',
-		semanticTests('Match Expressions', [
+		semanticTests([
 			{
 				description: 'match with literal and wildcard patterns',
 				expect: 'valid',
@@ -244,7 +244,7 @@ test('Semantic Specs', async (t) => {
 
 	await t.test(
 		'Type Mismatches',
-		semanticTests('Type Mismatches', [
+		semanticTests([
 			{
 				description: 'i32 to i64 assignment',
 				errorCode: 'TWCHECK012',
@@ -274,7 +274,7 @@ test('Semantic Specs', async (t) => {
 
 	await t.test(
 		'Undefined Variables',
-		semanticTests('Undefined Variables', [
+		semanticTests([
 			{
 				description: 'reference to undefined variable',
 				errorCode: 'TWCHECK013',
