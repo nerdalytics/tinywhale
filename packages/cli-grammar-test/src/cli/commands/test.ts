@@ -1,11 +1,15 @@
 import { readdirSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { args, BaseCommand, flags } from '@adonisjs/ace'
-import { createJsonReporter } from '../../reporters/json.ts'
-import { createSpecReporter } from '../../reporters/spec.ts'
-import { createTapReporter } from '../../reporters/tap.ts'
-import { clearRegistry, getRegisteredSuites, runSuite } from '../../runner/suite.ts'
-import type { Reporter } from '../../types.ts'
+import {
+	clearRegistry,
+	createJsonReporter,
+	createSpecReporter,
+	createTapReporter,
+	getRegisteredSuites,
+	type Reporter,
+	runSuite,
+} from '@tinywhale/grammar-test'
 
 function isTestFile(filename: string): boolean {
 	return filename.endsWith('.grammar-test.ts') || filename.endsWith('.grammar-test.js')

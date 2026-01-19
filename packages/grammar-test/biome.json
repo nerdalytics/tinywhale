@@ -1,0 +1,6 @@
+{
+	"extends": "//",
+	"files": {
+		"includes": ["src/**", "test/**", "!node_modules/", "!dist/"]
+	}
+}

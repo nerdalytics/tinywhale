@@ -1,12 +1,13 @@
 {
 	"author": "",
-	"bin": {
-		"tinywhale-lsp": "./dist/server.js"
-	},
 	"dependencies": {
 		"@tinywhale/compiler": "workspace:*"
 	},
 	"description": "TinyWhale Language Server Protocol implementation",
+	"devDependencies": {
+		"@types/node": "25.0.9",
+		"typescript": "5.9.3"
+	},
 	"exports": {
 		".": {
 			"default": "./dist/index.js",
@@ -25,7 +26,7 @@
 	"main": "./dist/index.js",
 	"name": "@tinywhale/lsp",
 	"scripts": {
-		"build": "echo 'Build script not yet configured'",
+		"build": "tsc -p tsconfig.build.json",
 		"clean": "rm -rf dist",
 		"test": "echo 'Test script not yet configured'"
 	},

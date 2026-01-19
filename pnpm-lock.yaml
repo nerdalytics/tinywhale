@@ -45,6 +45,9 @@ importers:
       '@adonisjs/ace':
         specifier: 13.4.0
         version: 13.4.0
+      '@tinywhale/grammar-test':
+        specifier: workspace:*
+        version: link:../grammar-test
       ohm-js:
         specifier: 17.3.0
         version: 17.3.0
@@ -96,11 +99,31 @@ importers:
 
   packages/diagnostics: {}
 
+  packages/grammar-test:
+    dependencies:
+      ohm-js:
+        specifier: 17.3.0
+        version: 17.3.0
+    devDependencies:
+      '@types/node':
+        specifier: 25.0.9
+        version: 25.0.9
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+
   packages/lsp:
     dependencies:
       '@tinywhale/compiler':
         specifier: workspace:*
         version: link:../compiler
+    devDependencies:
+      '@types/node':
+        specifier: 25.0.9
+        version: 25.0.9
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
 
 packages:
 
