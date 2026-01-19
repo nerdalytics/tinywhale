@@ -62,14 +62,14 @@ test('Grammar Specs', async (t) => {
 
 		// Report results
 		if (result.failed > 0) {
-			result.results.forEach((r) => {
+			for (const r of result.results) {
 				if (!r.passed) {
 					t.diagnostic(`[FAILED] ${r.expected} '${r.input}': ${r.errorMessage}`)
 					if (r.trace) t.diagnostic(r.trace)
 					// Show what the prepared input looked like
 					t.diagnostic(`Prepared Input: ${JSON.stringify(r.input)}`)
 				}
-			})
+			}
 			assert.fail(`Failed ${result.failed} grammar tests`)
 		} else {
 			assert.strictEqual(result.failed, 0)
@@ -106,12 +106,12 @@ test('Grammar Specs', async (t) => {
 
 		const result = tester.run()
 		if (result.failed > 0) {
-			result.results.forEach((r) => {
+			for (const r of result.results) {
 				if (!r.passed) {
 					t.diagnostic(`[FAILED] ${r.expected} '${r.input}': ${r.errorMessage}`)
 					t.diagnostic(`Prepared Input: ${JSON.stringify(r.input)}`)
 				}
-			})
+			}
 			assert.fail(`Failed ${result.failed} grammar tests`)
 		}
 	})
@@ -146,12 +146,12 @@ test('Grammar Specs', async (t) => {
 
 		const result = tester.run()
 		if (result.failed > 0) {
-			result.results.forEach((r) => {
+			for (const r of result.results) {
 				if (!r.passed) {
 					t.diagnostic(`[FAILED] ${r.expected} '${r.input}': ${r.errorMessage}`)
 					t.diagnostic(`Prepared Input: ${JSON.stringify(r.input)}`)
 				}
-			})
+			}
 			assert.fail(`Failed ${result.failed} grammar tests`)
 		}
 	})
@@ -170,12 +170,12 @@ test('Grammar Specs', async (t) => {
 
 		const result = tester.run()
 		if (result.failed > 0) {
-			result.results.forEach((r) => {
+			for (const r of result.results) {
 				if (!r.passed) {
 					t.diagnostic(`[FAILED] ${r.expected} '${r.input}': ${r.errorMessage}`)
 					t.diagnostic(`Prepared Input: ${JSON.stringify(r.input)}`)
 				}
-			})
+			}
 			assert.fail(`Failed ${result.failed} grammar tests`)
 		}
 	})

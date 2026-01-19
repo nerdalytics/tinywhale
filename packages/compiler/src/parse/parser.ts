@@ -666,6 +666,60 @@ function createNodeEmittingSemantics(
 				tokenId: tid,
 			})
 		},
+		PrimitiveBinding(ident: Node, _colon: Node, typeRef: Node, _equals: Node, expr: Node): NodeId {
+			const startCount = context.nodes.count()
+			ident['emitExpression']()
+
+			// Emit type annotation node with possible complex type children
+			if (typeRef.ctorName === 'ListType') {
+				typeRef['emitTypeAnnotation']()
+			} else if (typeRef.ctorName === 'HintedPrimitive') {
+				typeRef['emitTypeAnnotation']()
+			}
+
+			const tid = getTokenIdForOhmNode(typeRef)
+			context.nodes.add({
+				kind: NodeKind.TypeAnnotation,
+				subtreeSize: 1 + (context.nodes.count() - startCount - 1),
+				tokenId: tid,
+			})
+
+			expr['emitExpression']()
+
+			const childCount = context.nodes.count() - startCount
+
+			const lineNumber = getLineNumber(this)
+			const lineTid = getTokenIdForLine(lineNumber)
+
+			return context.nodes.add({
+				kind: NodeKind.PrimitiveBinding,
+				subtreeSize: 1 + childCount,
+				tokenId: lineTid,
+			})
+		},
+		RecordBinding(ident: Node, _colon: Node, typeName: Node, _equals: Node): NodeId {
+			const startCount = context.nodes.count()
+			ident['emitExpression']()
+
+			// Emit type annotation node (simple upperIdentifier, no complex type)
+			const tid = getTokenIdForOhmNode(typeName)
+			context.nodes.add({
+				kind: NodeKind.TypeAnnotation,
+				subtreeSize: 1,
+				tokenId: tid,
+			})
+
+			const childCount = context.nodes.count() - startCount
+
+			const lineNumber = getLineNumber(this)
+			const lineTid = getTokenIdForLine(lineNumber)
+
+			return context.nodes.add({
+				kind: NodeKind.RecordBinding,
+				subtreeSize: 1 + childCount,
+				tokenId: lineTid,
+			})
+		},
 		Statement(stmt: Node): NodeId {
 			return stmt['emitStatement']()
 		},

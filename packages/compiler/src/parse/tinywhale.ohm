@@ -12,13 +12,22 @@ TinyWhale {
   RootLine = Statement
 
   // Statements
-  Statement = TypeDecl | MatchBinding | MatchExpr | VariableBinding | PanicStatement
+  Statement = TypeDecl | MatchBinding | MatchExpr | PrimitiveBinding | RecordBinding | PanicStatement
   PanicStatement = panic
 
   // Type declaration: type Point
   TypeDecl = typeKeywordToken upperIdentifier
 
-  // Variable binding: x:i32 = expr or x:Point = (with block initializer)
+  // Primitive type reference (types that require inline expression)
+  PrimitiveTypeRef = ListType | HintedPrimitive | typeKeyword
+
+  // Binding for primitive types: expression required
+  PrimitiveBinding = identifier colon PrimitiveTypeRef equals Expression
+
+  // Binding for record types: no expression, block follows
+  RecordBinding = identifier colon upperIdentifier equals
+
+  // Variable binding (deprecated - kept for reference, use PrimitiveBinding or RecordBinding)
   VariableBinding = identifier TypeAnnotation equals Expression?
   TypeAnnotation = colon TypeRef
 
