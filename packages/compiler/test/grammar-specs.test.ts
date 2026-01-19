@@ -44,13 +44,12 @@ test('Grammar Specs', async (t) => {
 			'panic # comment',
 			'x:i32 = 1',
 			'x:i32 = 1 + 2',
-            'x:i32 =', // Valid (empty expression)
+            'type Point\n\tx: i32', // Single field
 			'type Point\n\tx: i32\n\ty: i32',
-            // 'panic panic' is valid as multiple RootLines on same line (in grammar terms)
-            'panic panic',
 		]))
 
         tester.reject(prepareList([
+             'panic panic', // Multiple statements on same line forbidden
              'panic : i32', // Panic doesn't take type annotation
              'type : i32', // Keyword as identifier
         ]))
