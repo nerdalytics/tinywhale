@@ -25,10 +25,7 @@ import { tokensToOhmInput } from '../src/parse/parser.ts'
 //   [GRAMMAR] - Grammar-only: parses but checker/codegen may not support
 //   [FUTURE]  - Intentionally reserved syntax for future features
 //
-// For end-to-end semantic tests, see: compile.test.ts, compile.property.test.ts
-//
-// TODO: Consider adding a companion "semantic-specs.test.ts" that uses compile()
-// to verify which grammar constructs actually produce valid WASM output.
+// For end-to-end semantic tests, see: semantic-specs.test.ts
 // =============================================================================
 
 // Resolve path relative to this test file
@@ -38,11 +35,7 @@ const GRAMMAR_PATH = path.resolve(DIRNAME, '../src/parse/tinywhale.ohm')
 function prepare(input: string): string {
 	const ctx = new CompilationContext(input)
 	tokenize(ctx)
-	// If tokenization failed, the grammar test should probably fail or we rely on what tokens were produced.
-	// But usually we want to test valid token streams against the grammar.
-	// If the tokenizer fails, the output might be incomplete, but let's pass it through.
-	const output = tokensToOhmInput(ctx)
-	return output
+	return tokensToOhmInput(ctx)
 }
 
 function prepareList(inputs: string[]): string[] {
@@ -50,12 +43,10 @@ function prepareList(inputs: string[]): string[] {
 }
 
 test('Grammar Specs', async (t) => {
-	// 1. Ensure grammar file exists and load it
 	assert.ok(fs.existsSync(GRAMMAR_PATH), `Grammar file not found at ${GRAMMAR_PATH}`)
 	const source = fs.readFileSync(GRAMMAR_PATH, 'utf-8')
 	const grammar = ohm.grammar(source)
 
-	// 2. Define Tests
 	await t.test('Basic Statements', (t) => {
 		const tester = createTester(grammar, 'Basic Statements', 'Program')
 
@@ -142,26 +133,11 @@ test('Grammar Specs', async (t) => {
 	await t.test('Variable Bindings', (t) => {
 		const tester = createTester(grammar, 'Variable Bindings', 'VariableBinding')
 
-		// For rule-specific tests (startRule != Program), we need to be careful.
-		// VariableBinding = identifier TypeAnnotation equals Expression?
-		// Note: 'Expression?' includes the equals? No.
-		// VariableBinding = identifier TypeAnnotation equals Expression?
-		// Wait, look at grammar:
-		// VariableBinding = identifier TypeAnnotation equals Expression?
-		// So 'x:i32 =' is valid? Expression is optional?
-		// Grammar says: VariableBinding = identifier TypeAnnotation equals Expression?
-		// So 'x:i32 =' matches if Expression is optional.
-		// Check grammar:
-		// VariableBinding = identifier TypeAnnotation equals Expression?
-
 		tester.match(prepareList(['x:i32 = 1', 'x: i32 = 1', 'veryLongVariableName: i64 = 1234567890']))
 
 		tester.reject(
 			prepareList([
 				'x = 1', // Missing type annotation
-				// 'x:i32 =' might actually be valid if Expression is optional!
-				// Let's check if Expression? allows empty.
-				// If it's valid, I should move it to match.
 				':i32 = 1', // Missing identifier
 				'x:i32 1', // Missing equals
 			])

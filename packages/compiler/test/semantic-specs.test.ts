@@ -29,13 +29,11 @@ interface TestCase {
 }
 
 function runSemanticTest(tc: TestCase): { message: string; passed: boolean } {
-	// Append panic if not present (required for valid WASM - needs unreachable)
 	const source = tc.input.includes('panic') ? tc.input : `${tc.input}\npanic`
 
 	try {
 		const result = compile(source)
 
-		// compile() throws on errors, so reaching here means success
 		if (tc.expect === 'valid') {
 			if (result.valid) {
 				return { message: 'Compiled to valid WASM', passed: true }
@@ -43,10 +41,8 @@ function runSemanticTest(tc: TestCase): { message: string; passed: boolean } {
 			return { message: 'Compilation returned but result.valid is false', passed: false }
 		}
 
-		// Expected an error but compilation succeeded
 		return { message: `Expected ${tc.expect} but compilation succeeded`, passed: false }
 	} catch (error) {
-		// compile() throws on errors, extract error info from message
 		const errMsg = error instanceof Error ? error.message : String(error)
 
 		if (tc.expect === 'valid') {
@@ -67,7 +63,6 @@ function runSemanticTest(tc: TestCase): { message: string; passed: boolean } {
 		}
 
 		if (tc.expect === 'parse-error') {
-			// Parse errors should mention TWPARSE or fail before TWCHECK
 			if (errMsg.includes('TWPARSE') || !errMsg.includes('TWCHECK')) {
 				return { message: 'Got expected parse error', passed: true }
 			}
@@ -89,10 +84,6 @@ function semanticTests(tests: TestCase[]) {
 		}
 	}
 }
-
-// =============================================================================
-// TEST SUITES
-// =============================================================================
 
 test('Semantic Specs', async (t) => {
 	await t.test(
