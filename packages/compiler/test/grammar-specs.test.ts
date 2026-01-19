@@ -8,6 +8,29 @@ import { CompilationContext } from '../src/core/context.ts'
 import { tokenize } from '../src/lex/tokenizer.ts'
 import { tokensToOhmInput } from '../src/parse/parser.ts'
 
+// =============================================================================
+// GRAMMAR SPECS - Syntax Acceptance Tests
+// =============================================================================
+//
+// These tests verify that the Ohm grammar (tinywhale.ohm) correctly accepts or
+// rejects source code SYNTAX. They test: tokenizer → parser (grammar matching).
+//
+// IMPORTANT: Grammar acceptance does NOT mean semantic correctness!
+// A construct may parse successfully but fail at:
+//   - Checker (type errors, undefined variables, etc.)
+//   - Codegen (unsupported features)
+//
+// Legend for test comments:
+//   [FULL]    - Fully implemented: grammar + checker + codegen
+//   [GRAMMAR] - Grammar-only: parses but checker/codegen may not support
+//   [FUTURE]  - Intentionally reserved syntax for future features
+//
+// For end-to-end semantic tests, see: compile.test.ts, compile.property.test.ts
+//
+// TODO: Consider adding a companion "semantic-specs.test.ts" that uses compile()
+// to verify which grammar constructs actually produce valid WASM output.
+// =============================================================================
+
 // Resolve path relative to this test file
 const DIRNAME = import.meta.dirname || path.dirname(new URL(import.meta.url).pathname)
 const GRAMMAR_PATH = path.resolve(DIRNAME, '../src/parse/tinywhale.ohm')
@@ -38,15 +61,15 @@ test('Grammar Specs', async (t) => {
 
 		tester.match(
 			prepareList([
-				'panic',
-				'panic\n',
-				'panic\npanic',
-				'# comment',
-				'panic # comment',
-				'x:i32 = 1',
-				'x:i32 = 1 + 2',
-				'type Point\n\tx: i32', // Single field
-				'type Point\n\tx: i32\n\ty: i32',
+				'panic', // [FULL]
+				'panic\n', // [FULL]
+				'panic\npanic', // [FULL]
+				'# comment', // [FULL] - comments stripped by tokenizer
+				'panic # comment', // [FULL]
+				'x:i32 = 1', // [FULL]
+				'x:i32 = 1 + 2', // [FULL]
+				'type Point\n\tx: i32', // [FULL] - single field record
+				'type Point\n\tx: i32\n\ty: i32', // [FULL] - multi-field record
 			])
 		)
 
@@ -81,14 +104,14 @@ test('Grammar Specs', async (t) => {
 
 		tester.match(
 			prepareList([
-				'x:i32 = 5',
-				'x:i64 = 123',
-				'x:f32 = 1.5',
-				'x:f64 = 2.5',
-				'x:i32<min=0> = 5',
-				'x:i32<min=0, max=100> = 50',
-				'arr:i32[]<size=3> = [1, 2, 3]',
-				'p:Point =', // Record binding - no expression, block follows
+				'x:i32 = 5', // [FULL]
+				'x:i64 = 123', // [FULL]
+				'x:f32 = 1.5', // [FULL]
+				'x:f64 = 2.5', // [FULL]
+				'x:i32<min=0> = 5', // [FULL] - type hints with constraint checking
+				'x:i32<min=0, max=100> = 50', // [FULL]
+				'arr:i32[]<size=3> = [1, 2, 3]', // [FULL] - single-level list
+				'p:Point =', // [FULL] - record binding, block follows
 			])
 		)
 
@@ -293,17 +316,17 @@ test('Grammar Specs', async (t) => {
 
 		tester.match(
 			prepareList([
-				// List type with size hint
+				// [FULL] Single-level lists
 				'arr:i32[]<size=4> = [1, 2, 3, 4]',
 				'arr:i64[]<size=2> = [1, 2]',
 				'arr:f32[]<size=2> = [1.0, 2.0]',
 				'arr:f64[]<size=2> = [1.0, 2.0]',
-				// Nested list type
+				'arr:i32[]<size=1> = [42]', // single element
+				'arr:i32[]<size=2> = [1 + 2, 3 * 4]', // expression elements
+
+				// [GRAMMAR] Nested list types - checker does not support nested list literals
+				// Error: "type mismatch: expected `i32`, found `list literal`"
 				'matrix:i32[]<size=2>[]<size=2> = [[1, 2], [3, 4]]',
-				// Single element list
-				'arr:i32[]<size=1> = [42]',
-				// List with expression elements
-				'arr:i32[]<size=2> = [1 + 2, 3 * 4]',
 			])
 		)
 
@@ -330,21 +353,28 @@ test('Grammar Specs', async (t) => {
 
 		tester.match(
 			prepareList([
-				// Field access
+				// [FULL] Field access on records
 				'x:i32 = point.x',
 				'x:i32 = point.x + point.y',
-				// Chained field access
-				'x:i32 = outer.inner.value',
-				// Index access
+				'x:i32 = outer.inner.value', // chained field access
+
+				// [FULL] Single index access
 				'x:i32 = arr[0]',
 				'x:i32 = arr[99]',
-				// Chained index access
+
+				// [GRAMMAR] Chained index access - requires nested list types (not implemented)
+				// Checker error: "cannot access field `[0]` on non-record type `i32`"
+				// (after first [0], result is i32, can't index into i32)
 				'x:i32 = matrix[0][1]',
 				'x:i32 = cube[0][1][2]',
-				// Field then index (FieldAccess is in PostfixBase for IndexAccess)
+
+				// [FULL] Field then index (record.listField[i])
 				'x:i32 = data.items[0]',
-				// Note: arr[0].field is NOT supported - IndexAccess cannot be followed by FieldAccess
-				// This is a grammar limitation: IndexAccess = PostfixBase (lbracket...), FieldAccess = PrimaryExprBase (dot...)
+
+				// [GRAMMAR LIMITATION] arr[0].field is NOT syntactically supported
+				// Grammar: IndexAccess = PostfixBase [...], FieldAccess = PrimaryExprBase (dot...)
+				// IndexAccess result cannot be followed by FieldAccess
+				// This would require storing records in arrays (future feature)
 			])
 		)
 
@@ -446,8 +476,11 @@ test('Grammar Specs', async (t) => {
 
 		tester.reject(
 			prepareList([
-				'_private:i32 = 1', // Underscore prefix not allowed
-				'__init__:i32 = 1', // Dunder not allowed
+				// [FUTURE] Underscore-prefixed identifiers reserved for:
+				// - Ignored variables in pattern matching (like JS destructuring)
+				// - Private/internal naming conventions
+				'_private:i32 = 1',
+				'__init__:i32 = 1', // Dunder reserved
 			])
 		)
 
