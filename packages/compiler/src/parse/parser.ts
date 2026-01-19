@@ -110,7 +110,7 @@ function generateNewlines(currentLine: number, targetLine: number): string {
 	return '\n'.repeat(Math.max(0, targetLine - currentLine))
 }
 
-function tokensToOhmInput(context: CompilationContext): string {
+export function tokensToOhmInput(context: CompilationContext): string {
 	const parts: string[] = []
 	let currentLine = 1
 
