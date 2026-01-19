@@ -6,9 +6,9 @@
 		"noEmit": false,
 		"outDir": "./dist",
 		"rewriteRelativeImportExtensions": true,
-		"rootDir": "./src",
+		"rootDir": "./src"
 	},
 	"exclude": ["node_modules", "dist"],
 	"extends": "../../tsconfig.json",
-	"include": ["src/**/*"],
+	"include": ["src/**/*"]
 }
