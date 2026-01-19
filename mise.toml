@@ -32,7 +32,8 @@ run = "pnpm -r test"
 
 [tasks.check]
 description = "Run biome check (lint & format)"
-run = "pnpm exec biome check --write --max-diagnostics 100"
+depends = ["build"]
+run = "pnpm -r exec biome check --write --max-diagnostics 100"
 
 [tasks.ci]
 description = "Run full CI pipeline: build, lint, typecheck, test"
@@ -47,7 +48,8 @@ pnpm -r test
 
 [tasks.typecheck]
 description = "Run TypeScript type checking"
-run = "pnpm exec tsc"
+depends = ["build"]
+run = "pnpm -r exec tsc"
 
 [tasks.clean]
 description = "Clean build artifacts"
@@ -55,7 +57,7 @@ run = "pnpm -r clean"
 
 [tasks.cli]
 description = "Run the TinyWhale CLI build command"
-depends = ["clean", "build"]
+depends = ["build"]
 usage = '''
 arg "<file>" help="TinyWhale source file to compile"
 flag "-o --output <dir>" help="Output directory"
@@ -67,4 +69,30 @@ node packages/cli/dist/cli.js build ${usage_file?} \
   ${usage_output:+--output "$usage_output"} \
   ${usage_target:+--target "$usage_target"} \
   ${usage_optimize:+--optimize}
+"""
+
+[tasks.grammar-test]
+description = "Run grammar tests"
+depends = ["build"]
+usage = '''
+arg "[files]..." help="Test files to run (default: all)"
+flag "-r --reporter <format>" help="Reporter format: spec, json, or tap"
+'''
+run = """
+node packages/grammar-test/dist/cli/index.js test \
+  ${usage_reporter:+--reporter "$usage_reporter"} \
+  ${usage_files}
+"""
+
+[tasks.grammar-analyze]
+description = "Analyze grammar for issues"
+depends = ["build"]
+usage = '''
+arg "<grammar>" help="Grammar file to analyze (.ohm)"
+flag "-f --format <format>" help="Output format: spec or json"
+'''
+run = """
+node packages/grammar-test/dist/cli/index.js analyze \
+  ${usage_format:+--format "$usage_format"} \
+  ${usage_grammar?}
 """
