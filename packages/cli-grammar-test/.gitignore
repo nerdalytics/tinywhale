@@ -1,22 +1,16 @@
-# Ignore every file
+# Ignore every file and folder
 *
 */
 
 # Allow list for the current folder
 !.gitignore
 !biome.json
-!docs/
-!docs/**
+!examples/
+!examples/**
 !package.json
-!README.md
 !src/
-!src/**/
-!src/**/*.ohm
-!src/**/*.ts
+!src/**
 !test/
 !test/**
 !tsconfig.build.json
 !tsconfig.json
-
-# Re-ignore declaration files
-src/**/*.d.ts
