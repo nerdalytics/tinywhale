@@ -4,6 +4,7 @@
 		"tw-grammar-test": "./dist/cli/index.js"
 	},
 	"dependencies": {
+		"@adonisjs/ace": "13.4.0",
 		"ohm-js": "17.3.0"
 	},
 	"description": "Generic Ohm.js grammar testing framework with static analysis",
