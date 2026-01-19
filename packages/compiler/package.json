@@ -8,6 +8,7 @@
 	"description": "TinyWhale compiler library",
 	"devDependencies": {
 		"@ohm-js/cli": "2.0.1",
+		"@tinywhale/grammar-test": "workspace:*",
 		"@types/node": "25.0.9",
 		"typescript": "5.9.3"
 	},

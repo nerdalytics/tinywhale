@@ -90,6 +90,9 @@ importers:
       '@ohm-js/cli':
         specifier: 2.0.1
         version: 2.0.1(ohm-js@17.3.0)
+      '@tinywhale/grammar-test':
+        specifier: workspace:*
+        version: link:../grammar-test
       '@types/node':
         specifier: 25.0.9
         version: 25.0.9

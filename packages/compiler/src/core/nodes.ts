@@ -37,8 +37,10 @@ export const NodeKind = {
 
 	PanicStatement: 10,
 	ParenExpr: 105,
+	PrimitiveBinding: 14,
 
 	Program: 255,
+	RecordBinding: 15,
 	RecordLiteral: 107,
 	RootLine: 2,
 	SizeHint: 152,

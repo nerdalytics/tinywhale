@@ -1,6 +1,14 @@
 TinyWhale {
-  Program (a program) = Line*
+  // Program structure: newlines are required between lines, not consumed as whitespace
+  // This ensures "panic panic" (two statements on one line) is rejected
+  Program (a program) = Line? (newline Line)* newline?
   Line (a line) = IndentedLine | DedentLine | RootLine
+
+  // RootLine is just a statement (newlines handled by Program rule)
+  RootLine = Statement
+
+  // Newline (required between lines, not treated as whitespace)
+  newline = "\n" | "\r\n" | "\r"
 
   // IndentedLine can contain a MatchArm, Statement, FieldDecl, or FieldInit
   // FieldInit comes before FieldDecl: uppercase identifiers are tried as NestedRecordInit first
@@ -9,16 +17,24 @@ TinyWhale {
   IndentedLine = indentToken anyDedent* IndentedContent?
   IndentedContent = MatchArm | FieldInit | FieldDecl | Statement
   DedentLine = anyDedent+ Statement?
-  RootLine = Statement
 
   // Statements
-  Statement = TypeDecl | MatchBinding | MatchExpr | VariableBinding | PanicStatement
+  Statement = TypeDecl | MatchBinding | MatchExpr | PrimitiveBinding | RecordBinding | PanicStatement
   PanicStatement = panic
 
   // Type declaration: type Point
   TypeDecl = typeKeywordToken upperIdentifier
 
-  // Variable binding: x:i32 = expr or x:Point = (with block initializer)
+  // Primitive type reference (types that require inline expression)
+  PrimitiveTypeRef = ListType | HintedPrimitive | typeKeyword
+
+  // Binding for primitive types: expression required
+  PrimitiveBinding = identifier colon PrimitiveTypeRef equals Expression
+
+  // Binding for record types: no expression, block follows
+  RecordBinding = identifier colon upperIdentifier equals
+
+  // Variable binding (deprecated - kept for reference, use PrimitiveBinding or RecordBinding)
   VariableBinding = identifier TypeAnnotation equals Expression?
   TypeAnnotation = colon TypeRef
 
@@ -192,7 +208,8 @@ TinyWhale {
   dedentNonZero = "⇤" nonZeroDigit digit*
   nonZeroDigit = "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"
 
-  // Comments treated as whitespace
-  space += comment
+  // Whitespace: spaces and tabs only (newlines are handled explicitly in Program rule)
+  // This ensures "panic panic" on one line is rejected
+  space := " " | "\t" | comment
   comment = "#" (~("#" | "\n" | "\r" | anyDedent) any)* ("#" | &"\n" | &"\r" | &anyDedent | end)
 }

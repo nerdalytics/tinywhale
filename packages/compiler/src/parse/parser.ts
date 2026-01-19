@@ -110,19 +110,49 @@ function generateNewlines(currentLine: number, targetLine: number): string {
 	return '\n'.repeat(Math.max(0, targetLine - currentLine))
 }
 
-function tokensToOhmInput(context: CompilationContext): string {
-	const parts: string[] = []
-	let currentLine = 1
+function needsSyntheticNewline(
+	token: Token,
+	currentLine: number,
+	prevTokenKind: number | null
+): boolean {
+	if (token.kind !== TokenKind.Dedent) return false
+	if (token.line !== currentLine) return false
+	if (prevTokenKind === null) return false
+	// Don't insert newline if previous token was Indent or Dedent
+	// (these go together: IndentedLine = indentToken anyDedent* IndentedContent?)
+	return prevTokenKind !== TokenKind.Indent && prevTokenKind !== TokenKind.Dedent
+}
 
-	for (const [, token] of context.tokens) {
-		parts.push(generateNewlines(currentLine, token.line))
-		currentLine = token.line
+interface TokenProcessingState {
+	parts: string[]
+	currentLine: number
+	prevTokenKind: number | null
+}
 
-		const str = tokenToOhmString(token, context)
-		if (str !== null) parts.push(str, ' ')
+function processToken(
+	token: Token,
+	state: TokenProcessingState,
+	context: CompilationContext
+): void {
+	if (needsSyntheticNewline(token, state.currentLine, state.prevTokenKind)) {
+		state.parts.push('\n')
+		state.currentLine++
 	}
+	state.parts.push(generateNewlines(state.currentLine, token.line))
+	state.currentLine = token.line
+	const str = tokenToOhmString(token, context)
+	if (str !== null) {
+		state.parts.push(str, ' ')
+		state.prevTokenKind = token.kind
+	}
+}
 
-	return parts.join('')
+export function tokensToOhmInput(context: CompilationContext): string {
+	const state: TokenProcessingState = { currentLine: 1, parts: [], prevTokenKind: null }
+	for (const [, token] of context.tokens) {
+		processToken(token, state, context)
+	}
+	return state.parts.join('')
 }
 
 interface TokenMapping {
@@ -666,6 +696,60 @@ function createNodeEmittingSemantics(
 				tokenId: tid,
 			})
 		},
+		PrimitiveBinding(ident: Node, _colon: Node, typeRef: Node, _equals: Node, expr: Node): NodeId {
+			const startCount = context.nodes.count()
+			ident['emitExpression']()
+
+			// Emit type annotation node with possible complex type children
+			// typeRef is PrimitiveTypeRef, need to check its child for the actual type
+			const innerType = typeRef.child(0)
+			if (innerType.ctorName === 'ListType' || innerType.ctorName === 'HintedPrimitive') {
+				innerType['emitTypeAnnotation']()
+			}
+
+			const tid = getTokenIdForOhmNode(typeRef)
+			context.nodes.add({
+				kind: NodeKind.TypeAnnotation,
+				subtreeSize: 1 + (context.nodes.count() - startCount - 1),
+				tokenId: tid,
+			})
+
+			expr['emitExpression']()
+
+			const childCount = context.nodes.count() - startCount
+
+			const lineNumber = getLineNumber(this)
+			const lineTid = getTokenIdForLine(lineNumber)
+
+			return context.nodes.add({
+				kind: NodeKind.PrimitiveBinding,
+				subtreeSize: 1 + childCount,
+				tokenId: lineTid,
+			})
+		},
+		RecordBinding(ident: Node, _colon: Node, typeName: Node, _equals: Node): NodeId {
+			const startCount = context.nodes.count()
+			ident['emitExpression']()
+
+			// Emit type annotation node (simple upperIdentifier, no complex type)
+			const tid = getTokenIdForOhmNode(typeName)
+			context.nodes.add({
+				kind: NodeKind.TypeAnnotation,
+				subtreeSize: 1,
+				tokenId: tid,
+			})
+
+			const childCount = context.nodes.count() - startCount
+
+			const lineNumber = getLineNumber(this)
+			const lineTid = getTokenIdForLine(lineNumber)
+
+			return context.nodes.add({
+				kind: NodeKind.RecordBinding,
+				subtreeSize: 1 + childCount,
+				tokenId: lineTid,
+			})
+		},
 		Statement(stmt: Node): NodeId {
 			return stmt['emitStatement']()
 		},
@@ -755,23 +839,28 @@ function createNodeEmittingSemantics(
 		},
 	})
 
+	function emitProgramLines(optFirstLine: Node, lines: Node): void {
+		const firstLine = optFirstLine.children[0]
+		if (firstLine !== undefined) {
+			firstLine['emitLine']()
+		}
+		for (const line of lines.children) {
+			line['emitLine']()
+		}
+	}
+
 	semantics.addOperation<NodeId>('emitProgram', {
-		Program(lines: Node) {
+		// Program = Line? (newline Line)* newline?
+		// Ohm distributes * over grouped elements: Line?, newline*, Line*, newline?
+		Program(optFirstLine: Node, _newlines: Node, lines: Node, _optTrailingNewline: Node) {
 			const startCount = context.nodes.count()
-
-			for (const line of lines.children) {
-				line['emitLine']()
-			}
-
+			emitProgramLines(optFirstLine, lines)
 			const childCount = context.nodes.count() - startCount
-			const subtreeSize = childCount + 1
-
-			const tid = context.tokens.count() > 0 ? tokenId(0) : tokenId(0)
 
 			return context.nodes.add({
 				kind: NodeKind.Program,
-				subtreeSize,
-				tokenId: tid,
+				subtreeSize: childCount + 1,
+				tokenId: tokenId(0),
 			})
 		},
 	})
