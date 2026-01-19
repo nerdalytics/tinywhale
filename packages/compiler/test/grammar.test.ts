@@ -2,7 +2,6 @@ import assert from 'node:assert'
 import fs from 'node:fs'
 import path from 'node:path'
 import { test } from 'node:test'
-import * as ohm from 'ohm-js'
 import {
 	analyzeLexicalRules,
 	analyzeNaming,
@@ -13,6 +12,7 @@ import {
 	analyzeSyntacticRules,
 	findUnreachableRules,
 } from '@tinywhale/grammar-test'
+import * as ohm from 'ohm-js'
 
 // Resolve path relative to this test file
 // import.meta.dirname is available in Node.js 20.11+ / 22+
@@ -41,23 +41,23 @@ test('Grammar Analysis', async (t) => {
 			// We log them as diagnostics so they appear in the test output
 			// but don't clutter standard output unless verbose
 			t.diagnostic(`Found ${issues.length} grammar issues:`)
-			
+
 			// Group by severity
-			const errors = issues.filter(i => i.severity === 'error')
-			const warnings = issues.filter(i => i.severity === 'warning')
-			const infos = issues.filter(i => i.severity === 'info')
+			const errors = issues.filter((i) => i.severity === 'error')
+			const warnings = issues.filter((i) => i.severity === 'warning')
+			const infos = issues.filter((i) => i.severity === 'info')
 
 			if (errors.length > 0) {
 				t.diagnostic(`Errors (${errors.length}):`)
-				errors.forEach(i => t.diagnostic(`  [!] ${i.code}: ${i.message}`))
+				for (const i of errors) t.diagnostic(`  [!] ${i.code}: ${i.message}`)
 			}
 			if (warnings.length > 0) {
 				t.diagnostic(`Warnings (${warnings.length}):`)
-				warnings.forEach(i => t.diagnostic(`  [W] ${i.code}: ${i.message}`))
+				for (const i of warnings) t.diagnostic(`  [W] ${i.code}: ${i.message}`)
 			}
 			if (infos.length > 0) {
 				t.diagnostic(`Infos (${infos.length}):`)
-				infos.forEach(i => t.diagnostic(`  [i] ${i.code}: ${i.message}`))
+				for (const i of infos) t.diagnostic(`  [i] ${i.code}: ${i.message}`)
 			}
 
 			// Fail on errors, but allow warnings/infos
@@ -70,7 +70,7 @@ test('Grammar Analysis', async (t) => {
 		const syntacticRules = analyzeSyntacticRules(grammar)
 		const lexicalRules = analyzeLexicalRules(grammar)
 		const unreachableRules = findUnreachableRules(grammar)
-		
+
 		t.diagnostic('Grammar Stats:')
 		t.diagnostic(`  Syntactic Rules: ${syntacticRules.length}`)
 		t.diagnostic(`  Lexical Rules: ${lexicalRules.length}`)
