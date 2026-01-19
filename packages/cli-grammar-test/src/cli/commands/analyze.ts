@@ -1,12 +1,18 @@
 import { readFileSync } from 'node:fs'
 import { args, BaseCommand, flags } from '@adonisjs/ace'
+import type { AnalysisIssue, AnalysisResult } from '@tinywhale/grammar-test'
+import {
+	analyzeLexicalRules,
+	analyzeNaming,
+	analyzeNullable,
+	analyzeReachability,
+	analyzeRedundancy,
+	analyzeShadows,
+	analyzeSyntacticRules,
+	findNullableRules,
+	findUnreachableRules,
+} from '@tinywhale/grammar-test'
 import { grammar } from 'ohm-js'
-import { analyzeLexicalRules, analyzeNaming, analyzeSyntacticRules } from '../../analyzer/naming.ts'
-import { analyzeNullable, findNullableRules } from '../../analyzer/nullable.ts'
-import { analyzeReachability, findUnreachableRules } from '../../analyzer/reachability.ts'
-import { analyzeRedundancy } from '../../analyzer/redundancy.ts'
-import { analyzeShadows } from '../../analyzer/shadows.ts'
-import type { AnalysisIssue, AnalysisResult } from '../../types.ts'
 
 function getSeverityIcon(severity: string): string {
 	if (severity === 'error') return '\u2717'

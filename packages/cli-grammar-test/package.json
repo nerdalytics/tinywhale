@@ -5,18 +5,13 @@
 	},
 	"dependencies": {
 		"@adonisjs/ace": "13.4.0",
+		"@tinywhale/grammar-test": "workspace:*",
 		"ohm-js": "17.3.0"
 	},
-	"description": "Generic Ohm.js grammar testing framework with static analysis",
+	"description": "CLI for grammar testing and analysis",
 	"devDependencies": {
 		"@types/node": "25.0.9",
 		"typescript": "5.9.3"
-	},
-	"exports": {
-		".": {
-			"default": "./dist/index.js",
-			"types": "./dist/index.d.ts"
-		}
 	},
 	"files": [
 		"dist"
@@ -29,7 +24,6 @@
 		"testing"
 	],
 	"license": "MIT",
-	"main": "./dist/index.js",
 	"name": "@tinywhale/cli-grammar-test",
 	"scripts": {
 		"build": "tsc -p tsconfig.build.json",
@@ -37,6 +31,5 @@
 		"test": "node --experimental-strip-types --test test/**/*.test.ts"
 	},
 	"type": "module",
-	"types": "./dist/index.d.ts",
 	"version": "0.0.0"
 }
