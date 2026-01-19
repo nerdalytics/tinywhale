@@ -72,6 +72,42 @@ test('Grammar Specs', async (t) => {
 		}
 	})
 
+	await t.test('Primitive vs Record Bindings', (t) => {
+		const tester = createTester(grammar, 'Primitive vs Record Bindings', 'Program')
+
+		tester.match(prepareList([
+			'x:i32 = 5',
+			'x:i64 = 123',
+			'x:f32 = 1.5',
+			'x:f64 = 2.5',
+			'x:i32<min=0> = 5',
+			'x:i32<min=0, max=100> = 50',
+			'arr:i32[]<size=3> = [1, 2, 3]',
+			'p:Point =',  // Record binding - no expression, block follows
+		]))
+
+		tester.reject(prepareList([
+			'x:i32 =',           // Missing expression for primitive
+			'x:i64 =',           // Missing expression for primitive
+			'x:f32 =',           // Missing expression for primitive
+			'x:f64 =',           // Missing expression for primitive
+			'x:i32<min=0> =',    // Missing expression for hinted primitive
+			'arr:i32[]<size=3> =', // Missing expression for list type
+			'p:Point = 5',       // Expression not allowed for record
+		]))
+
+		const result = tester.run()
+		if (result.failed > 0) {
+			result.results.forEach((r) => {
+				if (!r.passed) {
+					t.diagnostic(`[FAILED] ${r.expected} '${r.input}': ${r.errorMessage}`)
+					t.diagnostic(`Prepared Input: ${JSON.stringify(r.input)}`)
+				}
+			})
+			assert.fail(`Failed ${result.failed} grammar tests`)
+		}
+	})
+
 	await t.test('Variable Bindings', (t) => {
 		const tester = createTester(grammar, 'Variable Bindings', 'VariableBinding')
 		
