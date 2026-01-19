@@ -21,14 +21,15 @@
 		"dist"
 	],
 	"keywords": [
+		"cli",
 		"grammar",
 		"ohm",
-		"testing",
-		"static-analysis"
+		"static-analysis",
+		"testing"
 	],
 	"license": "MIT",
 	"main": "./dist/index.js",
-	"name": "@tinywhale/grammar-test",
+	"name": "@tinywhale/cli-grammar-test",
 	"scripts": {
 		"build": "tsc -p tsconfig.build.json",
 		"clean": "rm -rf dist",

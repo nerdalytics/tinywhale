@@ -65,7 +65,7 @@ flag "-t --target <format>" help="Output format: wasm or wat"
 flag "--optimize" help="Run optimization passes"
 '''
 run = """
-node packages/cli/dist/cli.js build ${usage_file?} \
+node packages/cli-compiler/dist/cli.js build ${usage_file?} \
   ${usage_output:+--output "$usage_output"} \
   ${usage_target:+--target "$usage_target"} \
   ${usage_optimize:+--optimize}
@@ -79,7 +79,7 @@ arg "[files]..." help="Test files to run (default: all)"
 flag "-r --reporter <format>" help="Reporter format: spec, json, or tap"
 '''
 run = """
-node packages/grammar-test/dist/cli/index.js test \
+node packages/cli-grammar-test/dist/cli/index.js test \
   ${usage_reporter:+--reporter "$usage_reporter"} \
   ${usage_files}
 """
@@ -92,7 +92,7 @@ arg "<grammar>" help="Grammar file to analyze (.ohm)"
 flag "-f --format <format>" help="Output format: spec or json"
 '''
 run = """
-node packages/grammar-test/dist/cli/index.js analyze \
+node packages/cli-grammar-test/dist/cli/index.js analyze \
   ${usage_format:+--format "$usage_format"} \
   ${usage_grammar?}
 """

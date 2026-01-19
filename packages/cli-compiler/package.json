@@ -24,11 +24,12 @@
 	],
 	"keywords": [
 		"cli",
+		"compiler",
 		"tinywhale"
 	],
 	"license": "MIT",
 	"main": "./dist/index.js",
-	"name": "@tinywhale/cli",
+	"name": "@tinywhale/cli-compiler",
 	"scripts": {
 		"build": "tsc -p tsconfig.build.json",
 		"clean": "rm -rf dist",
