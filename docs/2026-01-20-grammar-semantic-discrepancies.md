@@ -367,6 +367,29 @@ greaterGreaterGreater = ">>>"
 
 ---
 
+### 21. Refinement Types in Field Declarations
+
+```tinywhale
+type Point
+    x: i32<min=0, max=100>
+    y: i32<min=0, max=100>
+p:Point =
+    x: 50
+    y: 75
+```
+
+Refinement types can be used in record field declarations. Constraints are enforced during field initialization.
+
+```ohm
+FieldDecl = lowerIdentifier colon TypeRef
+TypeRef = ListType | RefinementType | upperIdentifier | typeKeyword
+RefinementType = typeKeyword TypeHints
+```
+
+**Fixed in PR #49:** Parser now emits RefinementType as child of FieldDecl. Checker traverses nodes instead of using token offsets.
+
+---
+
 ## Discrepancies
 
 ### D1. Nested Lists
@@ -526,39 +549,7 @@ floatLiteral = digit+ "." digit+ (("e" | "E") ("+" | "-")? digit+)?
 
 ---
 
-### D7. Refinement Types in Field Declarations
-
-**Desired:**
-```tinywhale
-type Point
-    x: i32<min=0, max=100>
-    y: i32<min=0, max=100>
-```
-Should allow refinement types on record fields, with constraints enforced during initialization.
-
-**Actual:**
-```tinywhale
-type Point
-    x: i32<min=0>
-    y: i32
-p:Point =
-    x: -5   # Should fail min=0, but passes
-    y: 10
-```
-Parses correctly but constraints are silently ignored.
-
-**Root cause:** `processFieldDecl` (`declarations.ts:196`) uses hardcoded `+2` token offset assuming `Identifier, Colon, TypeKeyword`. For refinement types like `i32<min=0>`, the type token is not at offset +2.
-
-```ohm
-FieldDecl = lowerIdentifier colon TypeRef
-TypeRef = ListType | RefinementType | upperIdentifier | typeKeyword
-```
-
-**Fix required:** Parse the TypeAnnotation node properly instead of using token offset arithmetic. Should traverse child nodes to find the type information.
-
----
-
-### D8. List Field Initialization in Records
+### D7. List Field Initialization in Records
 
 **Desired:**
 ```tinywhale
@@ -588,7 +579,7 @@ FieldValue = NestedRecordInit | Expression
 
 ---
 
-### D9. Lists of User-Defined Types (Blocked on Functions)
+### D8. Lists of User-Defined Types (Blocked on Functions)
 
 **Desired:**
 ```tinywhale
@@ -613,7 +604,7 @@ Should allow lists with record element types, initialized via variable reference
 
 ---
 
-### D10. Float Match Patterns
+### D9. Float Match Patterns
 
 **Desired:**
 ```tinywhale
@@ -689,23 +680,21 @@ Not yet implemented. Will unlock:
 
 | Category | Count |
 |----------|-------|
-| Working correctly | 20 |
-| Discrepancies | 10 |
+| Working correctly | 21 |
+| Discrepancies | 9 |
 | Future enhancements | 5 |
 
-**Fixes completed (PRs #47 and #48):**
+**Fixes completed (PRs #47, #48, and #49):**
 - Dead VariableBinding grammar rule removed
 - Postfix base restricted to identifiers only (no parens, literals, or list literals)
 - Integer scientific notation negative exponents rejected at grammar level
 - Binding patterns in match now work with lexical scoping
+- Refinement types in field declarations now enforced (checker traverses nodes instead of token offsets)
 
 **Remaining discrepancies for fuzzing preparation:**
 1. D1-D2 (nested lists, chained index) - need checker implementation
 2. D3-D5 (list/record destructuring, guards) - missing grammar + checker
 3. D6 (negative float literals) - grammar addition
-4. D7 (refinement types in fields) - checker fix for type resolution
-5. D8 (list fields in records) - checker fix
-6. D9 (lists of user-defined types) - deferred until functions
-7. D10 (float match patterns) - grammar + checker
-
-**Terminology:** "Hinted Primitives" → "Refinement Types" (D7 fix includes rename)
+4. D7 (list fields in records) - checker fix
+5. D8 (lists of user-defined types) - deferred until functions
+6. D9 (float match patterns) - grammar + checker
