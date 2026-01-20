@@ -10,16 +10,14 @@ import type { TokenId } from './tokens.ts'
 export const NodeKind = {
 	BinaryExpr: 104,
 	BindingPattern: 202,
+	Bound: 153,
 	CompareChain: 106,
 	DedentLine: 1,
 
 	FieldAccess: 109,
-
 	FieldDecl: 51,
 	FieldInit: 108,
 	FloatLiteral: 103,
-
-	Hint: 153,
 
 	Identifier: 100,
 	IndentedLine: 0,
@@ -35,16 +33,15 @@ export const NodeKind = {
 	PanicStatement: 10,
 	ParenExpr: 105,
 	PrimitiveBinding: 14,
-
 	Program: 255,
 	RecordBinding: 15,
 	RecordLiteral: 107,
 	RefinementType: 154,
 	RootLine: 2,
-	SizeHint: 152,
+	SizeBound: 152,
 	TypeAnnotation: 150,
+	TypeBounds: 155,
 	TypeDecl: 50,
-	TypeHints: 155,
 	UnaryExpr: 102,
 	VariableBinding: 11,
 
