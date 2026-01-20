@@ -218,11 +218,11 @@ export function resolveUserDefinedType(
 // Hinted Primitive Resolution (Internal Helpers)
 // ============================================================================
 
-function findHintedPrimitiveChild(
+function findRefinementTypeChild(
 	typeAnnotationId: NodeId,
 	context: CompilationContext
 ): NodeId | null {
-	return findChildByKind(typeAnnotationId, NodeKind.HintedPrimitive, context)
+	return findChildByKind(typeAnnotationId, NodeKind.RefinementType, context)
 }
 
 function hasMinOrMaxConstraint(constraints: { min?: bigint; max?: bigint } | null): boolean {
@@ -292,19 +292,19 @@ export function extractConstraintsFromTypeHints(
 }
 
 /**
- * Resolve a hinted primitive type (e.g., `i32<min=0, max=100>`).
+ * Resolve a refinement type (e.g., `i32<min=0, max=100>`).
  */
-export function resolveHintedPrimitive(
-	hintedPrimitiveId: NodeId,
+export function resolveRefinementType(
+	refinementTypeId: NodeId,
 	state: CheckerState,
 	context: CompilationContext
 ): { name: string; typeId: TypeId } | null {
-	const hintedPrimitiveNode = context.nodes.get(hintedPrimitiveId)
-	const baseToken = context.tokens.get(hintedPrimitiveNode.tokenId)
+	const refinementTypeNode = context.nodes.get(refinementTypeId)
+	const baseToken = context.tokens.get(refinementTypeNode.tokenId)
 	const baseType = getTypeNameFromToken(baseToken.kind)
 	if (!baseType) return null
 
-	const typeHintsId = findChildByKind(hintedPrimitiveId, NodeKind.TypeHints, context)
+	const typeHintsId = findChildByKind(refinementTypeId, NodeKind.TypeHints, context)
 	if (typeHintsId === null) return baseType
 
 	const constraints = extractConstraintsFromTypeHints(typeHintsId, context)
@@ -312,7 +312,7 @@ export function resolveHintedPrimitive(
 
 	// min/max constraints can only be applied to integer types
 	if (!isIntegerType(baseType.typeId)) {
-		context.emitAtNode('TWCHECK040' as DiagnosticCode, hintedPrimitiveId, {
+		context.emitAtNode('TWCHECK040' as DiagnosticCode, refinementTypeId, {
 			type: baseType.name,
 		})
 		return null
@@ -329,7 +329,7 @@ export function resolveHintedPrimitive(
 
 /**
  * Resolve a type from a TypeAnnotation node.
- * Handles list types, hinted primitives, primitive types, and user-defined types.
+ * Handles list types, refinement types, primitive types, and user-defined types.
  */
 export function resolveTypeFromAnnotation(
 	typeAnnotationId: NodeId,
@@ -341,9 +341,9 @@ export function resolveTypeFromAnnotation(
 		return resolveListType(listTypeChildId, state, context)
 	}
 
-	const hintedPrimitiveId = findHintedPrimitiveChild(typeAnnotationId, context)
-	if (hintedPrimitiveId !== null) {
-		return resolveHintedPrimitive(hintedPrimitiveId, state, context)
+	const refinementTypeId = findRefinementTypeChild(typeAnnotationId, context)
+	if (refinementTypeId !== null) {
+		return resolveRefinementType(refinementTypeId, state, context)
 	}
 
 	const typeAnnotationNode = context.nodes.get(typeAnnotationId)
