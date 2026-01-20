@@ -20,7 +20,7 @@ export const NodeKind = {
 	FloatLiteral: 103,
 
 	Hint: 153,
-	HintedPrimitive: 154,
+	RefinementType: 154,
 
 	Identifier: 100,
 	IndentedLine: 0,
