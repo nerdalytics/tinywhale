@@ -126,6 +126,14 @@ export class SymbolStore {
 		this.scopeStack.push({ bindings: new Map() })
 	}
 
+	private currentScope(): ScopeFrame {
+		const scope = this.scopeStack[this.scopeStack.length - 1]
+		if (scope === undefined) {
+			throw new Error('No scope available')
+		}
+		return scope
+	}
+
 	add(entry: Omit<SymbolEntry, 'localIndex'>): SymbolId {
 		const localIndex = this.nextLocalIndex++
 		const id = symbolId(this.symbols.length)
@@ -135,16 +143,14 @@ export class SymbolStore {
 		this.symbols.push(fullEntry)
 
 		// Register in current scope's bindings
-		const currentScope = this.scopeStack[this.scopeStack.length - 1]!
-		currentScope.bindings.set(entry.nameId, id)
+		this.currentScope().bindings.set(entry.nameId, id)
 
 		return id
 	}
 
 	lookupByName(nameId: StringId): SymbolId | undefined {
 		// Search from innermost scope to outermost
-		for (let i = this.scopeStack.length - 1; i >= 0; i--) {
-			const scope = this.scopeStack[i]!
+		for (const scope of this.scopeStack.toReversed()) {
 			const symId = scope.bindings.get(nameId)
 			if (symId !== undefined) return symId
 		}
