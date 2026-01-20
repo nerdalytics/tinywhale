@@ -588,23 +588,6 @@ function createNodeEmittingSemantics(
 		},
 	})
 
-	semantics.addOperation<NodeId>('emitFieldValue', {
-		FieldValue(value: Node): NodeId {
-			if (value.ctorName === 'NestedRecordInit') {
-				return value['emitFieldValue']()
-			}
-			return value['emitExpression']()
-		},
-		NestedRecordInit(_typeName: Node): NodeId {
-			const tid = getTokenIdForOhmNode(this)
-			return context.nodes.add({
-				kind: NodeKind.NestedRecordInit,
-				subtreeSize: 1,
-				tokenId: tid,
-			})
-		},
-	})
-
 	semantics.addOperation<NodeId>('emitIndentedContent', {
 		FieldDecl(fieldName: Node, _colon: Node, typeRef: Node): NodeId {
 			const startCount = context.nodes.count()
@@ -623,9 +606,9 @@ function createNodeEmittingSemantics(
 				tokenId: tid,
 			})
 		},
-		FieldInit(fieldName: Node, _colon: Node, fieldValue: Node): NodeId {
+		FieldInit(fieldName: Node, _equals: Node, expression: Node): NodeId {
 			const startCount = context.nodes.count()
-			fieldValue['emitFieldValue']()
+			expression['emitExpression']()
 			const childCount = context.nodes.count() - startCount
 
 			const tid = getTokenIdForOhmNode(fieldName)
@@ -729,7 +712,7 @@ function createNodeEmittingSemantics(
 				tokenId: lineTid,
 			})
 		},
-		RecordBinding(ident: Node, _colon: Node, typeName: Node, _equals: Node): NodeId {
+		RecordBinding(ident: Node, _colon: Node, typeName: Node): NodeId {
 			const startCount = context.nodes.count()
 			ident['emitExpression']()
 
