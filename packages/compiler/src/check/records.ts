@@ -69,7 +69,6 @@ export function hasUppercaseTypeRef(fieldDeclId: NodeId, context: CompilationCon
 	const fieldDeclNode = context.nodes.get(fieldDeclId)
 	const typeTokenId = (fieldDeclNode.tokenId as number) + 2
 	const typeToken = context.tokens.get(typeTokenId as typeof fieldDeclNode.tokenId)
-	// Uppercase means user-defined type
 	if (typeToken.kind === TokenKind.Identifier) {
 		const typeName = context.strings.get(typeToken.payload as StringId)
 		const firstChar = typeName[0]
@@ -491,7 +490,6 @@ export function finalizeNestedRecordInit(state: CheckerState, context: Compilati
 	popBlockContext(state)
 	validateNestedRecordMissingFields(ctx, state, context)
 
-	// Emit symbols and bindings for the nested record fields
 	if (!context.hasErrors() && isValidNestedRecordInitCtx(ctx)) {
 		emitFinalizedNestedRecordInit(ctx, state, context)
 	}

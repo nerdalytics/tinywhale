@@ -502,9 +502,7 @@ function createNodeEmittingSemantics(
 		},
 		TypeHints(_lessThan: Node, hintList: Node, _greaterThan: Node): NodeId {
 			const startCount = context.nodes.count()
-			// Emit first hint
 			hintList.child(0)['emitTypeAnnotation']()
-			// Emit rest hints (skipping comma separators)
 			const restHints = hintList.child(2)
 			for (let i = 0; i < restHints.numChildren; i++) {
 				restHints.child(i)['emitTypeAnnotation']()

@@ -177,7 +177,6 @@ function emitStatement(
 			}
 			break
 		case NodeKind.MatchExpr:
-			// Standalone match expression (discarded form) - not yet implemented
 			break
 	}
 }
@@ -258,7 +257,6 @@ function processIndentedLineAsFieldDecl(
 ): boolean {
 	if (!isInTypeDeclContext(state)) return false
 
-	// Handle FieldDecl for primitive type fields
 	const fieldDecl = getFieldDeclFromLine(lineId, context)
 	if (fieldDecl) {
 		processFieldDecl(fieldDecl.id, state, context)
@@ -280,11 +278,7 @@ function maybeStartNestedRecordInit(
 ): boolean {
 	const fieldDecl = getFieldDeclFromLineForInit(lineId, context)
 	if (!fieldDecl) return false
-
-	// Only start nested record init if in record literal context
 	if (!isInRecordInitContext(state)) return false
-
-	// Check if it's an uppercase TypeRef (user-defined type)
 	if (!hasUppercaseTypeRef(fieldDecl.id, context)) {
 		return false
 	}
@@ -365,14 +359,12 @@ function processDedentLineStatement(
 	state: CheckerState,
 	context: CompilationContext
 ): void {
-	// Check for TypeDecl first (needs special context setup)
 	const typeDecl = getTypeDeclFromLine(lineId, context)
 	if (typeDecl) {
 		startTypeDecl(typeDecl.id, state, context)
 		return
 	}
 
-	// Handle other statements
 	const stmt = getStatementFromLine(lineId, context)
 	if (stmt) emitStatement(stmt.id, stmt.kind, state, context)
 }
@@ -401,14 +393,12 @@ function handleDedentLine(lineId: NodeId, state: CheckerState, context: Compilat
 		return
 	}
 
-	// Finalize pending record literal and process statement
 	if (isInRecordLiteralContext(state)) {
 		finalizeRecordLiteral(state, context)
 		processDedentLineStatement(lineId, state, context)
 		return
 	}
 
-	// No context - error
 	context.emitAtNode('TWCHECK001' as DiagnosticCode, lineId)
 }
 
@@ -532,7 +522,6 @@ export function check(context: CompilationContext): CheckResult {
 		unreachableRange: null,
 	}
 
-	// Find Program node (last node in postorder storage)
 	const nodeCount = context.nodes.count()
 	if (nodeCount === 0) {
 		assignCheckResultsToContext(context, insts, symbols, types)
@@ -543,12 +532,10 @@ export function check(context: CompilationContext): CheckResult {
 	const program = context.nodes.get(programId)
 
 	if (program.kind !== NodeKind.Program) {
-		// No valid Program node - might be a parse error
 		assignCheckResultsToContext(context, insts, symbols, types)
 		return { succeeded: !context.hasErrors() }
 	}
 
-	// Process line children in source order
 	const lines = getLineChildrenInSourceOrder(programId, context)
 	for (const [lineId, line] of lines) {
 		processLine(lineId, line, state, context)
