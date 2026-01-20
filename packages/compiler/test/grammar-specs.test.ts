@@ -99,7 +99,7 @@ test('Grammar Specs', async (t) => {
 				'x:i64 = 123', // [FULL]
 				'x:f32 = 1.5', // [FULL]
 				'x:f64 = 2.5', // [FULL]
-				'x:i32<min=0> = 5', // [FULL] - type hints with constraint checking
+				'x:i32<min=0> = 5', // [FULL] - type bounds with constraint checking
 				'x:i32<min=0, max=100> = 50', // [FULL]
 				'arr:i32[]<size=3> = [1, 2, 3]', // [FULL] - single-level list
 				'p:Point', // [FULL] - record binding (new syntax: no trailing =)
@@ -112,7 +112,7 @@ test('Grammar Specs', async (t) => {
 				'x:i64 =', // Missing expression for primitive
 				'x:f32 =', // Missing expression for primitive
 				'x:f64 =', // Missing expression for primitive
-				'x:i32<min=0> =', // Missing expression for hinted primitive
+				'x:i32<min=0> =', // Missing expression for bounded primitive
 				'arr:i32[]<size=3> =', // Missing expression for list type
 				'p:Point = 5', // Expression not allowed for record
 				'p:Point =', // Old syntax: trailing = after record type rejected
@@ -322,7 +322,7 @@ test('Grammar Specs', async (t) => {
 
 		tester.reject(
 			prepareList([
-				'arr:i32[] = [1, 2]', // Missing size hint
+				'arr:i32[] = [1, 2]', // Missing size bound
 			])
 		)
 
