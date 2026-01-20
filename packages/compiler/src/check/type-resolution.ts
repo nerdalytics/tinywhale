@@ -67,12 +67,13 @@ function extractSizeFromSizeBound(sizeBoundId: NodeId, context: CompilationConte
 }
 
 /**
- * Extract size from a TypeBounds node (new grammar structure).
- * TypeBounds contains Bound children, we find the first one and extract its value.
+ * Extract size from a TypeBounds node.
  * For list types, there should be exactly one bound (the size).
  */
-function extractSizeFromTypeBounds(typeBoundsId: NodeId, context: CompilationContext): number | null {
-	// Find the first Bound child
+function extractSizeFromTypeBounds(
+	typeBoundsId: NodeId,
+	context: CompilationContext
+): number | null {
 	const boundId = findChildByKind(typeBoundsId, NodeKind.Bound, context)
 	if (boundId === null) return null
 
@@ -105,11 +106,10 @@ function resolveListElementType(
 }
 
 function findSizeBoundChild(listTypeId: NodeId, context: CompilationContext): NodeId | null {
-	// First try new grammar structure (TypeBounds)
 	const typeBoundsId = findChildByKind(listTypeId, NodeKind.TypeBounds, context)
 	if (typeBoundsId !== null) return typeBoundsId
 
-	// Fall back to old grammar structure (SizeBound) for compatibility
+	// Fall back to SizeBound for backward compatibility
 	return findChildByKind(listTypeId, NodeKind.SizeBound, context)
 }
 
@@ -120,7 +120,6 @@ function findNestedListTypeChild(listTypeId: NodeId, context: CompilationContext
 function validateListSize(sizeBoundId: NodeId, context: CompilationContext): number | null {
 	const node = context.nodes.get(sizeBoundId)
 
-	// Determine which extraction method to use based on node kind
 	let size: number | null
 	if (node.kind === NodeKind.TypeBounds) {
 		size = extractSizeFromTypeBounds(sizeBoundId, context)
