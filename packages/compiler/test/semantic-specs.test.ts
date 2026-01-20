@@ -173,7 +173,8 @@ test('Semantic Specs', async (t) => {
 			{
 				description: 'nested record init with new syntax',
 				expect: 'valid',
-				input: 'type Inner\n\tval: i32\ntype Outer\n\tinner: Inner\no:Outer\n\tinner: Inner\n\t\tval = 5',
+				input:
+					'type Inner\n\tval: i32\ntype Outer\n\tinner: Inner\no:Outer\n\tinner: Inner\n\t\tval = 5',
 			},
 			{
 				description: 'record field access with new syntax',

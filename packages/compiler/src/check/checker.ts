@@ -334,6 +334,17 @@ function finalizeNestedContextsForIndent(
 	}
 }
 
+function tryStartNestedRecordInit(
+	lineId: NodeId,
+	lineIndentLevel: number | null,
+	state: CheckerState,
+	context: CompilationContext
+): boolean {
+	return (
+		lineIndentLevel !== null && maybeStartNestedRecordInit(lineId, lineIndentLevel, state, context)
+	)
+}
+
 function handleIndentedLine(
 	lineId: NodeId,
 	state: CheckerState,
@@ -344,7 +355,7 @@ function handleIndentedLine(
 
 	if (processIndentedLineAsMatchArm(lineId, state, context)) return
 	if (processIndentedLineAsFieldDecl(lineId, state, context)) return
-	if (lineIndentLevel !== null && maybeStartNestedRecordInit(lineId, lineIndentLevel, state, context)) return
+	if (tryStartNestedRecordInit(lineId, lineIndentLevel, state, context)) return
 	if (processIndentedLineAsFieldInit(lineId, state, context)) return
 	context.emitAtNode('TWCHECK001' as DiagnosticCode, lineId)
 }
