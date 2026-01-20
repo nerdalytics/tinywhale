@@ -291,7 +291,26 @@ Statement = TypeDecl | MatchBinding | MatchExpr | PrimitiveBinding | RecordBindi
 
 ---
 
-### 16. Comments
+### 16. Binding Patterns in Match
+
+```tinywhale
+x:i32 = 5
+result:i32 = match x
+    0 -> 100
+    other -> other + 1
+```
+
+Binding patterns capture the matched value and make it available in the arm body. Lexically scoped - the binding is only visible within the arm.
+
+```ohm
+BindingPattern = ~keyword ~underscore identifier
+```
+
+**Fixed in PR #48:** Implemented lexical scoping with scope stack in SymbolStore. Match arms push/pop scopes so bindings don't leak.
+
+---
+
+### 17. Comments
 
 ```tinywhale
 # This is a comment #
@@ -306,7 +325,7 @@ comment = "#" (~("#" | "\n" | "\r" | anyDedent) any)* ("#" | &"\n" | &"\r" | &an
 
 ---
 
-### 17. Underscore-Prefixed Identifiers
+### 18. Underscore-Prefixed Identifiers
 
 ```tinywhale
 _unused:i32 = 42
@@ -320,7 +339,7 @@ identifier = ~keyword letter (alnum | "_")*
 
 ---
 
-### 18. Empty Lists Disallowed
+### 19. Empty Lists Disallowed
 
 ```tinywhale
 # This correctly fails to parse:
@@ -335,7 +354,7 @@ ListElements = Expression (comma Expression)*
 
 ---
 
-### 19. `<<<` Operator Correctly Omitted
+### 20. `<<<` Operator Correctly Omitted
 
 Unsigned left shift (`<<<`) would be identical to left shift (`<<`) - zeros fill from right regardless of signedness. Correctly not implemented.
 
@@ -400,114 +419,7 @@ IndexAccess = PostfixBase (lbracket intLiteral rbracket)+
 
 ---
 
-### D3. Binding Patterns in Match
-
-**Desired:**
-```tinywhale
-x:i32 = 5
-result:i32 = match x
-    0 -> 100
-    other -> other
-```
-Should bind matched value to `other` and use it in arm body.
-
-**Actual:**
-```tinywhale
-x:i32 = 5
-result:i32 = match x
-    0 -> 100
-    other -> other
-# Error: TWCHECK013 - variable 'other' not in scope
-```
-Grammar parses binding pattern, but checker never adds variable to scope.
-
-```ohm
-BindingPattern = ~keyword ~underscore identifier
-```
-
-**Discrepancy:** `BindingPattern` parses but `PatternBind` instruction doesn't populate symbol table.
-
----
-
-### D4. Dead Grammar Rule (VariableBinding)
-
-**Current grammar:**
-```ohm
-VariableBinding = identifier TypeAnnotation equals Expression?
-TypeAnnotation = colon TypeRef
-```
-
-This rule is never referenced in `Statement` or anywhere else. Comment says "deprecated - kept for reference."
-
-**Discrepancy:** Dead code in grammar adds noise for fuzzing. Should be removed.
-
----
-
-### D5. Parentheses as Postfix Base
-
-**Unintended:**
-```tinywhale
-x:i32 = ([1, 2, 3])[0]
-y:i32 = (1 + 2).something
-```
-Grammar allows indexing/field-access on parenthesized expressions.
-
-**Design principle:** One construct for similar goals. Pattern matching with destructuring is the intended way to access elements, not arbitrary expression indexing.
-
-```ohm
-PrimaryExprBase = lparen Expression rparen  -- paren
-                | ListLiteral
-                | identifier
-                | floatLiteral
-                | intLiteral
-
-PostfixBase = FieldAccess | PrimaryExprBase
-```
-
-**Discrepancy:** `PrimaryExprBase` includes parenthesized expressions, making them valid for postfix operations. Parentheses should only be for arithmetic grouping.
-
----
-
-### D6. List Literals as Postfix Base
-
-**Unintended:**
-```tinywhale
-x:i32 = [1, 2, 3][0]
-```
-Grammar allows indexing directly into list literals.
-
-**Design principle:** Bind values to variables, then operate on them.
-
-```ohm
-PrimaryExprBase = ...
-                | ListLiteral
-                | ...
-```
-
-**Discrepancy:** `ListLiteral` in `PrimaryExprBase` allows it as postfix base. Should only appear in binding contexts.
-
----
-
-### D7. Numeric Literals as Postfix Base
-
-**Unintended:**
-```tinywhale
-x:i32 = 123[0]
-y:i32 = 1.5.something
-```
-Grammar technically allows indexing/field-access on numeric literals (nonsensical).
-
-```ohm
-PrimaryExprBase = ...
-                | floatLiteral
-                | intLiteral
-```
-
-**Discrepancy:** Numeric literals in `PrimaryExprBase` makes them valid postfix bases.
-
----
-
-### D8. List Destructuring Patterns (Missing)
+### D3. List Destructuring Patterns (Missing)
 
 **Desired:**
 ```tinywhale
@@ -532,7 +444,7 @@ PrimaryPattern = WildcardPattern | LiteralPattern | BindingPattern
 
 ---
 
-### D9. Record Destructuring Patterns (Missing)
+### D4. Record Destructuring Patterns (Missing)
 
 **Desired:**
 ```tinywhale
@@ -561,7 +473,7 @@ PrimaryPattern = WildcardPattern | LiteralPattern | BindingPattern
 
 ---
 
-### D10. Pattern Guards (Missing)
+### D5. Pattern Guards (Missing)
 
 **Desired:**
 ```tinywhale
@@ -591,7 +503,7 @@ MatchArm = Pattern arrow Expression
 
 ---
 
-### D11. Negative Float Literals
+### D6. Negative Float Literals
 
 **Desired:**
 ```tinywhale
@@ -614,24 +526,7 @@ floatLiteral = digit+ "." digit+ (("e" | "E") ("+" | "-")? digit+)?
 
 ---
 
-### D12. Integer Scientific Notation with Negative Exponent
-
-**Unintended:**
-```tinywhale
-x:i32 = 1e-3
-# Parses, then checker throws: "Negative exponent not allowed for integers"
-```
-Grammar accepts `1e-3` as valid `intLiteral`, but checker rejects at runtime.
-
-```ohm
-intLiteral = digit+ (("e" | "E") ("+" | "-")? digit+)?
-```
-
-**Discrepancy:** Grammar allows negative exponents for integers. Validation happens in checker (`type-resolution.ts:454`), not at parse time. Should restrict in grammar: `("e" | "E") "+"? digit+`.
-
----
-
-### D13. Hinted Primitives in Field Declarations
+### D7. Hinted Primitives in Field Declarations
 
 **Desired:**
 ```tinywhale
@@ -658,7 +553,7 @@ TypeRef = ListType | HintedPrimitive | upperIdentifier | typeKeyword
 
 ---
 
-### D14. List Field Initialization in Records
+### D8. List Field Initialization in Records
 
 **Desired:**
 ```tinywhale
@@ -688,7 +583,7 @@ FieldValue = NestedRecordInit | Expression
 
 ---
 
-### D15. Lists of User-Defined Types
+### D9. Lists of User-Defined Types
 
 **Desired:**
 ```tinywhale
@@ -709,7 +604,7 @@ ListTypeBase = HintedPrimitive | upperIdentifier | typeKeyword
 
 ---
 
-### D16. Float Match Patterns
+### D10. Float Match Patterns
 
 **Desired:**
 ```tinywhale
@@ -785,13 +680,19 @@ Not yet implemented. Will unlock:
 
 | Category | Count |
 |----------|-------|
-| Working correctly | 19 |
-| Discrepancies | 16 |
+| Working correctly | 20 |
+| Discrepancies | 10 |
 | Future enhancements | 5 |
 
-**Priority discrepancies for fuzzing preparation:**
-1. D4 (dead grammar rule) - trivial fix
-2. D5-D7 (postfix base restrictions) - grammar tightening
-3. D12 (int scientific notation) - grammar tightening
-4. D11 (negative float literals) - grammar addition
-5. D3 (binding patterns) - checker fix
+**Fixes completed (PRs #47 and #48):**
+- Dead VariableBinding grammar rule removed
+- Postfix base restricted to identifiers only (no parens, literals, or list literals)
+- Integer scientific notation negative exponents rejected at grammar level
+- Binding patterns in match now work with lexical scoping
+
+**Remaining discrepancies for fuzzing preparation:**
+1. D1-D2 (nested lists, chained index) - need checker implementation
+2. D3-D5 (list/record destructuring, guards) - missing grammar + checker
+3. D6 (negative float literals) - grammar addition
+4. D7-D9 (hinted fields, list fields, record lists) - checker fixes
+5. D10 (float match patterns) - grammar + checker
