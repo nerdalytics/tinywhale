@@ -130,31 +130,6 @@ test('Grammar Specs', async (t) => {
 		}
 	})
 
-	await t.test('Variable Bindings', (t) => {
-		const tester = createTester(grammar, 'Variable Bindings', 'VariableBinding')
-
-		tester.match(prepareList(['x:i32 = 1', 'x: i32 = 1', 'veryLongVariableName: i64 = 1234567890']))
-
-		tester.reject(
-			prepareList([
-				'x = 1', // Missing type annotation
-				':i32 = 1', // Missing identifier
-				'x:i32 1', // Missing equals
-			])
-		)
-
-		const result = tester.run()
-		if (result.failed > 0) {
-			for (const r of result.results) {
-				if (!r.passed) {
-					t.diagnostic(`[FAILED] ${r.expected} '${r.input}': ${r.errorMessage}`)
-					t.diagnostic(`Prepared Input: ${JSON.stringify(r.input)}`)
-				}
-			}
-			assert.fail(`Failed ${result.failed} grammar tests`)
-		}
-	})
-
 	await t.test('Type Declarations', (t) => {
 		const tester = createTester(grammar, 'Type Declarations', 'TypeDecl')
 

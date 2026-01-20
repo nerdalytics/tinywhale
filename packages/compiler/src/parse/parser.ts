@@ -761,27 +761,6 @@ function createNodeEmittingSemantics(
 				tokenId: tid,
 			})
 		},
-		VariableBinding(ident: Node, typeAnnotation: Node, _equals: Node, optExpr: Node): NodeId {
-			const startCount = context.nodes.count()
-			ident['emitExpression']()
-			typeAnnotation['emitTypeAnnotation']()
-
-			const exprNode = optExpr.children[0]
-			if (exprNode !== undefined) {
-				exprNode['emitExpression']()
-			}
-
-			const childCount = context.nodes.count() - startCount
-
-			const lineNumber = getLineNumber(this)
-			const tid = getTokenIdForLine(lineNumber)
-
-			return context.nodes.add({
-				kind: NodeKind.VariableBinding,
-				subtreeSize: 1 + childCount,
-				tokenId: tid,
-			})
-		},
 	})
 
 	semantics.addOperation<NodeId | null>('emitLine', {

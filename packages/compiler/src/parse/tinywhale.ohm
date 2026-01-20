@@ -34,8 +34,7 @@ TinyWhale {
   // Binding for record types: no expression, block follows
   RecordBinding = identifier colon upperIdentifier equals
 
-  // Variable binding (deprecated - kept for reference, use PrimitiveBinding or RecordBinding)
-  VariableBinding = identifier TypeAnnotation equals Expression?
+  // TypeAnnotation used by MatchBinding
   TypeAnnotation = colon TypeRef
 
   // Field declaration inside type (on indented line)
