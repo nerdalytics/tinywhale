@@ -25,7 +25,6 @@ import {
 	popBlockContext,
 	pushBlockContext,
 	type RecordLiteralContext,
-	type TypeDeclContext,
 } from './state.ts'
 import { type FieldInfo, InstKind, type SymbolId, type TypeId } from './types.ts'
 
@@ -169,42 +168,6 @@ export function processFieldInitInNestedContext(
 
 	ctx.fieldNames.add(fieldName)
 	ctx.fieldInits.push({ exprResult, name: fieldName, nodeId: fieldInitId })
-}
-
-/**
- * Extract field info from a FieldInit with NestedRecordInit for type declaration.
- * Note: NestedRecordInit no longer exists in the grammar. This function is kept
- * for backward compatibility but returns null. TypeDecl fields are now handled
- * via FieldDecl nodes directly.
- */
-function extractTypeDeclFieldInfo(
-	_fieldInitId: NodeId,
-	_state: CheckerState,
-	_context: CompilationContext
-): { ctx: TypeDeclContext; fieldName: string; typeId: TypeId } | null {
-	// NestedRecordInit no longer exists - TypeDecl uses FieldDecl directly
-	return null
-}
-
-/**
- * Process a FieldInit with NestedRecordInit as a type declaration field.
- * This handles the case where a user-defined type field is parsed as FieldInit.
- */
-export function processFieldInitAsTypeField(
-	fieldInitId: NodeId,
-	state: CheckerState,
-	context: CompilationContext
-): void {
-	const info = extractTypeDeclFieldInfo(fieldInitId, state, context)
-	if (!info) return
-
-	if (info.ctx.fieldNames.has(info.fieldName)) {
-		context.emitAtNode('TWCHECK026' as DiagnosticCode, fieldInitId, { name: info.fieldName })
-		return
-	}
-
-	info.ctx.fieldNames.add(info.fieldName)
-	info.ctx.fields.push({ name: info.fieldName, nodeId: fieldInitId, typeId: info.typeId })
 }
 
 // ============================================================================

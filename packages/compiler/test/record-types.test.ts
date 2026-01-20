@@ -89,9 +89,6 @@ describe('record types node kinds', () => {
 	it('has FieldAccess node kind', () => {
 		assert.ok(NodeKind.FieldAccess !== undefined)
 	})
-	it('has NestedRecordInit node kind', () => {
-		assert.ok(NodeKind.NestedRecordInit !== undefined)
-	})
 })
 
 describe('record types parsing', () => {
@@ -575,7 +572,7 @@ panic`
 		assert.ok(result, 'should parse nested record init')
 	})
 
-	it('creates NestedRecordInit node for type name in field init', () => {
+	it('creates FieldDecl node for type name in nested record init', () => {
 		const source = `o: Outer =
     inner: Inner
         val: 42
@@ -585,8 +582,8 @@ panic`
 		parse(ctx)
 
 		const nodes = [...ctx.nodes]
-		const nestedRecordInit = nodes.find(([, n]) => n.kind === NodeKind.NestedRecordInit)
-		assert.ok(nestedRecordInit, 'should create NestedRecordInit node')
+		const fieldDecl = nodes.find(([, n]) => n.kind === NodeKind.FieldDecl)
+		assert.ok(fieldDecl, 'should create FieldDecl node for nested record type')
 	})
 })
 
