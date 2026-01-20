@@ -392,4 +392,40 @@ describe('check/variable bindings', () => {
 			assert.strictEqual(errors[0]?.line, 2)
 		})
 	})
+
+	describe('scope operations', () => {
+		it('should make binding invisible after popScope', () => {
+			const ctx = compileAndCheck(`x:i32 = 5
+result:i32 = match x
+\t0 -> 100
+\tn -> n + 1
+check:i32 = n
+`)
+			assert.strictEqual(ctx.hasErrors(), true)
+			const errors = ctx.getErrors()
+			assert.ok(errors.some((e) => e.message.includes('undefined variable')))
+		})
+
+		it('should allow outer binding to shadow inner after pop', () => {
+			const ctx = compileAndCheck(`x:i32 = 5
+result:i32 = match x
+\tn -> n
+n:i32 = 99
+y:i32 = n
+`)
+			assert.strictEqual(ctx.hasErrors(), false)
+			assert.ok(ctx.symbols)
+			// Should have: x, (inner n - invisible), result, n (outer), y
+			// The outer n is visible for y
+		})
+
+		it('should preserve outer binding visibility in match arm', () => {
+			const ctx = compileAndCheck(`outer:i32 = 42
+x:i32 = 5
+result:i32 = match x
+\tn -> n + outer
+`)
+			assert.strictEqual(ctx.hasErrors(), false)
+		})
+	})
 })
