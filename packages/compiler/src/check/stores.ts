@@ -130,8 +130,14 @@ export class SymbolStore {
 		const localIndex = this.nextLocalIndex++
 		const id = symbolId(this.symbols.length)
 		const fullEntry: SymbolEntry = { ...entry, localIndex }
+
+		// Store in flat array (codegen needs all symbols)
 		this.symbols.push(fullEntry)
-		this.nameToSymbol.set(entry.nameId, id)
+
+		// Register in current scope's bindings
+		const currentScope = this.scopeStack[this.scopeStack.length - 1]!
+		currentScope.bindings.set(entry.nameId, id)
+
 		return id
 	}
 
