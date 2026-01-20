@@ -142,7 +142,13 @@ export class SymbolStore {
 	}
 
 	lookupByName(nameId: StringId): SymbolId | undefined {
-		return this.nameToSymbol.get(nameId)
+		// Search from innermost scope to outermost
+		for (let i = this.scopeStack.length - 1; i >= 0; i--) {
+			const scope = this.scopeStack[i]!
+			const symId = scope.bindings.get(nameId)
+			if (symId !== undefined) return symId
+		}
+		return undefined
 	}
 
 	get(id: SymbolId): SymbolEntry {
