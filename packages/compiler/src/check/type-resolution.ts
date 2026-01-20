@@ -5,7 +5,7 @@
  * - Primitive type name resolution from tokens
  * - List type resolution with size validation
  * - User-defined type resolution
- * - Hinted primitive resolution (type hints like `i32<min=0, max=100>`)
+ * - Bounded primitive resolution (type bounds like `i32<min=0, max=100>`)
  * - Refinement constraint checking
  * - Integer constant emission helpers
  */
@@ -58,26 +58,26 @@ function findChildByKind(
 	return null
 }
 
-function extractSizeFromSizeHint(sizeHintId: NodeId, context: CompilationContext): number | null {
-	const sizeHintNode = context.nodes.get(sizeHintId)
-	const sizeToken = context.tokens.get(sizeHintNode.tokenId)
+function extractSizeFromSizeBound(sizeBoundId: NodeId, context: CompilationContext): number | null {
+	const sizeBoundNode = context.nodes.get(sizeBoundId)
+	const sizeToken = context.tokens.get(sizeBoundNode.tokenId)
 	const sizeText = context.strings.get(sizeToken.payload as StringId)
 	const size = Number.parseInt(sizeText, 10)
 	return Number.isNaN(size) ? null : size
 }
 
 /**
- * Extract size from a TypeHints node (new grammar structure).
- * TypeHints contains Hint children, we find the first one and extract its value.
- * For list types, there should be exactly one hint (the size).
+ * Extract size from a TypeBounds node (new grammar structure).
+ * TypeBounds contains Bound children, we find the first one and extract its value.
+ * For list types, there should be exactly one bound (the size).
  */
-function extractSizeFromTypeHints(typeHintsId: NodeId, context: CompilationContext): number | null {
-	// Find the first Hint child
-	const hintId = findChildByKind(typeHintsId, NodeKind.Hint, context)
-	if (hintId === null) return null
+function extractSizeFromTypeBounds(typeBoundsId: NodeId, context: CompilationContext): number | null {
+	// Find the first Bound child
+	const boundId = findChildByKind(typeBoundsId, NodeKind.Bound, context)
+	if (boundId === null) return null
 
-	const hintNode = context.nodes.get(hintId)
-	const valueToken = context.tokens.get(hintNode.tokenId)
+	const boundNode = context.nodes.get(boundId)
+	const valueToken = context.tokens.get(boundNode.tokenId)
 	const valueText = context.strings.get(valueToken.payload as StringId)
 	const size = Number.parseInt(valueText, 10)
 	return Number.isNaN(size) ? null : size
@@ -104,34 +104,34 @@ function resolveListElementType(
 	return null
 }
 
-function findSizeHintChild(listTypeId: NodeId, context: CompilationContext): NodeId | null {
-	// First try new grammar structure (TypeHints)
-	const typeHintsId = findChildByKind(listTypeId, NodeKind.TypeHints, context)
-	if (typeHintsId !== null) return typeHintsId
+function findSizeBoundChild(listTypeId: NodeId, context: CompilationContext): NodeId | null {
+	// First try new grammar structure (TypeBounds)
+	const typeBoundsId = findChildByKind(listTypeId, NodeKind.TypeBounds, context)
+	if (typeBoundsId !== null) return typeBoundsId
 
-	// Fall back to old grammar structure (SizeHint) for compatibility
-	return findChildByKind(listTypeId, NodeKind.SizeHint, context)
+	// Fall back to old grammar structure (SizeBound) for compatibility
+	return findChildByKind(listTypeId, NodeKind.SizeBound, context)
 }
 
 function findNestedListTypeChild(listTypeId: NodeId, context: CompilationContext): NodeId | null {
 	return findChildByKind(listTypeId, NodeKind.ListType, context)
 }
 
-function validateListSize(sizeHintId: NodeId, context: CompilationContext): number | null {
-	const node = context.nodes.get(sizeHintId)
+function validateListSize(sizeBoundId: NodeId, context: CompilationContext): number | null {
+	const node = context.nodes.get(sizeBoundId)
 
 	// Determine which extraction method to use based on node kind
 	let size: number | null
-	if (node.kind === NodeKind.TypeHints) {
-		size = extractSizeFromTypeHints(sizeHintId, context)
+	if (node.kind === NodeKind.TypeBounds) {
+		size = extractSizeFromTypeBounds(sizeBoundId, context)
 	} else {
-		size = extractSizeFromSizeHint(sizeHintId, context)
+		size = extractSizeFromSizeBound(sizeBoundId, context)
 	}
 
 	if (size === null) return null
 
 	if (size <= 0) {
-		context.emitAtNode('TWCHECK036' as DiagnosticCode, sizeHintId)
+		context.emitAtNode('TWCHECK036' as DiagnosticCode, sizeBoundId)
 		return null
 	}
 
@@ -172,10 +172,10 @@ export function resolveListType(
 	state: CheckerState,
 	context: CompilationContext
 ): { name: string; typeId: TypeId } | null {
-	const sizeHintId = findSizeHintChild(listTypeId, context)
-	if (sizeHintId === null) return null
+	const sizeBoundId = findSizeBoundChild(listTypeId, context)
+	if (sizeBoundId === null) return null
 
-	const size = validateListSize(sizeHintId, context)
+	const size = validateListSize(sizeBoundId, context)
 	if (size === null) return null
 
 	const nestedListTypeId = findNestedListTypeChild(listTypeId, context)
@@ -215,7 +215,7 @@ export function resolveUserDefinedType(
 }
 
 // ============================================================================
-// Hinted Primitive Resolution (Internal Helpers)
+// Bounded Primitive Resolution (Internal Helpers)
 // ============================================================================
 
 function findRefinementTypeChild(
@@ -229,9 +229,9 @@ function hasMinOrMaxConstraint(constraints: { min?: bigint; max?: bigint } | nul
 	return constraints?.min !== undefined || constraints?.max !== undefined
 }
 
-function extractHintValue(hintId: NodeId, context: CompilationContext): bigint {
-	const hintNode = context.nodes.get(hintId)
-	const valueToken = context.tokens.get(hintNode.tokenId)
+function extractBoundValue(boundId: NodeId, context: CompilationContext): bigint {
+	const boundNode = context.nodes.get(boundId)
+	const valueToken = context.tokens.get(boundNode.tokenId)
 	const valueText = context.strings.get(valueToken.payload as StringId)
 	const line = context.getSourceLine(valueToken.line) ?? ''
 	const beforeValue = line.substring(0, valueToken.column - 1).trimEnd()
@@ -247,9 +247,9 @@ function parseKeywordFromPrefix(prefix: string): string | null {
 	return null
 }
 
-function extractHintKeyword(hintId: NodeId, context: CompilationContext): string | null {
-	const hintNode = context.nodes.get(hintId)
-	const valueToken = context.tokens.get(hintNode.tokenId)
+function extractBoundKeyword(boundId: NodeId, context: CompilationContext): string | null {
+	const boundNode = context.nodes.get(boundId)
+	const valueToken = context.tokens.get(boundNode.tokenId)
 	const line = context.getSourceLine(valueToken.line)
 	if (!line) return null
 
@@ -260,32 +260,32 @@ function extractHintKeyword(hintId: NodeId, context: CompilationContext): string
 	return parseKeywordFromPrefix(beforeValue.substring(0, eqPos))
 }
 
-function processHintNode(
-	hintId: NodeId,
+function processBoundNode(
+	boundId: NodeId,
 	context: CompilationContext,
 	constraints: { min?: bigint; max?: bigint }
 ): void {
-	const value = extractHintValue(hintId, context)
-	const keyword = extractHintKeyword(hintId, context)
+	const value = extractBoundValue(boundId, context)
+	const keyword = extractBoundKeyword(boundId, context)
 	if (keyword === 'min') constraints.min = value
 	else if (keyword === 'max') constraints.max = value
 }
 
 // ============================================================================
-// Hinted Primitive Resolution (Exported)
+// Bounded Primitive Resolution (Exported)
 // ============================================================================
 
 /**
- * Extract min/max constraints from a TypeHints node.
+ * Extract min/max constraints from a TypeBounds node.
  */
-export function extractConstraintsFromTypeHints(
-	typeHintsId: NodeId,
+export function extractConstraintsFromTypeBounds(
+	typeBoundsId: NodeId,
 	context: CompilationContext
 ): { min?: bigint; max?: bigint } | null {
 	const constraints: { min?: bigint; max?: bigint } = {}
-	for (const [hintId, hintNode] of context.nodes.iterateChildren(typeHintsId)) {
-		if (hintNode.kind === NodeKind.Hint) {
-			processHintNode(hintId, context, constraints)
+	for (const [boundId, boundNode] of context.nodes.iterateChildren(typeBoundsId)) {
+		if (boundNode.kind === NodeKind.Bound) {
+			processBoundNode(boundId, context, constraints)
 		}
 	}
 	return constraints
@@ -325,10 +325,10 @@ export function resolveRefinementType(
 	const baseType = getTypeNameFromToken(baseToken.kind)
 	if (!baseType) return null
 
-	const typeHintsId = findChildByKind(refinementTypeId, NodeKind.TypeHints, context)
-	if (typeHintsId === null) return baseType
+	const typeBoundsId = findChildByKind(refinementTypeId, NodeKind.TypeBounds, context)
+	if (typeBoundsId === null) return baseType
 
-	const constraints = extractConstraintsFromTypeHints(typeHintsId, context)
+	const constraints = extractConstraintsFromTypeBounds(typeBoundsId, context)
 	if (!constraints || !hasMinOrMaxConstraint(constraints)) return baseType
 
 	return applyRefinementConstraints(baseType, constraints, refinementTypeId, state, context)
