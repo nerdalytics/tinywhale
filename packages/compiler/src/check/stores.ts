@@ -151,6 +151,25 @@ export class SymbolStore {
 		return undefined
 	}
 
+	/**
+	 * Push a new scope frame. Bindings added after this are scoped
+	 * to this frame until popScope() is called.
+	 */
+	pushScope(): void {
+		this.scopeStack.push({ bindings: new Map() })
+	}
+
+	/**
+	 * Pop the current scope frame. Bindings in this frame become
+	 * invisible. The global scope (index 0) cannot be popped.
+	 */
+	popScope(): void {
+		if (this.scopeStack.length <= 1) {
+			throw new Error('Cannot pop global scope')
+		}
+		this.scopeStack.pop()
+	}
+
 	get(id: SymbolId): SymbolEntry {
 		const entry = this.symbols[id]
 		if (entry === undefined) {
