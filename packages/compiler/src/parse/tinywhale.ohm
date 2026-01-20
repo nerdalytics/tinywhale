@@ -49,20 +49,20 @@ TinyWhale {
   TypeRef = ListType | RefinementType | upperIdentifier | typeKeyword
 
   // Refinement type: i32<min=0, max=100>
-  RefinementType = typeKeyword TypeHints
+  RefinementType = typeKeyword TypeBounds
 
-  // Type hints for constraints: <min=0, max=100> or <size=4>
-  TypeHints = lessThan HintList greaterThan
-  HintList = Hint (comma Hint)*
-  Hint = hintKeyword equals minus? intLiteral
-  hintKeyword = minKeyword | maxKeyword | sizeKeyword
+  // Type bounds for constraints: <min=0, max=100> or <size=4>
+  TypeBounds = lessThan BoundList greaterThan
+  BoundList = Bound (comma Bound)*
+  Bound = boundKeyword equals minus? intLiteral
+  boundKeyword = minKeyword | maxKeyword | sizeKeyword
   minKeyword = "min" ~identifierPart
   maxKeyword = "max" ~identifierPart
 
-  // List type with size hint: i32[]<size=4> or nested i32[]<size=4>[]<size=2>
+  // List type with size bound: i32[]<size=4> or nested i32[]<size=4>[]<size=2>
   // Uses iterative suffixes to avoid left recursion
   ListType = ListTypeBase ListTypeSuffix+
-  ListTypeSuffix = lbracket rbracket TypeHints
+  ListTypeSuffix = lbracket rbracket TypeBounds
   ListTypeBase = RefinementType | upperIdentifier | typeKeyword
   sizeKeyword = "size" ~identifierPart
 
