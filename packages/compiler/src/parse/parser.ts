@@ -286,15 +286,15 @@ function createNodeEmittingSemantics(
 		return typeNode.child(0).ctorName === 'ListType'
 	}
 
-	function isHintedPrimitiveRef(typeNode: Node): boolean {
+	function isRefinementTypeRef(typeNode: Node): boolean {
 		if (typeNode.ctorName !== 'TypeRef') return false
-		return typeNode.child(0).ctorName === 'HintedPrimitive'
+		return typeNode.child(0).ctorName === 'RefinementType'
 	}
 
 	function maybeEmitComplexType(typeNode: Node): void {
 		if (isListTypeRef(typeNode)) {
 			typeNode.child(0)['emitTypeAnnotation']()
-		} else if (isHintedPrimitiveRef(typeNode)) {
+		} else if (isRefinementTypeRef(typeNode)) {
 			typeNode.child(0)['emitTypeAnnotation']()
 		}
 	}
@@ -454,14 +454,14 @@ function createNodeEmittingSemantics(
 				tokenId: valueTid,
 			})
 		},
-		HintedPrimitive(_typeKeyword: Node, typeHints: Node): NodeId {
+		RefinementType(_typeKeyword: Node, typeHints: Node): NodeId {
 			const startCount = context.nodes.count()
 			typeHints['emitTypeAnnotation']()
 			const childCount = context.nodes.count() - startCount
 
 			const tid = getTokenIdForOhmNode(this)
 			return context.nodes.add({
-				kind: NodeKind.HintedPrimitive,
+				kind: NodeKind.RefinementType,
 				subtreeSize: 1 + childCount,
 				tokenId: tid,
 			})
@@ -469,7 +469,7 @@ function createNodeEmittingSemantics(
 		ListType(elementType: Node, suffixes: Node): NodeId {
 			const startCount = context.nodes.count()
 			// Handle hinted primitives as base element type
-			if (elementType.ctorName === 'HintedPrimitive') {
+			if (elementType.ctorName === 'RefinementType') {
 				elementType['emitTypeAnnotation']()
 			}
 			// Emit each list type suffix (each is []<size=N>)
@@ -696,7 +696,7 @@ function createNodeEmittingSemantics(
 			// Emit type annotation node with possible complex type children
 			// typeRef is PrimitiveTypeRef, need to check its child for the actual type
 			const innerType = typeRef.child(0)
-			if (innerType.ctorName === 'ListType' || innerType.ctorName === 'HintedPrimitive') {
+			if (innerType.ctorName === 'ListType' || innerType.ctorName === 'RefinementType') {
 				innerType['emitTypeAnnotation']()
 			}
 
