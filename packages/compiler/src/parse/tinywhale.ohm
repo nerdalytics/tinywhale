@@ -149,7 +149,7 @@ TinyWhale {
 
   // Identifiers and literals (from tokenizer)
   identifier = ~keyword letter (alnum | "_")*
-  intLiteral = digit+ (("e" | "E") ("+" | "-")? digit+)?
+  intLiteral = digit+ (("e" | "E") "+"? digit+)?
   floatLiteral = digit+ "." digit+ (("e" | "E") ("+" | "-")? digit+)?
   colon = ":"
   equals = "="
