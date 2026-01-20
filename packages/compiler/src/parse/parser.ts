@@ -443,20 +443,20 @@ function createNodeEmittingSemantics(
 	})
 
 	semantics.addOperation<NodeId>('emitTypeAnnotation', {
-		Hint(_keyword: Node, _equals: Node, _optMinus: Node, value: Node): NodeId {
+		Bound(_keyword: Node, _equals: Node, _optMinus: Node, value: Node): NodeId {
 			// Store the value token - this allows extracting the numeric value
 			// The keyword type (min/max/size) can be determined from context
-			// (for list size hints, we just need the value)
+			// (for list size bounds, we just need the value)
 			const valueTid = getTokenIdForOhmNode(value)
 			return context.nodes.add({
-				kind: NodeKind.Hint,
+				kind: NodeKind.Bound,
 				subtreeSize: 1,
 				tokenId: valueTid,
 			})
 		},
 		ListType(elementType: Node, suffixes: Node): NodeId {
 			const startCount = context.nodes.count()
-			// Handle hinted primitives as base element type
+			// Handle bounded primitives as base element type
 			if (elementType.ctorName === 'RefinementType') {
 				elementType['emitTypeAnnotation']()
 			}
@@ -473,12 +473,12 @@ function createNodeEmittingSemantics(
 				tokenId: tid,
 			})
 		},
-		ListTypeSuffix(_lbracket: Node, _rbracket: Node, typeHints: Node): NodeId {
-			return typeHints['emitTypeAnnotation']()
+		ListTypeSuffix(_lbracket: Node, _rbracket: Node, typeBounds: Node): NodeId {
+			return typeBounds['emitTypeAnnotation']()
 		},
-		RefinementType(_typeKeyword: Node, typeHints: Node): NodeId {
+		RefinementType(_typeKeyword: Node, typeBounds: Node): NodeId {
 			const startCount = context.nodes.count()
-			typeHints['emitTypeAnnotation']()
+			typeBounds['emitTypeAnnotation']()
 			const childCount = context.nodes.count() - startCount
 
 			const tid = getTokenIdForOhmNode(this)
@@ -500,18 +500,18 @@ function createNodeEmittingSemantics(
 				tokenId: tid,
 			})
 		},
-		TypeHints(_lessThan: Node, hintList: Node, _greaterThan: Node): NodeId {
+		TypeBounds(_lessThan: Node, boundList: Node, _greaterThan: Node): NodeId {
 			const startCount = context.nodes.count()
-			hintList.child(0)['emitTypeAnnotation']()
-			const restHints = hintList.child(2)
-			for (let i = 0; i < restHints.numChildren; i++) {
-				restHints.child(i)['emitTypeAnnotation']()
+			boundList.child(0)['emitTypeAnnotation']()
+			const restBounds = boundList.child(2)
+			for (let i = 0; i < restBounds.numChildren; i++) {
+				restBounds.child(i)['emitTypeAnnotation']()
 			}
 			const childCount = context.nodes.count() - startCount
 
 			const tid = getTokenIdForOhmNode(this)
 			return context.nodes.add({
-				kind: NodeKind.TypeHints,
+				kind: NodeKind.TypeBounds,
 				subtreeSize: 1 + childCount,
 				tokenId: tid,
 			})

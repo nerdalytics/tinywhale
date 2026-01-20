@@ -698,7 +698,7 @@ describe('parse/parser', () => {
 	})
 
 	describe('list type parsing', () => {
-		it('should parse list type with size hint', () => {
+		it('should parse list type with size bound', () => {
 			const source = 'arr: i32[]<size=4> = [1, 2, 3, 4]\npanic'
 			const ctx = new CompilationContext(source)
 			tokenize(ctx)

@@ -100,7 +100,7 @@ test('Semantic Specs', async (t) => {
 	)
 
 	await t.test(
-		'Type Hints',
+		'Type Bounds',
 		semanticTests([
 			{ description: 'min constraint satisfied', expect: 'valid', input: 'x:i32<min=0> = 5' },
 			{ description: 'max constraint satisfied', expect: 'valid', input: 'x:i32<max=100> = 50' },

@@ -9,7 +9,7 @@ import { CompilationContext } from '../../src/core/context.ts'
 import { tokenize } from '../../src/lex/tokenizer.ts'
 import { parse } from '../../src/parse/parser.ts'
 
-describe('check/type-hints TypeStore', () => {
+describe('check/type-bounds TypeStore', () => {
 	it('registerRefinedType creates distinct type from base', () => {
 		const store = new TypeStore()
 		const refinedId = store.registerRefinedType(BuiltinTypeId.I32, { min: 0n })
@@ -82,7 +82,7 @@ function compileAndCheck(source: string): CompilationContext {
 	return ctx
 }
 
-describe('check/type-hints TypeStore properties', () => {
+describe('check/type-bounds TypeStore properties', () => {
 	it('refined types with identical constraints are always interned', () => {
 		fc.assert(
 			fc.property(integerBaseTypeArb, constraintsArb, (baseType, constraints) => {
@@ -167,7 +167,7 @@ describe('check/type-hints TypeStore properties', () => {
 	})
 })
 
-describe('check/type-hints resolution', () => {
+describe('check/type-bounds resolution', () => {
 	it('resolves i32<min=0> to refined type', () => {
 		const ctx = compileAndCheck('x: i32<min=0> = 5\npanic')
 		assert.ok(
@@ -198,8 +198,8 @@ describe('check/type-hints resolution', () => {
 	})
 })
 
-describe('check/type-hints diagnostics', () => {
-	describe('TWCHECK040: invalid hint target', () => {
+describe('check/type-bounds diagnostics', () => {
+	describe('TWCHECK040: invalid bound target', () => {
 		it('errors when applying min/max to f32', () => {
 			const ctx = compileAndCheck('x: f32<min=0> = 5.0\npanic')
 
@@ -264,7 +264,7 @@ describe('check/type-hints diagnostics', () => {
 	})
 })
 
-describe('check/type-hints type compatibility', () => {
+describe('check/type-bounds type compatibility', () => {
 	it('errors when assigning i32 to i32<min=0> without cast', () => {
 		const source = `raw: i32 = 5
 x: i32<min=0> = raw
@@ -314,14 +314,14 @@ function generateRefinedProgram(
 	constraints: { min?: bigint; max?: bigint },
 	value: bigint
 ): string {
-	const hints = []
-	if (constraints.min !== undefined) hints.push(`min=${constraints.min}`)
-	if (constraints.max !== undefined) hints.push(`max=${constraints.max}`)
-	const hintStr = hints.length > 0 ? `<${hints.join(', ')}>` : ''
-	return `x: ${type}${hintStr} = ${value}\npanic\n`
+	const bounds = []
+	if (constraints.min !== undefined) bounds.push(`min=${constraints.min}`)
+	if (constraints.max !== undefined) bounds.push(`max=${constraints.max}`)
+	const boundStr = bounds.length > 0 ? `<${bounds.join(', ')}>` : ''
+	return `x: ${type}${boundStr} = ${value}\npanic\n`
 }
 
-describe('check/type-hints end-to-end properties', () => {
+describe('check/type-bounds end-to-end properties', () => {
 	it('soundness: values within constraints compile without errors', () => {
 		fc.assert(
 			fc.property(
