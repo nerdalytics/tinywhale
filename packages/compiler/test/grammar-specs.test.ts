@@ -408,6 +408,21 @@ test('Grammar Specs', async (t) => {
 			])
 		)
 
+		// New syntax tests: = for values, : for types only
+		tester.match(
+			prepareList([
+				'type Point\n\tx: i32\np:Point\n\tx = 5', // New: no = after type, = for field value
+				'type Point\n\tx: i32\n\ty: i32\np:Point\n\tx = 5\n\ty = 10', // Multiple fields
+				'type Inner\n\tval: i32\ntype Outer\n\tinner: Inner\no:Outer\n\tinner: Inner\n\t\tval = 5', // Nested
+			])
+		)
+		tester.reject(
+			prepareList([
+				'type Point\n\tx: i32\np:Point =\n\tx = 5', // Old syntax: = after type name rejected
+				'type Point\n\tx: i32\np:Point\n\tx: 5', // Old syntax: : for values rejected
+			])
+		)
+
 		const result = tester.run()
 		if (result.failed > 0) {
 			for (const r of result.results) {
