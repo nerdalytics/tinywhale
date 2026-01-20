@@ -113,17 +113,14 @@ TinyWhale {
               | floatLiteral
               | intLiteral
 
-  // Postfix expressions: field access and index access
+  // Postfix expressions: only identifiers can be postfix bases
   PostfixExpr = IndexAccess | FieldAccess
-  FieldAccess = PrimaryExprBase (dot lowerIdentifier)+
-  IndexAccess = PostfixBase (lbracket intLiteral rbracket)+
-  PostfixBase = FieldAccess | PrimaryExprBase
+  FieldAccess = PostfixableBase (dot lowerIdentifier)+
+  IndexAccess = PostfixIndexBase (lbracket intLiteral rbracket)+
+  PostfixIndexBase = FieldAccess | PostfixableBase
 
-  PrimaryExprBase = lparen Expression rparen  -- paren
-                  | ListLiteral
-                  | identifier
-                  | floatLiteral
-                  | intLiteral
+  // Only identifiers can be postfix bases (not parens, literals, or list literals)
+  PostfixableBase = identifier
 
   // List literal: [1, 2, 3]
   ListLiteral = lbracket ListElements rbracket

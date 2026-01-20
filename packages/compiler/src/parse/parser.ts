@@ -408,23 +408,16 @@ function createNodeEmittingSemantics(
 		MulExpr(first: Node, ops: Node, rest: Node): NodeId {
 			return emitBinaryChain(first, ops, rest)
 		},
-		PostfixBase(expr: Node): NodeId {
+		PostfixableBase(expr: Node): NodeId {
 			return expr['emitExpression']()
 		},
 		PostfixExpr(expr: Node): NodeId {
 			return expr['emitExpression']()
 		},
-		PrimaryExpr_paren(_lparen: Node, expr: Node, _rparen: Node): NodeId {
-			const childId = expr['emitExpression']() as NodeId
-			const tid = getTokenIdForOhmNode(this)
-			const childSize = context.nodes.get(childId).subtreeSize
-			return context.nodes.add({
-				kind: NodeKind.ParenExpr,
-				subtreeSize: 1 + childSize,
-				tokenId: tid,
-			})
+		PostfixIndexBase(expr: Node): NodeId {
+			return expr['emitExpression']()
 		},
-		PrimaryExprBase_paren(_lparen: Node, expr: Node, _rparen: Node): NodeId {
+		PrimaryExpr_paren(_lparen: Node, expr: Node, _rparen: Node): NodeId {
 			const childId = expr['emitExpression']() as NodeId
 			const tid = getTokenIdForOhmNode(this)
 			const childSize = context.nodes.get(childId).subtreeSize

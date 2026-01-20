@@ -367,6 +367,21 @@ test('Grammar Specs', async (t) => {
 			])
 		)
 
+		tester.reject(
+			prepareList([
+				// D5: Parenthesized expressions cannot be postfix bases
+				'x:i32 = (1 + 2).field',
+				'x:i32 = (1 + 2)[0]',
+				// D6: List literals cannot be postfix bases
+				'x:i32 = [1, 2, 3][0]',
+				'x:i32 = [1, 2, 3].length',
+				// D7: Numeric literals cannot be postfix bases
+				'x:i32 = 5[0]',
+				'x:i32 = 5.field',
+				'x:f32 = 1.5[0]',
+			])
+		)
+
 		const result = tester.run()
 		if (result.failed > 0) {
 			for (const r of result.results) {
