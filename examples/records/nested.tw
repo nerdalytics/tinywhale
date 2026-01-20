@@ -7,10 +7,10 @@ type Outer
     x: i32
 
 # Create with nested construction and sibling field
-o: Outer =
+o:Outer
     inner: Inner
-        val: 42
-    x: 10
+        val = 42
+    x = 10
 
 # Access nested and sibling fields
 result: i32 = o.inner.val

@@ -3,13 +3,13 @@ type Point
     x: i32
     y: i32
 
-origin: Point =
-    x: 0
-    y: 0
+origin:Point
+    x = 0
+    y = 0
 
-p: Point =
-    y: 10
-    x: 5
+p:Point
+    y = 10
+    x = 5
 
 sum: i32 = p.x + p.y
 panic
