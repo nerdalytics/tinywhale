@@ -16,7 +16,6 @@ import type { DiagnosticCode } from '../core/diagnostics.ts'
 import type { NodeId } from '../core/nodes.ts'
 import { NodeKind, prevNodeId } from '../core/nodes.ts'
 import { TokenKind } from '../core/tokens.ts'
-import { resolveUserDefinedFieldType } from './declarations.ts'
 import { checkExpression } from './expressions.ts'
 import {
 	type BlockContext,
@@ -64,46 +63,34 @@ export function getIndentLevelFromLine(lineId: NodeId, context: CompilationConte
 }
 
 /**
- * Check if a FieldInit node has a NestedRecordInit child.
- * This indicates a field with user-defined type (in type declaration context)
- * or nested record construction (in record literal context).
+ * Check if a FieldDecl node has an uppercase TypeRef (user-defined type).
+ * In record literal context, this indicates nested record construction.
  */
-export function hasNestedRecordInit(fieldInitId: NodeId, context: CompilationContext): boolean {
-	for (const [, child] of context.nodes.iterateChildren(fieldInitId)) {
-		if (child.kind === NodeKind.NestedRecordInit) {
-			return true
-		}
+export function hasUppercaseTypeRef(fieldDeclId: NodeId, context: CompilationContext): boolean {
+	const fieldDeclNode = context.nodes.get(fieldDeclId)
+	const typeTokenId = (fieldDeclNode.tokenId as number) + 2
+	const typeToken = context.tokens.get(typeTokenId as typeof fieldDeclNode.tokenId)
+	// Uppercase means user-defined type
+	if (typeToken.kind === TokenKind.Identifier) {
+		const typeName = context.strings.get(typeToken.payload as StringId)
+		const firstChar = typeName[0]
+		return typeName.length > 0 && firstChar !== undefined && firstChar === firstChar.toUpperCase()
 	}
 	return false
 }
 
 /**
- * Get the type name from a NestedRecordInit child of a FieldInit node.
+ * Get the type name from a FieldDecl node.
  */
-export function getNestedRecordTypeName(
-	fieldInitId: NodeId,
+export function getFieldDeclTypeName(
+	fieldDeclId: NodeId,
 	context: CompilationContext
 ): string | null {
-	for (const [, child] of context.nodes.iterateChildren(fieldInitId)) {
-		if (child.kind === NodeKind.NestedRecordInit) {
-			const typeToken = context.tokens.get(child.tokenId)
-			return context.strings.get(typeToken.payload as StringId)
-		}
-	}
-	return null
-}
-
-/**
- * Get the NestedRecordInit node ID from a FieldInit node (if present).
- */
-export function getNestedRecordInitFromFieldInit(
-	fieldInitId: NodeId,
-	context: CompilationContext
-): NodeId | null {
-	for (const [childId, child] of context.nodes.iterateChildren(fieldInitId)) {
-		if (child.kind === NodeKind.NestedRecordInit) {
-			return childId
-		}
+	const fieldDeclNode = context.nodes.get(fieldDeclId)
+	const typeTokenId = (fieldDeclNode.tokenId as number) + 2
+	const typeToken = context.tokens.get(typeTokenId as typeof fieldDeclNode.tokenId)
+	if (typeToken.kind === TokenKind.Identifier) {
+		return context.strings.get(typeToken.payload as StringId)
 	}
 	return null
 }
@@ -118,6 +105,15 @@ export function getNestedRecordInitFromFieldInit(
 export function extractFieldInitName(fieldInitId: NodeId, context: CompilationContext): string {
 	const fieldInitNode = context.nodes.get(fieldInitId)
 	const fieldToken = context.tokens.get(fieldInitNode.tokenId)
+	return context.strings.get(fieldToken.payload as StringId)
+}
+
+/**
+ * Extract field name from a FieldDecl node.
+ */
+export function extractFieldDeclName(fieldDeclId: NodeId, context: CompilationContext): string {
+	const fieldDeclNode = context.nodes.get(fieldDeclId)
+	const fieldToken = context.tokens.get(fieldDeclNode.tokenId)
 	return context.strings.get(fieldToken.payload as StringId)
 }
 
@@ -177,24 +173,17 @@ export function processFieldInitInNestedContext(
 
 /**
  * Extract field info from a FieldInit with NestedRecordInit for type declaration.
- * Returns null if context is wrong, type name is missing, or type resolution fails.
+ * Note: NestedRecordInit no longer exists in the grammar. This function is kept
+ * for backward compatibility but returns null. TypeDecl fields are now handled
+ * via FieldDecl nodes directly.
  */
 function extractTypeDeclFieldInfo(
-	fieldInitId: NodeId,
-	state: CheckerState,
-	context: CompilationContext
+	_fieldInitId: NodeId,
+	_state: CheckerState,
+	_context: CompilationContext
 ): { ctx: TypeDeclContext; fieldName: string; typeId: TypeId } | null {
-	const ctx = currentBlockContext(state)
-	if (!ctx || ctx.kind !== 'TypeDecl') return null
-
-	const typeName = getNestedRecordTypeName(fieldInitId, context)
-	if (!typeName) return null
-
-	const typeId = resolveUserDefinedFieldType(typeName, fieldInitId, state, context)
-	if (typeId === null) return null
-
-	const fieldName = extractFieldInitName(fieldInitId, context)
-	return { ctx, fieldName, typeId }
+	// NestedRecordInit no longer exists - TypeDecl uses FieldDecl directly
+	return null
 }
 
 /**
@@ -414,35 +403,31 @@ function buildNestedRecordParentPath(
 }
 
 /**
- * Start processing a nested record initialization.
- * Called when we detect a FieldInit with a NestedRecordInit child in a record literal context.
- * currentIndentLevel is the indent level of the line that contains this nested record init.
- * Children of this nested record should be at currentIndentLevel + 1.
+ * Start processing a nested record initialization from a FieldDecl.
+ * Called when we detect a FieldDecl with uppercase TypeRef in a record literal context.
  */
 export function startNestedRecordInit(
-	nestedInitNodeId: NodeId,
+	fieldDeclId: NodeId,
 	fieldName: string,
 	state: CheckerState,
 	context: CompilationContext,
 	currentIndentLevel?: number
 ): boolean {
-	const nestedInitNode = context.nodes.get(nestedInitNodeId)
-	const typeToken = context.tokens.get(nestedInitNode.tokenId)
-	const typeName = context.strings.get(typeToken.payload as StringId)
+	const typeName = getFieldDeclTypeName(fieldDeclId, context)
+	if (!typeName) return false
 
 	const typeId = state.types.lookup(typeName)
 	if (typeId === undefined) {
-		context.emitAtNode('TWCHECK010' as DiagnosticCode, nestedInitNodeId, { name: typeName })
+		context.emitAtNode('TWCHECK010' as DiagnosticCode, fieldDeclId, { name: typeName })
 		return false
 	}
 
-	if (!validateNestedRecordTypeMatch(nestedInitNodeId, fieldName, typeId, typeName, state, context))
+	if (!validateNestedRecordTypeMatch(fieldDeclId, fieldName, typeId, typeName, state, context))
 		return false
 
 	const parentCtx = currentBlockContext(state)
 	const parentPath = buildNestedRecordParentPath(fieldName, parentCtx, context)
 
-	// Build the context object, conditionally including childIndentLevel
 	const ctx: BlockContext = {
 		children: [],
 		expectedChildKind: NodeKind.FieldInit,
@@ -450,13 +435,12 @@ export function startNestedRecordInit(
 		fieldName,
 		fieldNames: new Set(),
 		kind: 'NestedRecordInit',
-		nodeId: nestedInitNodeId,
+		nodeId: fieldDeclId,
 		parentPath,
 		typeId,
 		typeName,
 	}
 
-	// Children of this nested record should be at the next indent level
 	if (currentIndentLevel !== undefined) {
 		ctx.childIndentLevel = currentIndentLevel + 1
 	}
