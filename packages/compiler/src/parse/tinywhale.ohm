@@ -34,8 +34,7 @@ TinyWhale {
   // Binding for record types: no expression, block follows
   RecordBinding = identifier colon upperIdentifier equals
 
-  // Variable binding (deprecated - kept for reference, use PrimitiveBinding or RecordBinding)
-  VariableBinding = identifier TypeAnnotation equals Expression?
+  // TypeAnnotation used by MatchBinding
   TypeAnnotation = colon TypeRef
 
   // Field declaration inside type (on indented line)
@@ -114,17 +113,14 @@ TinyWhale {
               | floatLiteral
               | intLiteral
 
-  // Postfix expressions: field access and index access
+  // Postfix expressions: only identifiers can be postfix bases
   PostfixExpr = IndexAccess | FieldAccess
-  FieldAccess = PrimaryExprBase (dot lowerIdentifier)+
-  IndexAccess = PostfixBase (lbracket intLiteral rbracket)+
-  PostfixBase = FieldAccess | PrimaryExprBase
+  FieldAccess = PostfixableBase (dot lowerIdentifier)+
+  IndexAccess = PostfixIndexBase (lbracket intLiteral rbracket)+
+  PostfixIndexBase = FieldAccess | PostfixableBase
 
-  PrimaryExprBase = lparen Expression rparen  -- paren
-                  | ListLiteral
-                  | identifier
-                  | floatLiteral
-                  | intLiteral
+  // Only identifiers can be postfix bases (not parens, literals, or list literals)
+  PostfixableBase = identifier
 
   // List literal: [1, 2, 3]
   ListLiteral = lbracket ListElements rbracket
@@ -150,7 +146,7 @@ TinyWhale {
 
   // Identifiers and literals (from tokenizer)
   identifier = ~keyword letter (alnum | "_")*
-  intLiteral = digit+ (("e" | "E") ("+" | "-")? digit+)?
+  intLiteral = digit+ (("e" | "E") "+"? digit+)?
   floatLiteral = digit+ "." digit+ (("e" | "E") ("+" | "-")? digit+)?
   colon = ":"
   equals = "="

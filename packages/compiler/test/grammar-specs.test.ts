@@ -130,31 +130,6 @@ test('Grammar Specs', async (t) => {
 		}
 	})
 
-	await t.test('Variable Bindings', (t) => {
-		const tester = createTester(grammar, 'Variable Bindings', 'VariableBinding')
-
-		tester.match(prepareList(['x:i32 = 1', 'x: i32 = 1', 'veryLongVariableName: i64 = 1234567890']))
-
-		tester.reject(
-			prepareList([
-				'x = 1', // Missing type annotation
-				':i32 = 1', // Missing identifier
-				'x:i32 1', // Missing equals
-			])
-		)
-
-		const result = tester.run()
-		if (result.failed > 0) {
-			for (const r of result.results) {
-				if (!r.passed) {
-					t.diagnostic(`[FAILED] ${r.expected} '${r.input}': ${r.errorMessage}`)
-					t.diagnostic(`Prepared Input: ${JSON.stringify(r.input)}`)
-				}
-			}
-			assert.fail(`Failed ${result.failed} grammar tests`)
-		}
-	})
-
 	await t.test('Type Declarations', (t) => {
 		const tester = createTester(grammar, 'Type Declarations', 'TypeDecl')
 
@@ -287,6 +262,44 @@ test('Grammar Specs', async (t) => {
 		}
 	})
 
+	await t.test('Numeric Literals', (t) => {
+		const tester = createTester(grammar, 'Numeric Literals', 'Program')
+
+		tester.match(
+			prepareList([
+				// Integer literals
+				'x:i32 = 42',
+				'x:i32 = 1e3', // Scientific notation with positive exponent
+				'x:i32 = 1E3',
+				'x:i32 = 1e+3', // Explicit positive exponent
+				'x:i32 = 1E+3',
+				// Float literals
+				'x:f32 = 1.5',
+				'x:f32 = 1.5e3',
+				'x:f32 = 1.5e-3', // Floats can have negative exponents
+				'x:f32 = 1.5E-10',
+			])
+		)
+
+		tester.reject(
+			prepareList([
+				'x:i32 = 1e-3', // Negative exponent invalid for integers (D12)
+				'x:i32 = 1E-10', // Negative exponent invalid for integers (D12)
+			])
+		)
+
+		const result = tester.run()
+		if (result.failed > 0) {
+			for (const r of result.results) {
+				if (!r.passed) {
+					t.diagnostic(`[FAILED] ${r.expected} '${r.input}': ${r.errorMessage}`)
+					t.diagnostic(`Prepared Input: ${JSON.stringify(r.input)}`)
+				}
+			}
+			assert.fail(`Failed ${result.failed} grammar tests`)
+		}
+	})
+
 	await t.test('List Types and Literals', (t) => {
 		const tester = createTester(grammar, 'List Types and Literals', 'Program')
 
@@ -351,6 +364,21 @@ test('Grammar Specs', async (t) => {
 				// Grammar: IndexAccess = PostfixBase [...], FieldAccess = PrimaryExprBase (dot...)
 				// IndexAccess result cannot be followed by FieldAccess
 				// This would require storing records in arrays (future feature)
+			])
+		)
+
+		tester.reject(
+			prepareList([
+				// D5: Parenthesized expressions cannot be postfix bases
+				'x:i32 = (1 + 2).field',
+				'x:i32 = (1 + 2)[0]',
+				// D6: List literals cannot be postfix bases
+				'x:i32 = [1, 2, 3][0]',
+				'x:i32 = [1, 2, 3].length',
+				// D7: Numeric literals cannot be postfix bases
+				'x:i32 = 5[0]',
+				'x:i32 = 5.field',
+				'x:f32 = 1.5[0]',
 			])
 		)
 

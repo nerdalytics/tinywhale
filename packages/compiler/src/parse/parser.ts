@@ -408,23 +408,16 @@ function createNodeEmittingSemantics(
 		MulExpr(first: Node, ops: Node, rest: Node): NodeId {
 			return emitBinaryChain(first, ops, rest)
 		},
-		PostfixBase(expr: Node): NodeId {
+		PostfixableBase(expr: Node): NodeId {
 			return expr['emitExpression']()
 		},
 		PostfixExpr(expr: Node): NodeId {
 			return expr['emitExpression']()
 		},
-		PrimaryExpr_paren(_lparen: Node, expr: Node, _rparen: Node): NodeId {
-			const childId = expr['emitExpression']() as NodeId
-			const tid = getTokenIdForOhmNode(this)
-			const childSize = context.nodes.get(childId).subtreeSize
-			return context.nodes.add({
-				kind: NodeKind.ParenExpr,
-				subtreeSize: 1 + childSize,
-				tokenId: tid,
-			})
+		PostfixIndexBase(expr: Node): NodeId {
+			return expr['emitExpression']()
 		},
-		PrimaryExprBase_paren(_lparen: Node, expr: Node, _rparen: Node): NodeId {
+		PrimaryExpr_paren(_lparen: Node, expr: Node, _rparen: Node): NodeId {
 			const childId = expr['emitExpression']() as NodeId
 			const tid = getTokenIdForOhmNode(this)
 			const childSize = context.nodes.get(childId).subtreeSize
@@ -758,27 +751,6 @@ function createNodeEmittingSemantics(
 			return context.nodes.add({
 				kind: NodeKind.TypeDecl,
 				subtreeSize: 1,
-				tokenId: tid,
-			})
-		},
-		VariableBinding(ident: Node, typeAnnotation: Node, _equals: Node, optExpr: Node): NodeId {
-			const startCount = context.nodes.count()
-			ident['emitExpression']()
-			typeAnnotation['emitTypeAnnotation']()
-
-			const exprNode = optExpr.children[0]
-			if (exprNode !== undefined) {
-				exprNode['emitExpression']()
-			}
-
-			const childCount = context.nodes.count() - startCount
-
-			const lineNumber = getLineNumber(this)
-			const tid = getTokenIdForLine(lineNumber)
-
-			return context.nodes.add({
-				kind: NodeKind.VariableBinding,
-				subtreeSize: 1 + childCount,
 				tokenId: tid,
 			})
 		},

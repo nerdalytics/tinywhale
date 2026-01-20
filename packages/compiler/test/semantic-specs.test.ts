@@ -223,12 +223,15 @@ test('Semantic Specs', async (t) => {
 				expect: 'valid',
 				input: 'x:i32 = 1\nresult:i32 = match x\n\t0 | 1 | 2 -> 100\n\t_ -> 0',
 			},
-			// [GRAMMAR] Binding patterns parse but pattern variable not bound to scope
 			{
-				description: 'binding pattern variable not in scope (not implemented)',
-				errorCode: 'TWCHECK013',
-				expect: 'check-error',
+				description: 'binding pattern variable usable in arm body',
+				expect: 'valid',
 				input: 'x:i32 = 5\nresult:i32 = match x\n\t0 -> 100\n\tother -> other',
+			},
+			{
+				description: 'binding pattern with arithmetic in body',
+				expect: 'valid',
+				input: 'x:i32 = 5\nresult:i32 = match x\n\t0 -> 100\n\tother -> other + 1',
 			},
 		])
 	)
