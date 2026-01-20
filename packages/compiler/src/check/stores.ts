@@ -104,27 +104,76 @@ export class ScopeStore {
 }
 
 /**
+ * A scope frame holds bindings visible within that scope.
+ */
+interface ScopeFrame {
+	readonly bindings: Map<StringId, SymbolId>
+}
+
+/**
  * Dense array storage for symbols (variable bindings).
  * Supports shadowing: same name can be bound multiple times,
  * each with a fresh local index.
  */
 export class SymbolStore {
 	private readonly symbols: SymbolEntry[] = []
-	private readonly nameToSymbol: Map<StringId, SymbolId> = new Map()
+	private readonly scopeStack: ScopeFrame[] = []
 	private nextLocalIndex = 0
 	private readonly listBindings: Map<StringId, TypeId> = new Map()
+
+	constructor() {
+		// Push global scope - never popped
+		this.scopeStack.push({ bindings: new Map() })
+	}
+
+	private currentScope(): ScopeFrame {
+		const scope = this.scopeStack[this.scopeStack.length - 1]
+		if (scope === undefined) {
+			throw new Error('No scope available')
+		}
+		return scope
+	}
 
 	add(entry: Omit<SymbolEntry, 'localIndex'>): SymbolId {
 		const localIndex = this.nextLocalIndex++
 		const id = symbolId(this.symbols.length)
 		const fullEntry: SymbolEntry = { ...entry, localIndex }
+
+		// Store in flat array (codegen needs all symbols)
 		this.symbols.push(fullEntry)
-		this.nameToSymbol.set(entry.nameId, id)
+
+		// Register in current scope's bindings
+		this.currentScope().bindings.set(entry.nameId, id)
+
 		return id
 	}
 
 	lookupByName(nameId: StringId): SymbolId | undefined {
-		return this.nameToSymbol.get(nameId)
+		// Search from innermost scope to outermost
+		for (const scope of this.scopeStack.toReversed()) {
+			const symId = scope.bindings.get(nameId)
+			if (symId !== undefined) return symId
+		}
+		return undefined
+	}
+
+	/**
+	 * Push a new scope frame. Bindings added after this are scoped
+	 * to this frame until popScope() is called.
+	 */
+	pushScope(): void {
+		this.scopeStack.push({ bindings: new Map() })
+	}
+
+	/**
+	 * Pop the current scope frame. Bindings in this frame become
+	 * invisible. The global scope (index 0) cannot be popped.
+	 */
+	popScope(): void {
+		if (this.scopeStack.length <= 1) {
+			throw new Error('Cannot pop global scope')
+		}
+		this.scopeStack.pop()
 	}
 
 	get(id: SymbolId): SymbolEntry {

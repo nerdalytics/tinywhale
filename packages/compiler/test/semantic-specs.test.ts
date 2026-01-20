@@ -233,6 +233,12 @@ test('Semantic Specs', async (t) => {
 				expect: 'valid',
 				input: 'x:i32 = 5\nresult:i32 = match x\n\t0 -> 100\n\tother -> other + 1',
 			},
+			{
+				description: 'binding pattern not visible after match arm',
+				errorCode: 'TWCHECK013',
+				expect: 'check-error',
+				input: 'x:i32 = 5\nresult:i32 = match x\n\t0 -> 100\n\tn -> n + 1\ncheck:i32 = n',
+			},
 		])
 	)
 
