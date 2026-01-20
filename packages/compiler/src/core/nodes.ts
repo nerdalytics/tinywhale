@@ -38,7 +38,6 @@ export const NodeKind = {
 	RecordLiteral: 107,
 	RefinementType: 154,
 	RootLine: 2,
-	SizeBound: 152,
 	TypeAnnotation: 150,
 	TypeBounds: 155,
 	TypeDecl: 50,

@@ -58,14 +58,6 @@ function findChildByKind(
 	return null
 }
 
-function extractSizeFromSizeBound(sizeBoundId: NodeId, context: CompilationContext): number | null {
-	const sizeBoundNode = context.nodes.get(sizeBoundId)
-	const sizeToken = context.tokens.get(sizeBoundNode.tokenId)
-	const sizeText = context.strings.get(sizeToken.payload as StringId)
-	const size = Number.parseInt(sizeText, 10)
-	return Number.isNaN(size) ? null : size
-}
-
 /**
  * Extract size from a TypeBounds node.
  * For list types, there should be exactly one bound (the size).
@@ -105,32 +97,20 @@ function resolveListElementType(
 	return null
 }
 
-function findSizeBoundChild(listTypeId: NodeId, context: CompilationContext): NodeId | null {
-	const typeBoundsId = findChildByKind(listTypeId, NodeKind.TypeBounds, context)
-	if (typeBoundsId !== null) return typeBoundsId
-
-	// Fall back to SizeBound for backward compatibility
-	return findChildByKind(listTypeId, NodeKind.SizeBound, context)
+function findTypeBoundsChild(listTypeId: NodeId, context: CompilationContext): NodeId | null {
+	return findChildByKind(listTypeId, NodeKind.TypeBounds, context)
 }
 
 function findNestedListTypeChild(listTypeId: NodeId, context: CompilationContext): NodeId | null {
 	return findChildByKind(listTypeId, NodeKind.ListType, context)
 }
 
-function validateListSize(sizeBoundId: NodeId, context: CompilationContext): number | null {
-	const node = context.nodes.get(sizeBoundId)
-
-	let size: number | null
-	if (node.kind === NodeKind.TypeBounds) {
-		size = extractSizeFromTypeBounds(sizeBoundId, context)
-	} else {
-		size = extractSizeFromSizeBound(sizeBoundId, context)
-	}
-
+function validateListSize(typeBoundsId: NodeId, context: CompilationContext): number | null {
+	const size = extractSizeFromTypeBounds(typeBoundsId, context)
 	if (size === null) return null
 
 	if (size <= 0) {
-		context.emitAtNode('TWCHECK036' as DiagnosticCode, sizeBoundId)
+		context.emitAtNode('TWCHECK036' as DiagnosticCode, typeBoundsId)
 		return null
 	}
 
@@ -171,10 +151,10 @@ export function resolveListType(
 	state: CheckerState,
 	context: CompilationContext
 ): { name: string; typeId: TypeId } | null {
-	const sizeBoundId = findSizeBoundChild(listTypeId, context)
-	if (sizeBoundId === null) return null
+	const typeBoundsId = findTypeBoundsChild(listTypeId, context)
+	if (typeBoundsId === null) return null
 
-	const size = validateListSize(sizeBoundId, context)
+	const size = validateListSize(typeBoundsId, context)
 	if (size === null) return null
 
 	const nestedListTypeId = findNestedListTypeChild(listTypeId, context)
