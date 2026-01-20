@@ -390,6 +390,28 @@ RefinementType = typeKeyword TypeHints
 
 ---
 
+### 22. Cleaner Record Initialization Syntax
+
+```tinywhale
+type Point
+    x: i32
+    y: i32
+
+p:Point
+    x = 50
+    y = 10
+```
+
+Record binding uses `:` for type name only (no trailing `=`). Field values use `=`. Nested record construction uses `:` with type name.
+
+```ohm
+RecordBinding = identifier colon upperIdentifier
+FieldInit = lowerIdentifier equals Expression
+FieldDecl = lowerIdentifier colon TypeRef  // Also used for nested record init
+```
+
+---
+
 ## Discrepancies
 
 ### D1. Nested Lists
@@ -680,7 +702,7 @@ Not yet implemented. Will unlock:
 
 | Category | Count |
 |----------|-------|
-| Working correctly | 21 |
+| Working correctly | 22 |
 | Discrepancies | 9 |
 | Future enhancements | 5 |
 

@@ -844,8 +844,8 @@ panic`
 		it('should parse record initialization with list field', () => {
 			const source = `type Foo
     items: i32[]<size=3>
-f: Foo =
-    items: [1, 2, 3]
+f:Foo
+    items = [1, 2, 3]
 panic`
 			const ctx = new CompilationContext(source)
 			tokenize(ctx)
@@ -856,8 +856,8 @@ panic`
 		it('should parse record initialization with nested list field', () => {
 			const source = `type Matrix
     data: i32[]<size=2>[]<size=2>
-m: Matrix =
-    data: [[1, 2], [3, 4]]
+m:Matrix
+    data = [[1, 2], [3, 4]]
 panic`
 			const ctx = new CompilationContext(source)
 			tokenize(ctx)
@@ -869,9 +869,9 @@ panic`
 			const source = `type Data
     xs: i32[]<size=2>
     ys: i32[]<size=2>
-d: Data =
-    xs: [1, 2]
-    ys: [3, 4]
+d:Data
+    xs = [1, 2]
+    ys = [3, 4]
 panic`
 			const ctx = new CompilationContext(source)
 			tokenize(ctx)

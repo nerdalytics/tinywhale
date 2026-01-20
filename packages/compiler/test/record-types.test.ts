@@ -89,9 +89,6 @@ describe('record types node kinds', () => {
 	it('has FieldAccess node kind', () => {
 		assert.ok(NodeKind.FieldAccess !== undefined)
 	})
-	it('has NestedRecordInit node kind', () => {
-		assert.ok(NodeKind.NestedRecordInit !== undefined)
-	})
 })
 
 describe('record types parsing', () => {
@@ -112,9 +109,9 @@ describe('record literal parsing', () => {
 		const source = `type Point
     x: i32
     y: i32
-p: Point =
-    x: 5
-    y: 10
+p:Point
+    x = 5
+    y = 10
 panic`
 		const ctx = new CompilationContext(source)
 		tokenize(ctx)
@@ -172,9 +169,9 @@ panic`
 	})
 
 	it('creates FieldInit nodes', () => {
-		const source = `p: Point =
-    x: 5
-    y: 10
+		const source = `p:Point
+    x = 5
+    y = 10
 panic`
 		const ctx = new CompilationContext(source)
 		tokenize(ctx)
@@ -271,9 +268,9 @@ describe('checker record instantiation', () => {
 		const source = `type Point
     x: i32
     y: i32
-p: Point =
-    x: 5
-    y: 10
+p:Point
+    x = 5
+    y = 10
 panic`
 		const ctx = createContext(source)
 		tokenize(ctx)
@@ -287,8 +284,8 @@ panic`
 		const source = `type Point
     x: i32
     y: i32
-p: Point =
-    x: 5
+p:Point
+    x = 5
 panic`
 		const ctx = createContext(source)
 		tokenize(ctx)
@@ -302,10 +299,10 @@ panic`
 		const source = `type Point
     x: i32
     y: i32
-p: Point =
-    x: 5
-    y: 10
-    z: 15
+p:Point
+    x = 5
+    y = 10
+    z = 15
 panic`
 		const ctx = createContext(source)
 		tokenize(ctx)
@@ -319,9 +316,9 @@ panic`
 		const source = `type Point
     x: i32
     y: i32
-p: Point =
-    x: 5
-    x: 10
+p:Point
+    x = 5
+    x = 10
 panic`
 		const ctx = createContext(source)
 		tokenize(ctx)
@@ -332,8 +329,8 @@ panic`
 	})
 
 	it('allows record instantiation without type declaration (error expected)', () => {
-		const source = `p: UnknownType =
-    x: 5
+		const source = `p:UnknownType
+    x = 5
 panic`
 		const ctx = createContext(source)
 		tokenize(ctx)
@@ -349,9 +346,9 @@ describe('checker field access', () => {
 		const source = `type Point
     x: i32
     y: i32
-p: Point =
-    x: 5
-    y: 10
+p:Point
+    x = 5
+    y = 10
 result: i32 = p.x
 panic`
 		const ctx = createContext(source)
@@ -365,8 +362,8 @@ panic`
 	it('reports error for unknown field', () => {
 		const source = `type Point
     x: i32
-p: Point =
-    x: 5
+p:Point
+    x = 5
 result: i32 = p.z
 panic`
 		const ctx = createContext(source)
@@ -394,9 +391,9 @@ panic`
     val: i32
 type Outer
     inner: Inner
-o: Outer =
-    inner:
-        val: 42
+o:Outer
+    inner: Inner
+        val = 42
 result: i32 = o.inner.val
 panic`
 		const ctx = createContext(source)
@@ -413,9 +410,9 @@ describe('SymbolStore record bindings', () => {
 		const source = `type Point
     x: i32
     y: i32
-p: Point =
-    x: 5
-    y: 10
+p:Point
+    x = 5
+    y = 10
 panic`
 		const ctx = createContext(source)
 		tokenize(ctx)
@@ -433,9 +430,9 @@ describe('codegen record types', () => {
 		const source = `type Point
     x: i32
     y: i32
-p: Point =
-    x: 5
-    y: 10
+p:Point
+    x = 5
+    y = 10
 panic`
 		const ctx = createContext(source)
 		tokenize(ctx)
@@ -457,9 +454,9 @@ panic`
 		const source = `type Point
     x: i32
     y: i32
-p: Point =
-    x: 5
-    y: 10
+p:Point
+    x = 5
+    y = 10
 result: i32 = p.x + p.y
 panic`
 		const ctx = createContext(source)
@@ -483,9 +480,9 @@ panic`
 		const source = `type Point
     x: i32
     y: i32
-p: Point =
-    x: 42
-    y: 99
+p:Point
+    x = 42
+    y = 99
 panic`
 		const ctx = createContext(source)
 		tokenize(ctx)
@@ -503,9 +500,9 @@ panic`
 		const source = `type Mixed
     a: i32
     b: i64
-m: Mixed =
-    a: 1
-    b: 2
+m:Mixed
+    a = 1
+    b = 2
 panic`
 		const ctx = createContext(source)
 		tokenize(ctx)
@@ -544,10 +541,10 @@ panic`
     x: i32
 type Line
     len: i32
-p: Point =
-    x: 5
-l: Line =
-    len: 10
+p:Point
+    x = 5
+l:Line
+    len = 10
 sum: i32 = p.x + l.len
 panic`
 		const ctx = createContext(source)
@@ -565,9 +562,9 @@ describe('nested record instantiation parsing', () => {
     val: i32
 type Outer
     inner: Inner
-o: Outer =
+o:Outer
     inner: Inner
-        val: 42
+        val = 42
 panic`
 		const ctx = createContext(source)
 		tokenize(ctx)
@@ -575,18 +572,18 @@ panic`
 		assert.ok(result, 'should parse nested record init')
 	})
 
-	it('creates NestedRecordInit node for type name in field init', () => {
-		const source = `o: Outer =
+	it('creates FieldDecl node for type name in nested record init', () => {
+		const source = `o:Outer
     inner: Inner
-        val: 42
+        val = 42
 panic`
 		const ctx = createContext(source)
 		tokenize(ctx)
 		parse(ctx)
 
 		const nodes = [...ctx.nodes]
-		const nestedRecordInit = nodes.find(([, n]) => n.kind === NodeKind.NestedRecordInit)
-		assert.ok(nestedRecordInit, 'should create NestedRecordInit node')
+		const fieldDecl = nodes.find(([, n]) => n.kind === NodeKind.FieldDecl)
+		assert.ok(fieldDecl, 'should create FieldDecl node for nested record type')
 	})
 })
 
@@ -662,9 +659,9 @@ describe('nested field access', () => {
     val: i32
 type Outer
     inner: Inner
-o: Outer =
+o:Outer
     inner: Inner
-        val: 42
+        val = 42
 result: i32 = o.inner.val
 panic`
 		const ctx = createContext(source)
@@ -680,9 +677,9 @@ panic`
     val: i32
 type Outer
     inner: Inner
-o: Outer =
+o:Outer
     inner: Inner
-        val: 42
+        val = 42
 result: i32 = o.inner.val
 panic`
 		const ctx = createContext(source)
@@ -703,9 +700,9 @@ describe('nested record codegen', () => {
     val: i32
 type Outer
     inner: Inner
-o: Outer =
+o:Outer
     inner: Inner
-        val: 42
+        val = 42
 panic`
 		const ctx = createContext(source)
 		tokenize(ctx)
@@ -725,9 +722,9 @@ describe('nested record instantiation checker', () => {
     val: i32
 type Outer
     inner: Inner
-o: Outer =
+o:Outer
     inner: Inner
-        val: 42
+        val = 42
 panic`
 		const ctx = createContext(source)
 		tokenize(ctx)
@@ -744,9 +741,9 @@ type B
     y: i32
 type Outer
     inner: A
-o: Outer =
+o:Outer
     inner: B
-        y: 5
+        y = 5
 panic`
 		const ctx = createContext(source)
 		tokenize(ctx)
@@ -764,9 +761,9 @@ panic`
     y: i32
 type Outer
     inner: Inner
-o: Outer =
+o:Outer
     inner: Inner
-        x: 1
+        x = 1
 panic`
 		const ctx = createContext(source)
 		tokenize(ctx)
@@ -786,10 +783,10 @@ describe('sibling fields after nested blocks', () => {
 type Outer
     inner: Inner
     x: i32
-o: Outer =
+o:Outer
     inner: Inner
-        val: 42
-    x: 10
+        val = 42
+    x = 10
 panic`
 		const ctx = createContext(source)
 		tokenize(ctx)
@@ -803,10 +800,10 @@ panic`
 type Outer
     inner: Inner
     x: i32
-o: Outer =
+o:Outer
     inner: Inner
-        val: 42
-    x: 10
+        val = 42
+    x = 10
 panic`
 		const ctx = createContext(source)
 		tokenize(ctx)
@@ -834,11 +831,11 @@ type Outer
     inner: Inner
     x: i32
     y: i32
-o: Outer =
+o:Outer
     inner: Inner
-        a: 1
-    x: 2
-    y: 3
+        a = 1
+    x = 2
+    y = 3
 panic`
 		const ctx = createContext(source)
 		tokenize(ctx)
@@ -869,12 +866,12 @@ type L2
 type L1
     l2: L2
     a: i32
-root: L1 =
+root:L1
     l2: L2
         l3: L3
-            val: 100
-        b: 20
-    a: 10
+            val = 100
+        b = 20
+    a = 10
 panic`
 		const ctx = createContext(source)
 		tokenize(ctx)

@@ -26,14 +26,12 @@ import {
 } from './declarations.ts'
 import { finalizeMatch, getMatchArmFromLine, processMatchArm, startMatchBinding } from './match.ts'
 import {
-	extractFieldInitName,
+	extractFieldDeclName,
 	finalizeNestedRecordInit,
 	finalizeRecordLiteral,
 	getFieldInitFromLine,
 	getIndentLevelFromLine,
-	getNestedRecordInitFromFieldInit,
-	hasNestedRecordInit,
-	processFieldInitAsTypeField,
+	hasUppercaseTypeRef,
 	processFieldInitInNestedContext,
 	startNestedRecordInit,
 	startRecordLiteral,
@@ -56,6 +54,21 @@ function getStatementFromLine(
 ): { id: NodeId; kind: NodeKind } | null {
 	for (const [childId, child] of context.nodes.iterateChildren(lineId)) {
 		if (isStatementNode(child.kind)) {
+			return { id: childId, kind: child.kind }
+		}
+	}
+	return null
+}
+
+/**
+ * Get FieldDecl node from a line (if present) - for nested record init detection.
+ */
+function getFieldDeclFromLineForInit(
+	lineId: NodeId,
+	context: CompilationContext
+): { id: NodeId; kind: NodeKind } | null {
+	for (const [childId, child] of context.nodes.iterateChildren(lineId)) {
+		if (child.kind === NodeKind.FieldDecl) {
 			return { id: childId, kind: child.kind }
 		}
 	}
@@ -164,7 +177,6 @@ function emitStatement(
 			}
 			break
 		case NodeKind.MatchExpr:
-			// Standalone match expression (discarded form) - not yet implemented
 			break
 	}
 }
@@ -245,18 +257,9 @@ function processIndentedLineAsFieldDecl(
 ): boolean {
 	if (!isInTypeDeclContext(state)) return false
 
-	// Try standard FieldDecl first (for primitive types)
 	const fieldDecl = getFieldDeclFromLine(lineId, context)
 	if (fieldDecl) {
 		processFieldDecl(fieldDecl.id, state, context)
-		return true
-	}
-
-	// Also handle FieldInit with NestedRecordInit as type field (for user-defined types)
-	// This occurs because the grammar parses `inner: Inner` as FieldInit when FieldInit is tried first
-	const fieldInit = getFieldInitFromLine(lineId, context)
-	if (fieldInit && hasNestedRecordInit(fieldInit.id, context)) {
-		processFieldInitAsTypeField(fieldInit.id, state, context)
 		return true
 	}
 
@@ -264,23 +267,24 @@ function processIndentedLineAsFieldDecl(
 }
 
 /**
- * Try to start a nested record init from a field init node.
- * Returns true if this field init starts a nested record construction.
- * currentIndentLevel is the indent level of the current line, used to set the expected child level.
+ * Try to start a nested record init from a FieldDecl with uppercase TypeRef.
+ * In record literal context, FieldDecl with uppercase TypeRef indicates nested record construction.
  */
-function tryStartNestedRecordFromFieldInit(
-	fieldInitId: NodeId,
+function maybeStartNestedRecordInit(
+	lineId: NodeId,
+	currentIndentLevel: number,
 	state: CheckerState,
-	context: CompilationContext,
-	currentIndentLevel?: number
+	context: CompilationContext
 ): boolean {
-	if (!hasNestedRecordInit(fieldInitId, context)) return false
-	const fieldName = extractFieldInitName(fieldInitId, context)
-	const nestedInitNode = getNestedRecordInitFromFieldInit(fieldInitId, context)
-	if (nestedInitNode && fieldName) {
-		return startNestedRecordInit(nestedInitNode, fieldName, state, context, currentIndentLevel)
+	const fieldDecl = getFieldDeclFromLineForInit(lineId, context)
+	if (!fieldDecl) return false
+	if (!isInRecordInitContext(state)) return false
+	if (!hasUppercaseTypeRef(fieldDecl.id, context)) {
+		return false
 	}
-	return false
+
+	const fieldName = extractFieldDeclName(fieldDecl.id, context)
+	return startNestedRecordInit(fieldDecl.id, fieldName, state, context, currentIndentLevel)
 }
 
 function processIndentedLineAsFieldInit(
@@ -292,12 +296,6 @@ function processIndentedLineAsFieldInit(
 
 	const fieldInit = getFieldInitFromLine(lineId, context)
 	if (!fieldInit) return false
-
-	// Get the indent level of this line to pass to nested record init
-	const currentIndentLevel = getIndentLevelFromLine(lineId, context) ?? undefined
-
-	if (tryStartNestedRecordFromFieldInit(fieldInit.id, state, context, currentIndentLevel))
-		return true
 
 	processFieldInitInNestedContext(fieldInit.id, state, context)
 	return true
@@ -330,6 +328,17 @@ function finalizeNestedContextsForIndent(
 	}
 }
 
+function tryStartNestedRecordInit(
+	lineId: NodeId,
+	lineIndentLevel: number | null,
+	state: CheckerState,
+	context: CompilationContext
+): boolean {
+	return (
+		lineIndentLevel !== null && maybeStartNestedRecordInit(lineId, lineIndentLevel, state, context)
+	)
+}
+
 function handleIndentedLine(
 	lineId: NodeId,
 	state: CheckerState,
@@ -340,6 +349,7 @@ function handleIndentedLine(
 
 	if (processIndentedLineAsMatchArm(lineId, state, context)) return
 	if (processIndentedLineAsFieldDecl(lineId, state, context)) return
+	if (tryStartNestedRecordInit(lineId, lineIndentLevel, state, context)) return
 	if (processIndentedLineAsFieldInit(lineId, state, context)) return
 	context.emitAtNode('TWCHECK001' as DiagnosticCode, lineId)
 }
@@ -349,14 +359,12 @@ function processDedentLineStatement(
 	state: CheckerState,
 	context: CompilationContext
 ): void {
-	// Check for TypeDecl first (needs special context setup)
 	const typeDecl = getTypeDeclFromLine(lineId, context)
 	if (typeDecl) {
 		startTypeDecl(typeDecl.id, state, context)
 		return
 	}
 
-	// Handle other statements
 	const stmt = getStatementFromLine(lineId, context)
 	if (stmt) emitStatement(stmt.id, stmt.kind, state, context)
 }
@@ -385,14 +393,12 @@ function handleDedentLine(lineId: NodeId, state: CheckerState, context: Compilat
 		return
 	}
 
-	// Finalize pending record literal and process statement
 	if (isInRecordLiteralContext(state)) {
 		finalizeRecordLiteral(state, context)
 		processDedentLineStatement(lineId, state, context)
 		return
 	}
 
-	// No context - error
 	context.emitAtNode('TWCHECK001' as DiagnosticCode, lineId)
 }
 
@@ -516,7 +522,6 @@ export function check(context: CompilationContext): CheckResult {
 		unreachableRange: null,
 	}
 
-	// Find Program node (last node in postorder storage)
 	const nodeCount = context.nodes.count()
 	if (nodeCount === 0) {
 		assignCheckResultsToContext(context, insts, symbols, types)
@@ -527,12 +532,10 @@ export function check(context: CompilationContext): CheckResult {
 	const program = context.nodes.get(programId)
 
 	if (program.kind !== NodeKind.Program) {
-		// No valid Program node - might be a parse error
 		assignCheckResultsToContext(context, insts, symbols, types)
 		return { succeeded: !context.hasErrors() }
 	}
 
-	// Process line children in source order
 	const lines = getLineChildrenInSourceOrder(programId, context)
 	for (const [lineId, line] of lines) {
 		processLine(lineId, line, state, context)

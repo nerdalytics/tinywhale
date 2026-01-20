@@ -163,8 +163,8 @@ panic`
 		it('documents expected: list field init in record should work', () => {
 			const source = `type Data
     items: i32[]<size=1>
-d: Data =
-    items: [99]
+d:Data
+    items = [99]
 panic`
 			const ctx = prepareAndCheck(source)
 

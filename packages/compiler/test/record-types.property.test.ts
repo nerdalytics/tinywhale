@@ -82,9 +82,9 @@ function generateRecordInit(
 	values: number[]
 ): string {
 	const fieldInits = fields
-		.map((f, i) => `    ${f.name}: ${literalForType(f.type, values[i] ?? 0)}`)
+		.map((f, i) => `    ${f.name} = ${literalForType(f.type, values[i] ?? 0)}`)
 		.join('\n')
-	return `${varName}: ${typeName} =\n${fieldInits}`
+	return `${varName}:${typeName}\n${fieldInits}`
 }
 
 // ============================================================================
@@ -663,11 +663,11 @@ function generateNestedTypes(depth: number): string {
  * Generate nested record initialization for a given depth
  */
 function generateNestedInit(depth: number, value: number): string {
-	let init = `o: T0 =\n`
+	let init = `o:T0\n`
 	for (let i = 0; i < depth - 1; i++) {
 		init += `${'    '.repeat(i + 1)}inner: T${i + 1}\n`
 	}
-	init += `${'    '.repeat(depth)}val: ${value}\n`
+	init += `${'    '.repeat(depth)}val = ${value}\n`
 	return init
 }
 
@@ -703,15 +703,15 @@ function generateNestedInitWithSiblings(
 	leafValue: number,
 	siblingValues: number[]
 ): string {
-	let init = 'o: T0 =\n'
+	let init = 'o:T0\n'
 	for (let i = 0; i < depth - 1; i++) {
 		init += `${'    '.repeat(i + 1)}inner: T${i + 1}\n`
 	}
 	// Leaf value
-	init += `${'    '.repeat(depth)}val: ${leafValue}\n`
+	init += `${'    '.repeat(depth)}val = ${leafValue}\n`
 	// Sibling fields (in reverse order from deepest to shallowest)
 	for (let i = depth - 2; i >= 0; i--) {
-		init += `${'    '.repeat(i + 1)}sib${i}: ${siblingValues[i] ?? 0}\n`
+		init += `${'    '.repeat(i + 1)}sib${i} = ${siblingValues[i] ?? 0}\n`
 	}
 	return init
 }
@@ -836,8 +836,8 @@ describe('record types/sibling fields after nested blocks properties', () => {
 
 					// Two orderings of fields in init
 					const init = siblingFirst
-						? `o: Outer =\n    sib: ${sibVal}\n    inner: Inner\n        val: ${innerVal}\n`
-						: `o: Outer =\n    inner: Inner\n        val: ${innerVal}\n    sib: ${sibVal}\n`
+						? `o:Outer\n    sib = ${sibVal}\n    inner: Inner\n        val = ${innerVal}\n`
+						: `o:Outer\n    inner: Inner\n        val = ${innerVal}\n    sib = ${sibVal}\n`
 
 					const source = `${types}${init}panic\n`
 
@@ -911,9 +911,9 @@ describe('record types/sibling fields after nested blocks properties', () => {
 					const types = `type Inner\n    val: i32\ntype Outer\n${typeFields}`
 
 					// Init with nested block first, then all siblings
-					let init = `o: Outer =\n    inner: Inner\n        val: ${values[0] ?? 0}\n`
+					let init = `o:Outer\n    inner: Inner\n        val = ${values[0] ?? 0}\n`
 					for (let i = 0; i < siblingCount; i++) {
-						init += `    s${i}: ${values[i + 1] ?? 0}\n`
+						init += `    s${i} = ${values[i + 1] ?? 0}\n`
 					}
 
 					const source = `${types}${init}panic\n`

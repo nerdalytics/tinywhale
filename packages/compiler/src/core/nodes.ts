@@ -30,8 +30,6 @@ export const NodeKind = {
 	LiteralPattern: 201,
 	MatchArm: 13,
 	MatchExpr: 12,
-
-	NestedRecordInit: 110,
 	OrPattern: 203,
 
 	PanicStatement: 10,

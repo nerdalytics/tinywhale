@@ -102,7 +102,7 @@ test('Grammar Specs', async (t) => {
 				'x:i32<min=0> = 5', // [FULL] - type hints with constraint checking
 				'x:i32<min=0, max=100> = 50', // [FULL]
 				'arr:i32[]<size=3> = [1, 2, 3]', // [FULL] - single-level list
-				'p:Point =', // [FULL] - record binding, block follows
+				'p:Point', // [FULL] - record binding (new syntax: no trailing =)
 			])
 		)
 
@@ -115,6 +115,7 @@ test('Grammar Specs', async (t) => {
 				'x:i32<min=0> =', // Missing expression for hinted primitive
 				'arr:i32[]<size=3> =', // Missing expression for list type
 				'p:Point = 5', // Expression not allowed for record
+				'p:Point =', // Old syntax: trailing = after record type rejected
 			])
 		)
 
@@ -397,14 +398,28 @@ test('Grammar Specs', async (t) => {
 	await t.test('Record Initialization', (t) => {
 		const tester = createTester(grammar, 'Record Initialization', 'Program')
 
+		// New syntax: = for values, : for types only
 		tester.match(
 			prepareList([
 				// Simple record with fields
-				'type Point\n\tx: i32\n\ty: i32\np:Point =\n\tx: 1\n\ty: 2',
+				'type Point\n\tx: i32\n\ty: i32\np:Point\n\tx = 1\n\ty = 2',
 				// Record with list field
-				'type Foo\n\titems: i32[]<size=3>\nf:Foo =\n\titems: [1, 2, 3]',
+				'type Foo\n\titems: i32[]<size=3>\nf:Foo\n\titems = [1, 2, 3]',
 				// Nested record initialization
-				'type Inner\n\tvalue: i32\ntype Outer\n\tinner: Inner\no:Outer =\n\tinner: Inner\n\t\tvalue: 42',
+				'type Inner\n\tvalue: i32\ntype Outer\n\tinner: Inner\no:Outer\n\tinner: Inner\n\t\tvalue = 42',
+				// Additional new syntax tests
+				'type Point\n\tx: i32\np:Point\n\tx = 5', // no = after type, = for field value
+				'type Point\n\tx: i32\n\ty: i32\np:Point\n\tx = 5\n\ty = 10', // Multiple fields
+				'type Inner\n\tval: i32\ntype Outer\n\tinner: Inner\no:Outer\n\tinner: Inner\n\t\tval = 5', // Nested
+			])
+		)
+
+		// Old syntax should be rejected
+		tester.reject(
+			prepareList([
+				'type Point\n\tx: i32\np:Point =\n\tx = 5', // Old syntax: = after type name rejected
+				'type Point\n\tx: i32\np:Point\n\tx: 5', // Old syntax: : for values rejected
+				'type Point\n\tx: i32\np:Point =\n\tx: 5', // Old syntax: both = after type and : for value
 			])
 		)
 
