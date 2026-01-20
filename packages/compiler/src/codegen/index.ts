@@ -19,6 +19,8 @@ import {
 	getMatchArmPatternNodeId,
 	getMatchScrutineeId,
 	getNegateOperandId,
+	getPatternBindScrutineeId,
+	getPatternBindSymbolId,
 	getVarRefSymbolId,
 	type Inst,
 	type InstId,
@@ -150,6 +152,23 @@ function emitBind(
 	if (initExpr === undefined) return null
 
 	return mod.local.set(symbol.localIndex, initExpr)
+}
+
+function emitPatternBind(
+	mod: binaryen.Module,
+	inst: Inst,
+	valueMap: Map<InstId, binaryen.ExpressionRef>,
+	context: CompilationContext
+): binaryen.ExpressionRef | null {
+	const symId = getPatternBindSymbolId(inst)
+	const scrutineeInstId = getPatternBindScrutineeId(inst)
+	const symbol = context.symbols?.get(symId)
+	if (!symbol) return null
+
+	const scrutineeExpr = valueMap.get(scrutineeInstId)
+	if (scrutineeExpr === undefined) return null
+
+	return mod.local.set(symbol.localIndex, scrutineeExpr)
 }
 
 function emitNegate(
@@ -666,6 +685,8 @@ function emitInstruction(
 			return emitVarRef(mod, inst, context)
 		case InstKind.Bind:
 			return emitBind(mod, inst, valueMap, context)
+		case InstKind.PatternBind:
+			return emitPatternBind(mod, inst, valueMap, context)
 		case InstKind.Negate:
 			return emitNegate(mod, inst, valueMap, context)
 		case InstKind.BitwiseNot:
@@ -706,7 +727,7 @@ function isValueProducer(kind: InstKind): boolean {
 }
 
 function isStatement(kind: InstKind): boolean {
-	return kind === InstKind.Unreachable || kind === InstKind.Bind
+	return kind === InstKind.Unreachable || kind === InstKind.Bind || kind === InstKind.PatternBind
 }
 
 function processInstruction(

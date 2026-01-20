@@ -75,6 +75,40 @@ function checkOrPatternChildren(
 }
 
 /**
+ * Create a symbol for a binding pattern variable.
+ * The pattern variable is bound to the scrutinee value.
+ */
+function createPatternBindingSymbol(
+	patternId: NodeId,
+	scrutineeType: TypeId,
+	state: CheckerState,
+	context: CompilationContext
+): void {
+	const patternNode = context.nodes.get(patternId)
+	const token = context.tokens.get(patternNode.tokenId)
+	const nameId = token.payload as StringId
+
+	// Create symbol for pattern variable
+	const symId = state.symbols.add({
+		nameId,
+		parseNodeId: patternId,
+		typeId: scrutineeType,
+	})
+
+	// Emit PatternBind instruction if we have a valid scrutinee
+	const scrutineeInstId = state.matchContext?.scrutinee.instId
+	if (scrutineeInstId !== null && scrutineeInstId !== undefined) {
+		state.insts.add({
+			arg0: symId as number,
+			arg1: scrutineeInstId as number,
+			kind: InstKind.PatternBind,
+			parseNodeId: patternId,
+			typeId: scrutineeType,
+		})
+	}
+}
+
+/**
  * Check a pattern against the scrutinee type.
  */
 export function checkPattern(
@@ -91,6 +125,9 @@ export function checkPattern(
 			break
 		case NodeKind.OrPattern:
 			checkOrPatternChildren(patternId, scrutineeType, state, context)
+			break
+		case NodeKind.BindingPattern:
+			createPatternBindingSymbol(patternId, scrutineeType, state, context)
 			break
 	}
 
