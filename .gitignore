@@ -12,6 +12,8 @@
 !.github/**
 !.npmrc
 !biome.json
+!docs/
+!docs/**
 !examples/
 !examples/**
 !LICENSE
@@ -25,5 +27,8 @@
 !README.md
 !tsconfig.json
 
-# Disallow dist folders everywhere
+# Ignore planning documents (local only)
+docs/plans/**
+
+# Disallow files and folders everywhere
 **/dist/**
