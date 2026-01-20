@@ -526,7 +526,7 @@ floatLiteral = digit+ "." digit+ (("e" | "E") ("+" | "-")? digit+)?
 
 ---
 
-### D7. Hinted Primitives in Field Declarations
+### D7. Refinement Types in Field Declarations
 
 **Desired:**
 ```tinywhale
@@ -534,22 +534,27 @@ type Point
     x: i32<min=0, max=100>
     y: i32<min=0, max=100>
 ```
-Should allow refinement types on record fields.
+Should allow refinement types on record fields, with constraints enforced during initialization.
 
 **Actual:**
 ```tinywhale
 type Point
     x: i32<min=0>
-# May parse but checker uses fixed token offset (+2) that breaks for hinted types
+    y: i32
+p:Point =
+    x: -5   # Should fail min=0, but passes
+    y: 10
 ```
-`processFieldDecl` assumes simple `Identifier, Colon, TypeKeyword` layout.
+Parses correctly but constraints are silently ignored.
+
+**Root cause:** `processFieldDecl` (`declarations.ts:196`) uses hardcoded `+2` token offset assuming `Identifier, Colon, TypeKeyword`. For refinement types like `i32<min=0>`, the type token is not at offset +2.
 
 ```ohm
 FieldDecl = lowerIdentifier colon TypeRef
-TypeRef = ListType | HintedPrimitive | upperIdentifier | typeKeyword
+TypeRef = ListType | RefinementType | upperIdentifier | typeKeyword
 ```
 
-**Discrepancy:** Grammar allows `HintedPrimitive` in `TypeRef` for fields, but checker doesn't handle complex type tokens.
+**Fix required:** Parse the TypeAnnotation node properly instead of using token offset arithmetic. Should traverse child nodes to find the type information.
 
 ---
 
@@ -583,24 +588,28 @@ FieldValue = NestedRecordInit | Expression
 
 ---
 
-### D9. Lists of User-Defined Types
+### D9. Lists of User-Defined Types (Blocked on Functions)
 
 **Desired:**
 ```tinywhale
 type Point
     x: i32
     y: i32
-vertices:Point[]<size=3> = ...
+p1:Point =
+    x: 1
+    y: 2
+p2:Point =
+    x: 3
+    y: 4
+vertices:Point[]<size=2> = [p1, p2]
 ```
-Should allow lists with record element types.
+Should allow lists with record element types, initialized via variable references.
 
-**Actual:** Grammar allows via `ListTypeBase = ... | upperIdentifier`, but untested and likely unsupported in checker.
+**Actual:** Grammar and type resolution work correctly. But records are currently flattened to local fields (`p1_x`, `p1_y`) - no symbol exists for `p1` itself.
 
-```ohm
-ListTypeBase = HintedPrimitive | upperIdentifier | typeKeyword
-```
+**Not a bug - architectural decision:** Records are flattened unless passed around. When functions are implemented, records passed to functions will use WASM structs, and whole-record references will work.
 
-**Discrepancy:** Grammar allows user-defined types as list base, but checker likely doesn't support initialization or access.
+**Status:** Deferred until functions feature (F5).
 
 ---
 
@@ -694,5 +703,9 @@ Not yet implemented. Will unlock:
 1. D1-D2 (nested lists, chained index) - need checker implementation
 2. D3-D5 (list/record destructuring, guards) - missing grammar + checker
 3. D6 (negative float literals) - grammar addition
-4. D7-D9 (hinted fields, list fields, record lists) - checker fixes
-5. D10 (float match patterns) - grammar + checker
+4. D7 (refinement types in fields) - checker fix for type resolution
+5. D8 (list fields in records) - checker fix
+6. D9 (lists of user-defined types) - deferred until functions
+7. D10 (float match patterns) - grammar + checker
+
+**Terminology:** "Hinted Primitives" → "Refinement Types" (D7 fix includes rename)
