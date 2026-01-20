@@ -170,9 +170,15 @@ export function processMatchArm(
 		return
 	}
 
+	// Push scope for this arm's bindings
+	state.symbols.pushScope()
+
 	checkPattern(patternId, state.matchContext.scrutinee.typeId, state, context)
 
 	const bodyResult = checkExpression(exprId, state.matchContext.expectedType, state, context)
+
+	// Pop scope - arm bindings no longer visible
+	state.symbols.popScope()
 
 	if (isValidExprResult(bodyResult)) {
 		state.matchContext.arms.push({
