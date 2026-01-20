@@ -454,18 +454,6 @@ function createNodeEmittingSemantics(
 				tokenId: valueTid,
 			})
 		},
-		RefinementType(_typeKeyword: Node, typeHints: Node): NodeId {
-			const startCount = context.nodes.count()
-			typeHints['emitTypeAnnotation']()
-			const childCount = context.nodes.count() - startCount
-
-			const tid = getTokenIdForOhmNode(this)
-			return context.nodes.add({
-				kind: NodeKind.RefinementType,
-				subtreeSize: 1 + childCount,
-				tokenId: tid,
-			})
-		},
 		ListType(elementType: Node, suffixes: Node): NodeId {
 			const startCount = context.nodes.count()
 			// Handle hinted primitives as base element type
@@ -487,6 +475,18 @@ function createNodeEmittingSemantics(
 		},
 		ListTypeSuffix(_lbracket: Node, _rbracket: Node, typeHints: Node): NodeId {
 			return typeHints['emitTypeAnnotation']()
+		},
+		RefinementType(_typeKeyword: Node, typeHints: Node): NodeId {
+			const startCount = context.nodes.count()
+			typeHints['emitTypeAnnotation']()
+			const childCount = context.nodes.count() - startCount
+
+			const tid = getTokenIdForOhmNode(this)
+			return context.nodes.add({
+				kind: NodeKind.RefinementType,
+				subtreeSize: 1 + childCount,
+				tokenId: tid,
+			})
 		},
 		TypeAnnotation(_colon: Node, typeRef: Node): NodeId {
 			const startCount = context.nodes.count()
@@ -606,11 +606,20 @@ function createNodeEmittingSemantics(
 	})
 
 	semantics.addOperation<NodeId>('emitIndentedContent', {
-		FieldDecl(fieldName: Node, _colon: Node, _typeRef: Node): NodeId {
+		FieldDecl(fieldName: Node, _colon: Node, typeRef: Node): NodeId {
+			const startCount = context.nodes.count()
+
+			// Emit complex type children (RefinementType or ListType) if present
+			const innerType = typeRef.child(0)
+			if (innerType.ctorName === 'ListType' || innerType.ctorName === 'RefinementType') {
+				innerType['emitTypeAnnotation']()
+			}
+
+			const childCount = context.nodes.count() - startCount
 			const tid = getTokenIdForOhmNode(fieldName)
 			return context.nodes.add({
 				kind: NodeKind.FieldDecl,
-				subtreeSize: 1,
+				subtreeSize: 1 + childCount,
 				tokenId: tid,
 			})
 		},

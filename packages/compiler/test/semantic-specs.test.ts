@@ -156,7 +156,8 @@ test('Semantic Specs', async (t) => {
 			{
 				description: 'multiple refinement fields',
 				expect: 'valid',
-				input: 'type Bounded\n\ta: i32<min=0, max=100>\n\tb: i32<min=-10>\np:Bounded =\n\ta: 50\n\tb: -5',
+				input:
+					'type Bounded\n\ta: i32<min=0, max=100>\n\tb: i32<min=-10>\np:Bounded =\n\ta: 50\n\tb: -5',
 			},
 			{
 				description: 'refinement field max constraint violated',
