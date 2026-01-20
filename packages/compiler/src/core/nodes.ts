@@ -20,7 +20,6 @@ export const NodeKind = {
 	FloatLiteral: 103,
 
 	Hint: 153,
-	HintedPrimitive: 154,
 
 	Identifier: 100,
 	IndentedLine: 0,
@@ -42,6 +41,7 @@ export const NodeKind = {
 	Program: 255,
 	RecordBinding: 15,
 	RecordLiteral: 107,
+	RefinementType: 154,
 	RootLine: 2,
 	SizeHint: 152,
 	TypeAnnotation: 150,

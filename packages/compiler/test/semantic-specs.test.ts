@@ -142,6 +142,29 @@ test('Semantic Specs', async (t) => {
 				expect: 'check-error',
 				input: 'type Point\n\tx: i32\n\ty: i32\np:Point =\n\tx: 1',
 			},
+			{
+				description: 'refinement type in field - constraint satisfied',
+				expect: 'valid',
+				input: 'type Point\n\tx: i32<min=0>\n\ty: i32\np:Point =\n\tx: 5\n\ty: 10',
+			},
+			{
+				description: 'refinement type in field - constraint violated',
+				errorCode: 'TWCHECK041',
+				expect: 'check-error',
+				input: 'type Point\n\tx: i32<min=0>\n\ty: i32\np:Point =\n\tx: -5\n\ty: 10',
+			},
+			{
+				description: 'multiple refinement fields',
+				expect: 'valid',
+				input:
+					'type Bounded\n\ta: i32<min=0, max=100>\n\tb: i32<min=-10>\np:Bounded =\n\ta: 50\n\tb: -5',
+			},
+			{
+				description: 'refinement field max constraint violated',
+				errorCode: 'TWCHECK041',
+				expect: 'check-error',
+				input: 'type Bounded\n\ta: i32<max=10>\np:Bounded =\n\ta: 100',
+			},
 		])
 	)
 

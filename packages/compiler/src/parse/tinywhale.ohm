@@ -26,7 +26,7 @@ TinyWhale {
   TypeDecl = typeKeywordToken upperIdentifier
 
   // Primitive type reference (types that require inline expression)
-  PrimitiveTypeRef = ListType | HintedPrimitive | typeKeyword
+  PrimitiveTypeRef = ListType | RefinementType | typeKeyword
 
   // Binding for primitive types: expression required
   PrimitiveBinding = identifier colon PrimitiveTypeRef equals Expression
@@ -49,10 +49,10 @@ TinyWhale {
 
   // Type reference (primitives or user-defined)
   // ListType handles iterative nesting: i32[]<size=4>[]<size=2>
-  TypeRef = ListType | HintedPrimitive | upperIdentifier | typeKeyword
+  TypeRef = ListType | RefinementType | upperIdentifier | typeKeyword
 
-  // Hinted primitive: i32<min=0, max=100>
-  HintedPrimitive = typeKeyword TypeHints
+  // Refinement type: i32<min=0, max=100>
+  RefinementType = typeKeyword TypeHints
 
   // Type hints for constraints: <min=0, max=100> or <size=4>
   TypeHints = lessThan HintList greaterThan
@@ -66,7 +66,7 @@ TinyWhale {
   // Uses iterative suffixes to avoid left recursion
   ListType = ListTypeBase ListTypeSuffix+
   ListTypeSuffix = lbracket rbracket TypeHints
-  ListTypeBase = HintedPrimitive | upperIdentifier | typeKeyword
+  ListTypeBase = RefinementType | upperIdentifier | typeKeyword
   sizeKeyword = "size" ~identifierPart
 
   // Upper-case identifier for type names

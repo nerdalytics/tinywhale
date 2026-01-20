@@ -16,7 +16,7 @@ import type { NodeId } from '../core/nodes.ts'
 import { NodeKind } from '../core/nodes.ts'
 import { TokenKind } from '../core/tokens.ts'
 import type { CheckerState, ExprResult } from './state.ts'
-import { BuiltinTypeId, InstKind, type TypeId } from './types.ts'
+import { BuiltinTypeId, InstKind, type TypeConstraints, type TypeId } from './types.ts'
 import { fitsInConstraints, isIntegerType, splitBigIntTo32BitParts } from './utils.ts'
 
 // ============================================================================
@@ -218,11 +218,11 @@ export function resolveUserDefinedType(
 // Hinted Primitive Resolution (Internal Helpers)
 // ============================================================================
 
-function findHintedPrimitiveChild(
+function findRefinementTypeChild(
 	typeAnnotationId: NodeId,
 	context: CompilationContext
 ): NodeId | null {
-	return findChildByKind(typeAnnotationId, NodeKind.HintedPrimitive, context)
+	return findChildByKind(typeAnnotationId, NodeKind.RefinementType, context)
 }
 
 function hasMinOrMaxConstraint(constraints: { min?: bigint; max?: bigint } | null): boolean {
@@ -292,35 +292,46 @@ export function extractConstraintsFromTypeHints(
 }
 
 /**
- * Resolve a hinted primitive type (e.g., `i32<min=0, max=100>`).
+ * Apply refinement constraints to a base type.
+ * Returns refined type if constraints are valid, null if invalid.
  */
-export function resolveHintedPrimitive(
-	hintedPrimitiveId: NodeId,
+function applyRefinementConstraints(
+	baseType: { name: string; typeId: TypeId },
+	constraints: TypeConstraints,
+	refinementTypeId: NodeId,
 	state: CheckerState,
 	context: CompilationContext
 ): { name: string; typeId: TypeId } | null {
-	const hintedPrimitiveNode = context.nodes.get(hintedPrimitiveId)
-	const baseToken = context.tokens.get(hintedPrimitiveNode.tokenId)
-	const baseType = getTypeNameFromToken(baseToken.kind)
-	if (!baseType) return null
-
-	const typeHintsId = findChildByKind(hintedPrimitiveId, NodeKind.TypeHints, context)
-	if (typeHintsId === null) return baseType
-
-	const constraints = extractConstraintsFromTypeHints(typeHintsId, context)
-	if (!hasMinOrMaxConstraint(constraints)) return baseType
-
-	// min/max constraints can only be applied to integer types
 	if (!isIntegerType(baseType.typeId)) {
-		context.emitAtNode('TWCHECK040' as DiagnosticCode, hintedPrimitiveId, {
+		context.emitAtNode('TWCHECK040' as DiagnosticCode, refinementTypeId, {
 			type: baseType.name,
 		})
 		return null
 	}
-
-	// biome-ignore lint/style/noNonNullAssertion: constraints verified by hasMinOrMaxConstraint
-	const refinedTypeId = state.types.registerRefinedType(baseType.typeId, constraints!)
+	const refinedTypeId = state.types.registerRefinedType(baseType.typeId, constraints)
 	return { name: state.types.typeName(refinedTypeId), typeId: refinedTypeId }
+}
+
+/**
+ * Resolve a refinement type (e.g., `i32<min=0, max=100>`).
+ */
+export function resolveRefinementType(
+	refinementTypeId: NodeId,
+	state: CheckerState,
+	context: CompilationContext
+): { name: string; typeId: TypeId } | null {
+	const refinementTypeNode = context.nodes.get(refinementTypeId)
+	const baseToken = context.tokens.get(refinementTypeNode.tokenId)
+	const baseType = getTypeNameFromToken(baseToken.kind)
+	if (!baseType) return null
+
+	const typeHintsId = findChildByKind(refinementTypeId, NodeKind.TypeHints, context)
+	if (typeHintsId === null) return baseType
+
+	const constraints = extractConstraintsFromTypeHints(typeHintsId, context)
+	if (!constraints || !hasMinOrMaxConstraint(constraints)) return baseType
+
+	return applyRefinementConstraints(baseType, constraints, refinementTypeId, state, context)
 }
 
 // ============================================================================
@@ -329,7 +340,7 @@ export function resolveHintedPrimitive(
 
 /**
  * Resolve a type from a TypeAnnotation node.
- * Handles list types, hinted primitives, primitive types, and user-defined types.
+ * Handles list types, refinement types, primitive types, and user-defined types.
  */
 export function resolveTypeFromAnnotation(
 	typeAnnotationId: NodeId,
@@ -341,9 +352,9 @@ export function resolveTypeFromAnnotation(
 		return resolveListType(listTypeChildId, state, context)
 	}
 
-	const hintedPrimitiveId = findHintedPrimitiveChild(typeAnnotationId, context)
-	if (hintedPrimitiveId !== null) {
-		return resolveHintedPrimitive(hintedPrimitiveId, state, context)
+	const refinementTypeId = findRefinementTypeChild(typeAnnotationId, context)
+	if (refinementTypeId !== null) {
+		return resolveRefinementType(refinementTypeId, state, context)
 	}
 
 	const typeAnnotationNode = context.nodes.get(typeAnnotationId)

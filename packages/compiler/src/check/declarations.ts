@@ -15,7 +15,7 @@ import type { Token } from '../core/tokens.ts'
 import { nextTokenId, TokenKind } from '../core/tokens.ts'
 import type { CheckerState, TypeDeclContext } from './state.ts'
 import { currentBlockContext, popBlockContext, pushBlockContext } from './state.ts'
-import { getTypeNameFromToken } from './type-resolution.ts'
+import { getTypeNameFromToken, resolveListType, resolveRefinementType } from './type-resolution.ts'
 import type { TypeId } from './types.ts'
 
 // ============================================================================
@@ -141,6 +141,56 @@ function resolveFieldType(
 	return typeInfo.typeId
 }
 
+/**
+ * Maps node kinds to complex type identifiers for field type resolution.
+ */
+const complexTypeKinds = new Map<NodeKind, 'refinement' | 'list'>([
+	[NodeKind.RefinementType, 'refinement'],
+	[NodeKind.ListType, 'list'],
+])
+
+/**
+ * Find a complex type child (RefinementType or ListType) in a FieldDecl.
+ */
+function findComplexTypeChild(
+	fieldDeclId: NodeId,
+	context: CompilationContext
+): { kind: 'refinement' | 'list'; nodeId: NodeId } | null {
+	for (const [childId, child] of context.nodes.iterateChildren(fieldDeclId)) {
+		const kind = complexTypeKinds.get(child.kind)
+		if (kind) {
+			return { kind, nodeId: childId }
+		}
+	}
+	return null
+}
+
+/**
+ * Resolve field type by traversing node children.
+ * Handles refinement types, list types, user-defined types, and primitives.
+ */
+function resolveFieldTypeFromNode(
+	fieldDeclId: NodeId,
+	state: CheckerState,
+	context: CompilationContext
+): TypeId | null {
+	const complexType = findComplexTypeChild(fieldDeclId, context)
+	if (complexType) {
+		const result =
+			complexType.kind === 'refinement'
+				? resolveRefinementType(complexType.nodeId, state, context)
+				: resolveListType(complexType.nodeId, state, context)
+		return result?.typeId ?? null
+	}
+
+	// Fall back to token-based resolution for simple types (primitives, user-defined)
+	const fieldDeclNode = context.nodes.get(fieldDeclId)
+	const typeTokenId = (fieldDeclNode.tokenId as number) + 2
+	const typeToken = context.tokens.get(typeTokenId as typeof fieldDeclNode.tokenId)
+
+	return resolveFieldType(typeToken, fieldDeclId, state, context)
+}
+
 // ============================================================================
 // Field Context Management (Internal)
 // ============================================================================
@@ -191,12 +241,7 @@ export function processFieldDecl(
 	const fieldToken = context.tokens.get(fieldDeclNode.tokenId)
 	const fieldName = context.strings.get(fieldToken.payload as StringId)
 
-	// Get the type token (field token + 2: skip colon)
-	// Token layout: Identifier, Colon, TypeKeyword/Identifier
-	const typeTokenId = (fieldDeclNode.tokenId as number) + 2
-	const typeToken = context.tokens.get(typeTokenId as typeof fieldDeclNode.tokenId)
-
-	const fieldTypeId = resolveFieldType(typeToken, fieldDeclId, state, context)
+	const fieldTypeId = resolveFieldTypeFromNode(fieldDeclId, state, context)
 	if (!fieldTypeId) return
 
 	addFieldToTypeDeclContext(ctx, fieldName, fieldTypeId, fieldDeclId, context)
