@@ -11,7 +11,8 @@ TinyWhale {
   newline = "\n" | "\r\n" | "\r"
 
   // IndentedLine can contain a MatchArm, Statement, FieldDecl, or FieldInit
-  // FieldInit comes before FieldDecl: uppercase identifiers are tried as NestedRecordInit first
+  // FieldDecl (with :) for type declarations or nested record init (context-dependent)
+  // FieldInit (with =) for value assignments
   // When dedenting from level N to level M (where M > 0), tokenizer emits both indent and dedent tokens.
   // anyDedent* handles the dedent tokens that follow the indent marker.
   IndentedLine = indentToken anyDedent* IndentedContent?
@@ -32,7 +33,7 @@ TinyWhale {
   PrimitiveBinding = identifier colon PrimitiveTypeRef equals Expression
 
   // Binding for record types: no expression, block follows
-  RecordBinding = identifier colon upperIdentifier equals
+  RecordBinding = identifier colon upperIdentifier
 
   // TypeAnnotation used by MatchBinding
   TypeAnnotation = colon TypeRef
@@ -40,12 +41,8 @@ TinyWhale {
   // Field declaration inside type (on indented line)
   FieldDecl = lowerIdentifier colon TypeRef
 
-  // Field initialization: x: 5 or inner: Inner (nested construction)
-  FieldInit = lowerIdentifier colon FieldValue
-  FieldValue = NestedRecordInit | Expression
-
-  // Nested record construction (typename signals block follows)
-  NestedRecordInit = upperIdentifier
+  // Field value initialization: x = 50
+  FieldInit = lowerIdentifier equals Expression
 
   // Type reference (primitives or user-defined)
   // ListType handles iterative nesting: i32[]<size=4>[]<size=2>
