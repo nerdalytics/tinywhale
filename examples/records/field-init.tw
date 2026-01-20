@@ -5,14 +5,14 @@ type Point
     x: i32
     y: i32
 
-p1: Point =
-    x: 10
-    y: 20
+p1:Point
+    x = 10
+    y = 20
 
 # Initialize p2 using field access from p1
-p2: Point =
-    x: p1.x
-    y: p1.y
+p2:Point
+    x = p1.x
+    y = p1.y
 
 # Combine fields from different records
 sum: i32 = p1.x + p2.y

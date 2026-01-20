@@ -10,12 +10,12 @@ type Level1
     level2: Level2
     a: i32
 
-root: Level1 =
+root:Level1
     level2: Level2
         level3: Level3
-            value: 123
-        b: 20
-    a: 10
+            value = 123
+        b = 20
+    a = 10
 
 # Access through all levels
 deep: i32 = root.level2.level3.value
