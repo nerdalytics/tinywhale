@@ -104,15 +104,27 @@ export class ScopeStore {
 }
 
 /**
+ * A scope frame holds bindings visible within that scope.
+ */
+interface ScopeFrame {
+	readonly bindings: Map<StringId, SymbolId>
+}
+
+/**
  * Dense array storage for symbols (variable bindings).
  * Supports shadowing: same name can be bound multiple times,
  * each with a fresh local index.
  */
 export class SymbolStore {
 	private readonly symbols: SymbolEntry[] = []
-	private readonly nameToSymbol: Map<StringId, SymbolId> = new Map()
+	private readonly scopeStack: ScopeFrame[] = []
 	private nextLocalIndex = 0
 	private readonly listBindings: Map<StringId, TypeId> = new Map()
+
+	constructor() {
+		// Push global scope - never popped
+		this.scopeStack.push({ bindings: new Map() })
+	}
 
 	add(entry: Omit<SymbolEntry, 'localIndex'>): SymbolId {
 		const localIndex = this.nextLocalIndex++
