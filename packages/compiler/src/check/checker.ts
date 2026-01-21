@@ -47,7 +47,7 @@ import {
 	isInTypeDeclContext,
 } from './state.ts'
 import { FuncStore, InstStore, ScopeStore, SymbolStore, TypeStore } from './stores.ts'
-import { BuiltinTypeId, type CheckResult, InstKind, type TypeId } from './types.ts'
+import { BuiltinTypeId, type CheckResult, type InstId, InstKind, type TypeId } from './types.ts'
 import { isStatementNode, isTerminator } from './utils.ts'
 
 function getStatementFromLine(
@@ -165,7 +165,7 @@ function emitStatement(
 			handleFuncDecl(stmtId, state, context)
 			break
 		case NodeKind.FuncBinding:
-			handleFuncBinding(stmtId, state, context, checkExpression)
+			handleFuncBinding(stmtId, state, context, checkExpressionWithSequence)
 			break
 		case NodeKind.PrimitiveBinding:
 			processPrimitiveBinding(stmtId, state, context)
@@ -187,6 +187,105 @@ function emitStatement(
 		case NodeKind.MatchExpr:
 			break
 	}
+}
+
+// ============================================================================
+// Expression Sequence Handling (for lambda bodies)
+// ============================================================================
+
+/**
+ * Collect children from an expression sequence in source order.
+ */
+function collectSequenceChildren(
+	seqId: NodeId,
+	context: CompilationContext
+): Array<{ id: NodeId; kind: NodeKind }> {
+	const children: Array<{ id: NodeId; kind: NodeKind }> = []
+	for (const [childId, child] of context.nodes.iterateChildren(seqId)) {
+		children.push({ id: childId, kind: child.kind })
+	}
+	return children.reverse()
+}
+
+/**
+ * Process all non-last children in an expression sequence as statements.
+ */
+function processSequenceStatements(
+	children: Array<{ id: NodeId; kind: NodeKind }>,
+	state: CheckerState,
+	context: CompilationContext
+): void {
+	for (let i = 0; i < children.length - 1; i++) {
+		const child = children[i]
+		if (child !== undefined && isStatementNode(child.kind)) {
+			emitStatementInLambdaBody(child.id, child.kind, state, context)
+		}
+	}
+}
+
+/**
+ * Check an expression sequence (multi-line lambda body).
+ * Processes all children in order, returning the type of the last expression.
+ */
+function checkExpressionSequence(
+	seqId: NodeId,
+	expectedType: TypeId,
+	state: CheckerState,
+	context: CompilationContext
+): { instId: InstId | null; typeId: TypeId } {
+	const children = collectSequenceChildren(seqId, context)
+	if (children.length === 0) {
+		return { instId: null, typeId: BuiltinTypeId.None }
+	}
+
+	processSequenceStatements(children, state, context)
+
+	const lastChild = children[children.length - 1]
+	if (lastChild === undefined) {
+		return { instId: null, typeId: BuiltinTypeId.None }
+	}
+
+	return checkExpressionWithSequence(lastChild.id, expectedType, state, context)
+}
+
+/**
+ * Emit a statement within a lambda body expression sequence.
+ * Handles bindings and function declarations that can appear in multi-line lambdas.
+ */
+function emitStatementInLambdaBody(
+	stmtId: NodeId,
+	stmtKind: NodeKind,
+	state: CheckerState,
+	context: CompilationContext
+): void {
+	switch (stmtKind) {
+		case NodeKind.FuncDecl:
+			handleFuncDecl(stmtId, state, context)
+			break
+		case NodeKind.FuncBinding:
+			handleFuncBinding(stmtId, state, context, checkExpressionWithSequence)
+			break
+		case NodeKind.PrimitiveBinding:
+			processPrimitiveBinding(stmtId, state, context)
+			break
+	}
+}
+
+/**
+ * Check an expression, handling ExpressionSequence specially for lambda bodies.
+ * This wrapper is passed to handleFuncBinding to support multi-line function bodies.
+ */
+function checkExpressionWithSequence(
+	exprId: NodeId,
+	expectedType: TypeId,
+	state: CheckerState,
+	context: CompilationContext
+): { instId: InstId | null; typeId: TypeId } {
+	const node = context.nodes.get(exprId)
+	if (node.kind === NodeKind.ExpressionSequence) {
+		return checkExpressionSequence(exprId, expectedType, state, context)
+	}
+	return checkExpression(exprId, expectedType, state, context)
 }
 
 function flushUnreachableWarning(state: CheckerState, context: CompilationContext): void {
@@ -408,7 +507,11 @@ function handleDedentLine(lineId: NodeId, state: CheckerState, context: Compilat
 		return
 	}
 
-	context.emitAtNode('TWCHECK001' as DiagnosticCode, lineId)
+	// No special context - this happens when returning from lambda body indentation.
+	// Lambda bodies with expression sequences have their indented lines grouped into
+	// the ExpressionSequence node, so the checker only sees the DedentLine after.
+	// Process the statement normally.
+	processDedentLineStatement(lineId, state, context)
 }
 
 /**

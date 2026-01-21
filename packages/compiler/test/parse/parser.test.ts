@@ -1,7 +1,8 @@
 import assert from 'node:assert'
 import { describe, it } from 'node:test'
 import { CompilationContext } from '../../src/core/context.ts'
-import { type NodeId, NodeKind } from '../../src/core/nodes.ts'
+import type { NodeId } from '../../src/core/nodes.ts'
+import { NodeKind } from '../../src/core/nodes.ts'
 import { tokenize } from '../../src/lex/tokenizer.ts'
 import { matchOnly, parse } from '../../src/parse/parser.ts'
 
@@ -809,7 +810,7 @@ describe('parse/parser', () => {
 
 	describe('list in record type parsing', () => {
 		it('should parse record type with list field', () => {
-			const source = `type Foo
+			const source = `Foo
     items: i32[]<size=3>
 panic`
 			const ctx = new CompilationContext(source)
@@ -819,7 +820,7 @@ panic`
 		})
 
 		it('should parse record type with multiple list fields', () => {
-			const source = `type Data
+			const source = `Data
     xs: i32[]<size=4>
     ys: f64[]<size=4>
 panic`
@@ -830,7 +831,7 @@ panic`
 		})
 
 		it('should parse record type with nested list field', () => {
-			const source = `type Matrix
+			const source = `Matrix
     data: i32[]<size=3>[]<size=3>
 panic`
 			const ctx = new CompilationContext(source)
@@ -842,7 +843,7 @@ panic`
 
 	describe('list literal in record init parsing', () => {
 		it('should parse record initialization with list field', () => {
-			const source = `type Foo
+			const source = `Foo
     items: i32[]<size=3>
 f:Foo
     items = [1, 2, 3]
@@ -854,7 +855,7 @@ panic`
 		})
 
 		it('should parse record initialization with nested list field', () => {
-			const source = `type Matrix
+			const source = `Matrix
     data: i32[]<size=2>[]<size=2>
 m:Matrix
     data = [[1, 2], [3, 4]]
@@ -866,7 +867,7 @@ panic`
 		})
 
 		it('should parse record initialization with multiple list fields', () => {
-			const source = `type Data
+			const source = `Data
     xs: i32[]<size=2>
     ys: i32[]<size=2>
 d:Data

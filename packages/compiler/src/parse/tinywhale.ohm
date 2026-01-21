@@ -21,23 +21,37 @@ TinyWhale {
   DedentLine = anyDedent+ Statement?
 
   // Statements
-  Statement = TypeDecl | MatchBinding | MatchExpr | FuncDecl | FuncBinding | PrimitiveBinding | RecordBinding | PanicStatement
+  Statement = RecordTypeDecl | TypeAlias | MatchBinding | MatchExpr | FuncDecl | FuncBinding | PrimitiveBinding | RecordBinding | PanicStatement
   PanicStatement = panic
 
   // Function forward declaration: factorial: (i32) -> i32
   FuncDecl = identifier colon FuncType
 
   // Lambda expression: (x: i32): i32 -> x * 2
+  // LambdaBody can be:
+  //   - Single inline expression: (x: i32): i32 -> x * 2
+  //   - Block with expression sequence:
+  //       (x: i32): i32 ->
+  //           y: i32 = x * 2
+  //           y + 1
   Lambda = lparen ParameterList? rparen (colon TypeRef)? arrow LambdaBody
   ParameterList = Parameter (comma Parameter)*
   Parameter = identifier colon TypeRef
-  LambdaBody = Expression
+  LambdaBody = LambdaBlock | Expression
+  LambdaBlock = newline LambdaBlockLine (newline LambdaBlockLine)*
+  LambdaBlockLine = indentToken anyDedent* BlockExpression
+  BlockExpression = FuncDecl | FuncBinding | PrimitiveBinding | MatchBinding | MatchExpr | Expression
 
   // Function binding: double = (x: i32): i32 -> x * 2
-  FuncBinding = identifier equals Lambda
+  // With optional type annotation: add: Add = (a: i32, b: i32): i32 -> a + b
+  FuncBinding = identifier (colon TypeRef)? equals Lambda
 
-  // Type declaration: type Point
-  TypeDecl = typeKeywordToken upperIdentifier
+  // Record type declaration: Point (followed by indented FieldDecls)
+  // Use negative lookahead to avoid matching TypeAlias (= TypeRef) or bindings (: Type)
+  RecordTypeDecl = upperIdentifier ~(equals | colon)
+
+  // Type alias (no `type` keyword): Add = (i32, i32) -> i32
+  TypeAlias = upperIdentifier equals TypeRef
 
   // Primitive type reference (types that require inline expression)
   PrimitiveTypeRef = ListType | RefinementType | typeKeyword
@@ -149,11 +163,10 @@ TinyWhale {
   unaryOp = minus | tilde
 
   // Keywords
-  keyword = panic | typeKeyword | matchKeyword | typeKeywordToken
+  keyword = panic | typeKeyword | matchKeyword
   typeKeyword = i32 | i64 | f32 | f64
   panic = "panic" ~identifierPart
   matchKeyword = "match" ~identifierPart
-  typeKeywordToken = "type" ~identifierPart
   i32 = "i32" ~identifierPart
   i64 = "i64" ~identifierPart
   f32 = "f32" ~identifierPart

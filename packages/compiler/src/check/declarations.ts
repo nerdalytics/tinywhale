@@ -12,7 +12,7 @@ import type { DiagnosticCode } from '../core/diagnostics.ts'
 import type { NodeId } from '../core/nodes.ts'
 import { NodeKind } from '../core/nodes.ts'
 import type { Token } from '../core/tokens.ts'
-import { nextTokenId, TokenKind } from '../core/tokens.ts'
+import { TokenKind } from '../core/tokens.ts'
 import type { CheckerState, TypeDeclContext } from './state.ts'
 import { currentBlockContext, popBlockContext, pushBlockContext } from './state.ts'
 import { getTypeNameFromToken, resolveListType, resolveRefinementType } from './type-resolution.ts'
@@ -66,10 +66,8 @@ export function startTypeDecl(
 	context: CompilationContext
 ): void {
 	const typeDeclNode = context.nodes.get(typeDeclId)
-	// TypeDecl node's tokenId points to the 'type' keyword
-	// The type name is in the next token (the identifier)
-	const identTokenId = nextTokenId(typeDeclNode.tokenId)
-	const identToken = context.tokens.get(identTokenId)
+	// TypeDecl node's tokenId points directly to the type name identifier
+	const identToken = context.tokens.get(typeDeclNode.tokenId)
 	const typeName = context.strings.get(identToken.payload as StringId)
 
 	pushBlockContext(state, {

@@ -94,7 +94,7 @@ panic`
 			})
 
 			it('errors when indexing a record', () => {
-				const source = `type Point
+				const source = `Point
     x: i32
     y: i32
 p: Point =
@@ -133,7 +133,7 @@ panic`
 
 	describe('list type field declaration in records', () => {
 		it('parses record type with list field', () => {
-			const source = `type Data
+			const source = `Data
     items: i32[]<size=3>
 panic`
 			const ctx = createContext(source)
@@ -144,7 +144,7 @@ panic`
 		})
 
 		it('checks record type with list field - type registered', () => {
-			const source = `type Data
+			const source = `Data
     items: i32[]<size=3>
 panic`
 			const ctx = prepareAndCheck(source)
@@ -161,7 +161,7 @@ panic`
 
 	describe('future: list in record field initialization', () => {
 		it('documents expected: list field init in record should work', () => {
-			const source = `type Data
+			const source = `Data
     items: i32[]<size=1>
 d:Data
     items = [99]

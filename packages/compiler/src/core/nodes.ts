@@ -19,6 +19,7 @@ export const NodeKind = {
 
 	// Structure (0-9, 255)
 	DedentLine: 1,
+	ExpressionSequence: 116,
 	FieldAccess: 109,
 
 	// Type/Field declarations (50-59)
@@ -54,6 +55,7 @@ export const NodeKind = {
 	RecordLiteral: 107,
 	RefinementType: 154,
 	RootLine: 2,
+	TypeAlias: 18,
 	TypeAnnotation: 150,
 	TypeBounds: 155,
 	TypeDecl: 50,

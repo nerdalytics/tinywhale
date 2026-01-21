@@ -1,8 +1,8 @@
 # TinyWhale: Nested record instantiation with sibling fields
-type Inner
+Inner
     val: i32
 
-type Outer
+Outer
     inner: Inner
     x: i32
 
