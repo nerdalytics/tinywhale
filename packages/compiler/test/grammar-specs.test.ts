@@ -462,6 +462,60 @@ test('Grammar Specs', async (t) => {
 		}
 	})
 
+	await t.test('Functions', (t) => {
+		const tester = createTester(grammar, 'Functions', 'Program')
+
+		tester.match(
+			prepareList([
+				// [GRAMMAR] Function forward declaration
+				'factorial: (i32) -> i32',
+				'add: (i32, i32) -> i32',
+				'getValue: () -> i32',
+				'f: (i32, i32, i32) -> i64',
+
+				// [GRAMMAR] Simple function binding
+				'double = (x: i32): i32 -> x * 2',
+				'add = (a: i32, b: i32): i32 -> a + b',
+				'getValue = (): i32 -> 42',
+
+				// [GRAMMAR] Function call
+				'result:i32 = add(1, 2)',
+				'result:i32 = double(21)',
+				'result:i32 = getValue()',
+
+				// [GRAMMAR] Function call in expression
+				'result:i32 = add(1, 2) + 3',
+				'result:i32 = double(add(1, 2))',
+
+				// [GRAMMAR] Forward declaration followed by definition
+				'factorial: (i32) -> i32\nfactorial = (n: i32): i32 -> n',
+
+				// [GRAMMAR] Function with omitted return type (inferred)
+				'double = (x: i32) -> x * 2',
+			])
+		)
+
+		tester.reject(
+			prepareList([
+				'f: i32 -> i32', // Missing parens around param types
+				'f = (x): i32 -> x', // Missing param type annotation
+				'f = (x: i32) ->', // Missing body
+				'f = -> 42', // Missing parameter list
+			])
+		)
+
+		const result = tester.run()
+		if (result.failed > 0) {
+			for (const r of result.results) {
+				if (!r.passed) {
+					t.diagnostic(`[FAILED] ${r.expected} '${r.input}': ${r.errorMessage}`)
+					t.diagnostic(`Prepared Input: ${JSON.stringify(r.input)}`)
+				}
+			}
+			assert.fail(`Failed ${result.failed} grammar tests`)
+		}
+	})
+
 	await t.test('Identifiers', (t) => {
 		const tester = createTester(grammar, 'Identifiers', 'Program')
 
