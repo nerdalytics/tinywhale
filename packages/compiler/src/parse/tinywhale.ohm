@@ -26,6 +26,12 @@ TinyWhale {
   // Function forward declaration: factorial: (i32) -> i32
   FuncDecl = identifier colon FuncType
 
+  // Lambda expression: (x: i32): i32 -> x * 2
+  Lambda = lparen ParameterList? rparen (colon TypeRef)? arrow LambdaBody
+  ParameterList = Parameter (comma Parameter)*
+  Parameter = identifier colon TypeRef
+  LambdaBody = Expression
+
   // Type declaration: type Point
   TypeDecl = typeKeywordToken upperIdentifier
 
