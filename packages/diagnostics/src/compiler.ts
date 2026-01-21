@@ -339,6 +339,14 @@ export const TWCHECK050: DiagnosticDef = {
 	suggestion: 'You can safely remove this code, or move it before the exit point.',
 }
 
+export const TWCHECK051: DiagnosticDef = {
+	code: 'TWCHECK051',
+	description: 'A variable binding is hiding a function with the same name.',
+	message: "shadowing function '{name}'",
+	severity: DiagnosticSeverity.Warning,
+	suggestion: 'Consider using a different variable name to avoid confusion.',
+}
+
 // =============================================================================
 // CODEGEN ERRORS (TWGEN001-099)
 // =============================================================================
@@ -388,6 +396,7 @@ export const COMPILER_DIAGNOSTICS = {
 	TWCHECK041,
 	TWCHECK042,
 	TWCHECK050,
+	TWCHECK051,
 	TWGEN001,
 	TWLEX001,
 	TWLEX002,
