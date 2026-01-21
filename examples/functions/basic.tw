@@ -1,0 +1,15 @@
+# Basic function examples
+
+# Single expression function
+double = (x: i32): i32 -> x * 2
+
+# Multiple parameters
+add = (a: i32, b: i32): i32 -> a + b
+
+# Zero parameters
+get_answer = (): i32 -> 42
+
+# Using functions
+a:i32 = double(21)
+b:i32 = add(10, 20)
+c:i32 = get_answer()

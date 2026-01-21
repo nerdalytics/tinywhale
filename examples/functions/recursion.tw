@@ -1,0 +1,17 @@
+# Recursive functions require forward declaration
+
+factorial: (i32) -> i32
+factorial = (n: i32): i32 ->
+    match n
+        0 -> 1
+        _ -> n * factorial(n - 1)
+
+fib: (i32) -> i32
+fib = (n: i32): i32 ->
+    match n
+        0 -> 0
+        1 -> 1
+        _ -> fib(n - 1) + fib(n - 2)
+
+fact5:i32 = factorial(5)
+fib10:i32 = fib(10)
