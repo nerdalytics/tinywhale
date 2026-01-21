@@ -20,7 +20,7 @@ TinyWhale {
   DedentLine = anyDedent+ Statement?
 
   // Statements
-  Statement = TypeDecl | MatchBinding | MatchExpr | FuncDecl | PrimitiveBinding | RecordBinding | PanicStatement
+  Statement = TypeDecl | MatchBinding | MatchExpr | FuncDecl | FuncBinding | PrimitiveBinding | RecordBinding | PanicStatement
   PanicStatement = panic
 
   // Function forward declaration: factorial: (i32) -> i32
@@ -31,6 +31,9 @@ TinyWhale {
   ParameterList = Parameter (comma Parameter)*
   Parameter = identifier colon TypeRef
   LambdaBody = Expression
+
+  // Function binding: double = (x: i32): i32 -> x * 2
+  FuncBinding = identifier equals Lambda
 
   // Type declaration: type Point
   TypeDecl = typeKeywordToken upperIdentifier
