@@ -9,14 +9,9 @@
 
 import type { CompilationContext, StringId } from '../core/context.ts'
 import type { DiagnosticCode } from '../core/diagnostics.ts'
-import { type NodeId, NodeKind, prevNodeId } from '../core/nodes.ts'
+import { type NodeId, NodeKind } from '../core/nodes.ts'
 import { TokenKind } from '../core/tokens.ts'
-import {
-	type CheckerState,
-	type FuncDefContext,
-	popBlockContext,
-	pushBlockContext,
-} from './state.ts'
+import type { CheckerState } from './state.ts'
 import { resolveTypeFromAnnotation } from './type-resolution.ts'
 import { BuiltinTypeId, InstKind, type InstId, type SymbolId, type TypeId } from './types.ts'
 
@@ -156,18 +151,27 @@ function resolveTypeRef(
 }
 
 /**
- * Start processing a function binding: double = (x: i32): i32 -> expr
+ * Handle a function binding: double = (x: i32): i32 -> expr
+ * This processes the entire binding including checking the body expression.
  */
-export function startFuncBinding(
+export function handleFuncBinding(
 	bindingId: NodeId,
 	state: CheckerState,
-	context: CompilationContext
+	context: CompilationContext,
+	checkExpr: (exprId: NodeId, expectedType: TypeId, state: CheckerState, context: CompilationContext) => { instId: InstId | null; typeId: TypeId }
 ): void {
 	const funcs = context.funcs
 	if (!funcs) return
 
 	const { nameId, lambdaId } = extractFuncBindingParts(bindingId, context)
-	const { paramNames, paramTypes, returnType } = parseLambdaSignature(lambdaId, state, context)
+	const { paramNames, paramTypes, returnType, bodyExprId } = parseLambdaSignature(lambdaId, state, context)
+
+	if (bodyExprId === null) {
+		context.emitAtNode('TWCHECK010' as DiagnosticCode, bindingId, {
+			found: 'lambda without body',
+		})
+		return
+	}
 
 	const funcTypeId = state.types.registerFuncType(paramTypes, returnType)
 
@@ -188,6 +192,8 @@ export function startFuncBinding(
 		}
 	}
 
+	state.symbols.pushScope()
+
 	const paramSymbols: SymbolId[] = []
 	for (let i = 0; i < paramNames.length; i++) {
 		const paramNameId = paramNames[i]
@@ -201,15 +207,30 @@ export function startFuncBinding(
 		paramSymbols.push(symId)
 	}
 
-	const funcDefCtx: FuncDefContext = {
-		bodyInsts: [],
-		funcId,
-		funcNodeId: bindingId,
-		kind: 'FuncDef',
-		paramSymbols,
-		returnType,
+	const bodyResult = checkExpr(bodyExprId, returnType, state, context)
+
+	state.symbols.popScope()
+
+	if (bodyResult.instId === null) {
+		return
 	}
-	pushBlockContext(state, funcDefCtx)
+
+	if (bodyResult.typeId !== returnType && bodyResult.typeId !== BuiltinTypeId.None) {
+		context.emitAtNode('TWCHECK016' as DiagnosticCode, bindingId, {
+			expected: state.types.typeName(returnType),
+			found: state.types.typeName(bodyResult.typeId),
+		})
+	}
+
+	state.insts.add({
+		arg0: funcId as number,
+		arg1: bodyResult.instId as number,
+		kind: InstKind.FuncDef,
+		parseNodeId: bindingId,
+		typeId: BuiltinTypeId.None,
+	})
+
+	funcs.defineFunc(funcId, bodyResult.instId, paramSymbols)
 }
 
 /**
@@ -239,16 +260,17 @@ function extractFuncBindingParts(
 }
 
 /**
- * Parse lambda signature to extract parameter names, types, and return type.
+ * Parse lambda signature to extract parameter names, types, return type, and body expression.
  */
 function parseLambdaSignature(
 	lambdaId: NodeId,
 	state: CheckerState,
 	context: CompilationContext
-): { paramNames: StringId[]; paramTypes: TypeId[]; returnType: TypeId } {
+): { paramNames: StringId[]; paramTypes: TypeId[]; returnType: TypeId; bodyExprId: NodeId | null } {
 	const paramNames: StringId[] = []
 	const paramTypes: TypeId[] = []
 	let returnType: TypeId = BuiltinTypeId.I32
+	let bodyExprId: NodeId | null = null
 
 	for (const [childId, child] of context.nodes.iterateChildren(lambdaId)) {
 		if (child.kind === NodeKind.ParameterList) {
@@ -264,10 +286,12 @@ function parseLambdaSignature(
 			if (resolved) {
 				returnType = resolved.typeId
 			}
+		} else {
+			bodyExprId = childId
 		}
 	}
 
-	return { paramNames, paramTypes, returnType }
+	return { bodyExprId, paramNames, paramTypes, returnType }
 }
 
 /**
@@ -303,56 +327,6 @@ function parseParameter(
 	}
 
 	return { nameId, typeId }
-}
-
-/**
- * Get the body expression node from a Lambda.
- */
-export function getLambdaBodyExpr(
-	bindingId: NodeId,
-	context: CompilationContext
-): NodeId | null {
-	for (const [childId, child] of context.nodes.iterateChildren(bindingId)) {
-		if (child.kind === NodeKind.Lambda) {
-			return prevNodeId(childId)
-		}
-	}
-	return null
-}
-
-/**
- * Finalize a function definition after its body has been checked.
- */
-export function finalizeFuncDef(
-	bodyInstId: InstId,
-	state: CheckerState,
-	context: CompilationContext
-): void {
-	const ctx = popBlockContext(state)
-	if (!ctx || ctx.kind !== 'FuncDef') return
-
-	const funcs = context.funcs
-	if (!funcs) return
-
-	const funcCtx = ctx as FuncDefContext
-
-	const bodyInst = state.insts.get(bodyInstId)
-	if (bodyInst.typeId !== funcCtx.returnType && bodyInst.typeId !== BuiltinTypeId.None) {
-		context.emitAtNode('TWCHECK016' as DiagnosticCode, funcCtx.funcNodeId, {
-			expected: state.types.typeName(funcCtx.returnType),
-			found: state.types.typeName(bodyInst.typeId),
-		})
-	}
-
-	state.insts.add({
-		arg0: funcCtx.funcId as number,
-		arg1: bodyInstId as number,
-		kind: InstKind.FuncDef,
-		parseNodeId: funcCtx.funcNodeId,
-		typeId: BuiltinTypeId.None,
-	})
-
-	funcs.defineFunc(funcCtx.funcId, bodyInstId, funcCtx.paramSymbols)
 }
 
 /**

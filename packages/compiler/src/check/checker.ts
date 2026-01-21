@@ -24,6 +24,8 @@ import {
 	processFieldDecl,
 	startTypeDecl,
 } from './declarations.ts'
+import { checkExpression } from './expressions.ts'
+import { handleFuncBinding, handleFuncDecl } from './funcs.ts'
 import { finalizeMatch, getMatchArmFromLine, processMatchArm, startMatchBinding } from './match.ts'
 import {
 	extractFieldDeclName,
@@ -158,6 +160,12 @@ function emitStatement(
 				parseNodeId: stmtId,
 				typeId: BuiltinTypeId.None,
 			})
+			break
+		case NodeKind.FuncDecl:
+			handleFuncDecl(stmtId, state, context)
+			break
+		case NodeKind.FuncBinding:
+			handleFuncBinding(stmtId, state, context, checkExpression)
 			break
 		case NodeKind.PrimitiveBinding:
 			processPrimitiveBinding(stmtId, state, context)
