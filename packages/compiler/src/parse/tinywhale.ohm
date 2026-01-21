@@ -1,7 +1,8 @@
 TinyWhale {
   // Program structure: newlines are required between lines, not consumed as whitespace
   // This ensures "panic panic" (two statements on one line) is rejected
-  Program (a program) = Line? (newline Line)* newline?
+  // Line? after newline allows blank lines between statements
+  Program (a program) = Line? (newline Line?)* newline?
   Line (a line) = IndentedLine | DedentLine | RootLine
 
   // RootLine is just a statement (newlines handled by Program rule)

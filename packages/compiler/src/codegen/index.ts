@@ -145,7 +145,6 @@ function emitVarRef(
 ): binaryen.ExpressionRef | null {
 	const symId = getVarRefSymbolId(inst)
 
-	// Check if this is a param reference in current function context
 	if (currentParamMap) {
 		const paramIndex = currentParamMap.get(symId)
 		if (paramIndex !== undefined) {
@@ -687,6 +686,36 @@ function emitMatch(
 	return buildMatchChain(mod, scrutineeExpr, arms, inst.typeId, valueMap, context)
 }
 
+function resolveCalleeInfo(
+	inst: Inst,
+	context: CompilationContext
+): { calleeInstId: InstId; funcName: string } | null {
+	const calleeInstId = getCallCalleeId(inst)
+	const calleeInst = context.insts?.get(calleeInstId)
+	if (!calleeInst) return null
+	if (calleeInst.kind !== InstKind.VarRef) return null
+
+	const symId = getVarRefSymbolId(calleeInst)
+	const symbol = context.symbols?.get(symId)
+	if (!symbol) return null
+
+	return { calleeInstId, funcName: context.strings.get(symbol.nameId) }
+}
+
+function collectCallArgExprs(
+	calleeInstId: InstId,
+	argCount: number,
+	valueMap: Map<InstId, binaryen.ExpressionRef>
+): binaryen.ExpressionRef[] {
+	const argExprs: binaryen.ExpressionRef[] = []
+	for (let i = 1; i <= argCount; i++) {
+		const argInstId = instId((calleeInstId as number) + i)
+		const argExpr = valueMap.get(argInstId)
+		if (argExpr !== undefined) argExprs.push(argExpr)
+	}
+	return argExprs
+}
+
 /**
  * Emit a function call.
  * arg0 = callee InstId (VarRef to function symbol)
@@ -700,33 +729,13 @@ function emitCall(
 	valueMap: Map<InstId, binaryen.ExpressionRef>,
 	context: CompilationContext
 ): binaryen.ExpressionRef | null {
-	const calleeInstId = getCallCalleeId(inst)
+	const calleeInfo = resolveCalleeInfo(inst, context)
+	if (!calleeInfo) return null
+
 	const argCount = getCallArgCount(inst)
-
-	// Get the callee instruction to find the function symbol
-	const calleeInst = context.insts?.get(calleeInstId)
-	if (!calleeInst || calleeInst.kind !== InstKind.VarRef) return null
-
-	const symId = getVarRefSymbolId(calleeInst)
-	const symbol = context.symbols?.get(symId)
-	if (!symbol) return null
-
-	// Get function name from symbol
-	const funcName = context.strings.get(symbol.nameId)
-
-	// Collect argument expressions
-	// Arguments are the instructions between callee and this Call instruction
-	const argExprs: binaryen.ExpressionRef[] = []
-	for (let i = 1; i <= argCount; i++) {
-		const argInstId = instId((calleeInstId as number) + i)
-		const argExpr = valueMap.get(argInstId)
-		if (argExpr !== undefined) {
-			argExprs.push(argExpr)
-		}
-	}
-
+	const argExprs = collectCallArgExprs(calleeInfo.calleeInstId, argCount, valueMap)
 	const returnType = toBinaryenType(inst.typeId, context)
-	return mod.call(funcName, argExprs, returnType)
+	return mod.call(calleeInfo.funcName, argExprs, returnType)
 }
 
 /**
@@ -749,7 +758,6 @@ function markExpressionTree(
 	const inst = context.insts?.get(rootInstId)
 	if (!inst) return
 
-	// Mark dependencies based on instruction kind
 	switch (inst.kind) {
 		case InstKind.BinaryOp:
 			markExpressionTree(getBinaryOpLeftId(inst), context, marked)
@@ -769,8 +777,19 @@ function markExpressionTree(
 			markExpressionTree(getLogicalOrLeftId(inst), context, marked)
 			markExpressionTree(getLogicalOrRightId(inst), context, marked)
 			break
-		// Leaf nodes: IntConst, FloatConst, VarRef - no dependencies
 	}
+}
+
+function emitBodyInstruction(
+	mod: binaryen.Module,
+	id: InstId,
+	valueMap: Map<InstId, binaryen.ExpressionRef>,
+	context: CompilationContext
+): void {
+	const inst = context.insts?.get(id)
+	if (!inst) return
+	const expr = emitInstruction(mod, inst, id, valueMap, context)
+	if (expr !== null) valueMap.set(id, expr)
 }
 
 /**
@@ -782,36 +801,30 @@ function emitFuncBody(
 	context: CompilationContext
 ): binaryen.ExpressionRef {
 	const valueMap = new Map<InstId, binaryen.ExpressionRef>()
-
-	// Collect all instructions that are part of this body
 	const bodyInsts = new Set<InstId>()
 	markExpressionTree(bodyInstId, context, bodyInsts)
 
-	// Process instructions in order (lower InstIds first)
 	const sortedInsts = Array.from(bodyInsts).sort((a, b) => (a as number) - (b as number))
-
 	for (const id of sortedInsts) {
-		const inst = context.insts?.get(id)
-		if (!inst) continue
-
-		const expr = emitInstruction(mod, inst, id, valueMap, context)
-		if (expr !== null) {
-			valueMap.set(id, expr)
-		}
+		emitBodyInstruction(mod, id, valueMap, context)
 	}
 
-	const result = valueMap.get(bodyInstId)
-	return result ?? mod.unreachable()
+	return valueMap.get(bodyInstId) ?? mod.unreachable()
+}
+
+function setupParamSymbolMap(paramSymbols: readonly SymbolId[]): Map<SymbolId, number> {
+	const map = new Map<SymbolId, number>()
+	for (let i = 0; i < paramSymbols.length; i++) {
+		const symId = paramSymbols[i]
+		if (symId !== undefined) map.set(symId, i)
+	}
+	return map
 }
 
 /**
  * Emit a user-defined function definition.
  */
-function emitFuncDef(
-	mod: binaryen.Module,
-	inst: Inst,
-	context: CompilationContext
-): void {
+function emitFuncDef(mod: binaryen.Module, inst: Inst, context: CompilationContext): void {
 	const funcIdNum = getFuncDefFuncId(inst)
 	const bodyInstId = getFuncDefBodyId(inst)
 
@@ -821,35 +834,16 @@ function emitFuncDef(
 	const typeInfo = context.types?.getFuncInfo(funcInfo.typeId)
 	if (!typeInfo) return
 
-	// Build param types for WASM function signature
 	const paramTypes = typeInfo.paramTypes.map((t) => toBinaryenType(t, context))
 	const returnType = toBinaryenType(typeInfo.returnType, context)
 
-	// Set up param symbol -> index mapping
-	currentParamMap = new Map<SymbolId, number>()
-	for (let i = 0; i < funcInfo.paramSymbols.length; i++) {
-		const symId = funcInfo.paramSymbols[i]
-		if (symId !== undefined) {
-			currentParamMap.set(symId, i)
-		}
-	}
-
-	// Mark body instructions to skip in main pass
+	currentParamMap = setupParamSymbolMap(funcInfo.paramSymbols)
 	markExpressionTree(bodyInstId, context, funcBodyInsts)
-
-	// Emit body expression with param context
 	const bodyExpr = emitFuncBody(mod, bodyInstId, context)
-
-	// Clear param context
 	currentParamMap = null
 
-	// Get function name
 	const name = context.strings.get(funcInfo.nameId)
-
-	// Create WASM function
 	mod.addFunction(name, binaryen.createType(paramTypes), returnType, [], bodyExpr)
-
-	// Export the function
 	mod.addFunctionExport(name, name)
 }
 
@@ -897,10 +891,7 @@ function emitInstruction(
 			// fields are flattened to locals.
 			return null
 		case InstKind.FuncDecl:
-			// Forward declaration - no WASM code needed
-			return null
 		case InstKind.FuncDef:
-			// Function definitions are handled in emitUserFunctions pass
 			return null
 		case InstKind.Call:
 			return emitCall(mod, inst, currentInstId, valueMap, context)
@@ -936,7 +927,6 @@ function processInstruction(
 	expressions: binaryen.ExpressionRef[],
 	context: CompilationContext
 ): void {
-	// Skip instructions that are part of function bodies
 	if (funcBodyInsts.has(currentInstId)) return
 
 	const expr = emitInstruction(mod, inst, currentInstId, valueMap, context)
@@ -1031,10 +1021,7 @@ function extractWarnings(context: CompilationContext): CompileWarning[] {
 export function emit(context: CompilationContext, options: EmitOptions = {}): CompileResult {
 	const mod = new binaryen.Module()
 
-	// Reset function body tracking for this emit
 	funcBodyInsts.clear()
-
-	// Emit user-defined functions first (marks function body instructions)
 	emitUserFunctions(mod, context)
 
 	const locals = buildLocals(context)
@@ -1046,7 +1033,6 @@ export function emit(context: CompilationContext, options: EmitOptions = {}): Co
 		throw new CompileError('empty program')
 	}
 
-	// Only create _start if there are main expressions
 	if (expressions.length > 0) {
 		const body = createFunctionBody(mod, expressions)
 		setupStartFunction(mod, body, locals)

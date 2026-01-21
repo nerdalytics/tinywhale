@@ -5,7 +5,9 @@
 
 import type { StringId } from '../core/context.ts'
 import type { NodeId } from '../core/nodes.ts'
+
 export type { StringId } from '../core/context.ts'
+
 import {
 	BuiltinTypeId,
 	type FieldInfo,
@@ -625,12 +627,12 @@ export class FuncStore {
 
 		const id = funcId(this.funcs.length)
 		this.funcs.push({
-			nameId,
-			typeId,
-			parseNodeId,
 			bodyInstId: null,
-			paramSymbols: [],
 			isDefined: false,
+			nameId,
+			paramSymbols: [],
+			parseNodeId,
+			typeId,
 		})
 		this.byName.set(nameId, id)
 		return id
