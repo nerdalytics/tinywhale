@@ -40,6 +40,7 @@ export function symbolId(n: number): SymbolId {
  * - Variables: 20-29
  * - Operators: 30-39
  * - Control flow: 40-49
+ * - Functions: 50-59
  */
 export const InstKind = {
 	/** Binary operation: arg0 = left InstId, arg1 = right InstId. Operator from parseNodeId. */
@@ -48,10 +49,16 @@ export const InstKind = {
 	Bind: 20,
 	/** Bitwise NOT: arg0 = operand InstId */
 	BitwiseNot: 31,
+	/** Function call: arg0 = callee InstId, arg1 = argument count */
+	Call: 52,
 	/** Field access: arg0 = base InstId, arg1 = field index */
 	FieldAccess: 22,
 	/** Float constant: arg0 = FloatId (index into FloatStore) */
 	FloatConst: 11,
+	/** Function forward declaration: arg0 = FuncId */
+	FuncDecl: 50,
+	/** Function definition: arg0 = FuncId, arg1 = body InstId */
+	FuncDef: 51,
 	/** Integer constant: arg0 = low 32 bits, arg1 = high 32 bits (for i64) */
 	IntConst: 10,
 	/** Logical AND (short-circuit): arg0 = left InstId, arg1 = right InstId */
@@ -64,6 +71,8 @@ export const InstKind = {
 	MatchArm: 41,
 	/** Unary negation: arg0 = operand InstId */
 	Negate: 30,
+	/** Parameter reference: arg0 = parameter index */
+	Param: 53,
 	/** Pattern binding: arg0 = SymbolId, arg1 = scrutinee InstId */
 	PatternBind: 42,
 	/** panic - unconditional trap, terminates control flow */
@@ -309,4 +318,28 @@ export function getLogicalOrLeftId(inst: Inst): InstId {
 
 export function getLogicalOrRightId(inst: Inst): InstId {
 	return inst.arg1 as InstId
+}
+
+export function getFuncDeclFuncId(inst: Inst): number {
+	return inst.arg0
+}
+
+export function getFuncDefFuncId(inst: Inst): number {
+	return inst.arg0
+}
+
+export function getFuncDefBodyId(inst: Inst): InstId {
+	return inst.arg1 as InstId
+}
+
+export function getCallCalleeId(inst: Inst): InstId {
+	return inst.arg0 as InstId
+}
+
+export function getCallArgCount(inst: Inst): number {
+	return inst.arg1
+}
+
+export function getParamIndex(inst: Inst): number {
+	return inst.arg0
 }
