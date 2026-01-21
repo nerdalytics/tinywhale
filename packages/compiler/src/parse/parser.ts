@@ -306,6 +306,26 @@ function createNodeEmittingSemantics(
 		}
 	}
 
+	/**
+	 * Emit a TypeAnnotation node for any TypeRef (simple or complex).
+	 * For complex types (ListType, RefinementType, FuncType), emits the complex type as child.
+	 * For simple types (typeKeyword, upperIdentifier), emits just the TypeAnnotation with the token.
+	 */
+	function emitTypeRefAsTypeAnnotation(typeNode: Node): NodeId {
+		const startCount = context.nodes.count()
+		maybeEmitComplexType(typeNode)
+		const childCount = context.nodes.count() - startCount
+
+		// Get token from the type node - for TypeRef, get from its child
+		const typeChild = typeNode.ctorName === 'TypeRef' ? typeNode.child(0) : typeNode
+		const tid = getTokenIdForOhmNode(typeChild)
+		return context.nodes.add({
+			kind: NodeKind.TypeAnnotation,
+			subtreeSize: 1 + childCount,
+			tokenId: tid,
+		})
+	}
+
 	semantics.addOperation<NodeId>('emitExpression', {
 		AddExpr(first: Node, ops: Node, rest: Node): NodeId {
 			return emitBinaryChain(first, ops, rest)
@@ -486,21 +506,31 @@ function createNodeEmittingSemantics(
 		},
 		FuncType(_lparen: Node, optTypeList: Node, _rparen: Node, _arrow: Node, returnType: Node): NodeId {
 			const startCount = context.nodes.count()
-			// Emit parameter types if present
+
+			// Emit parameter types wrapped in TypeList if present
 			const typeListNode = optTypeList.children[0]
 			if (typeListNode !== undefined) {
+				const typeListStartCount = context.nodes.count()
 				// TypeList = TypeRef (comma TypeRef)*
 				const firstType = typeListNode.child(0)
-				maybeEmitComplexType(firstType)
+				emitTypeRefAsTypeAnnotation(firstType)
 				const restTypes = typeListNode.child(2)
 				for (let i = 0; i < restTypes.numChildren; i++) {
-					maybeEmitComplexType(restTypes.child(i))
+					emitTypeRefAsTypeAnnotation(restTypes.child(i))
 				}
+				const typeListChildCount = context.nodes.count() - typeListStartCount
+				const typeListTid = getTokenIdForOhmNode(typeListNode)
+				context.nodes.add({
+					kind: NodeKind.TypeList,
+					subtreeSize: 1 + typeListChildCount,
+					tokenId: typeListTid,
+				})
 			}
-			// Emit return type
-			maybeEmitComplexType(returnType)
-			const childCount = context.nodes.count() - startCount
 
+			// Emit return type as TypeAnnotation
+			emitTypeRefAsTypeAnnotation(returnType)
+
+			const childCount = context.nodes.count() - startCount
 			const tid = getTokenIdForOhmNode(this)
 			return context.nodes.add({
 				kind: NodeKind.FuncType,

@@ -274,6 +274,7 @@ function parseLambdaSignature(
 
 	for (const [childId, child] of context.nodes.iterateChildren(lambdaId)) {
 		if (child.kind === NodeKind.ParameterList) {
+			// Handle ParameterList if present (for compatibility)
 			for (const [paramId, paramNode] of context.nodes.iterateChildren(childId)) {
 				if (paramNode.kind === NodeKind.Parameter) {
 					const { nameId, typeId } = parseParameter(paramId, state, context)
@@ -281,6 +282,11 @@ function parseLambdaSignature(
 					paramTypes.unshift(typeId)
 				}
 			}
+		} else if (child.kind === NodeKind.Parameter) {
+			// Handle Parameter nodes directly under Lambda (parser emits them this way)
+			const { nameId, typeId } = parseParameter(childId, state, context)
+			paramNames.unshift(nameId)
+			paramTypes.unshift(typeId)
 		} else if (child.kind === NodeKind.TypeAnnotation) {
 			const resolved = resolveTypeFromAnnotation(childId, state, context)
 			if (resolved) {
@@ -339,13 +345,16 @@ export function handleFuncCall(
 	checkExpr: (exprId: NodeId, state: CheckerState, context: CompilationContext) => { instId: InstId | null; typeId: TypeId }
 ): { instId: InstId | null; typeId: TypeId } {
 	let calleeId: NodeId | null = null
-	let argListId: NodeId | null = null
+	const argIds: NodeId[] = []
 
+	// Parser emits arguments directly as children of FuncCall (no ArgumentList wrapper)
+	// Children in postorder: arguments first (reverse order), then callee identifier last
 	for (const [childId, child] of context.nodes.iterateChildren(callId)) {
-		if (child.kind === NodeKind.ArgumentList) {
-			argListId = childId
-		} else if (child.kind === NodeKind.Identifier) {
+		if (child.kind === NodeKind.Identifier) {
 			calleeId = childId
+		} else {
+			// All non-identifier children are arguments
+			argIds.push(childId)
 		}
 	}
 
@@ -367,13 +376,12 @@ export function handleFuncCall(
 		return { instId: null, typeId: BuiltinTypeId.Invalid }
 	}
 
+	// Check each argument - argIds are in reverse order from postorder iteration
 	const args: InstId[] = []
-	if (argListId !== null) {
-		for (const [argId, _argNode] of context.nodes.iterateChildren(argListId)) {
-			const argResult = checkExpr(argId, state, context)
-			if (argResult.instId !== null) {
-				args.unshift(argResult.instId)
-			}
+	for (const argId of argIds) {
+		const argResult = checkExpr(argId, state, context)
+		if (argResult.instId !== null) {
+			args.unshift(argResult.instId)
 		}
 	}
 
