@@ -89,6 +89,8 @@ export const TypeKind = {
 	F32: 3,
 	/** 64-bit IEEE 754 float */
 	F64: 4,
+	/** Function type: (params) -> returnType */
+	Func: 9,
 	/** 32-bit signed integer */
 	I32: 1,
 	/** 64-bit signed integer */
@@ -143,6 +145,14 @@ export interface TypeConstraints {
 }
 
 /**
+ * Information about a function type.
+ */
+export interface FuncTypeInfo {
+	readonly paramTypes: readonly TypeId[]
+	readonly returnType: TypeId
+}
+
+/**
  * Information about a type stored in TypeStore.
  */
 export interface TypeInfo {
@@ -162,6 +172,8 @@ export interface TypeInfo {
 	readonly listSize?: number
 	/** For Refined types: constraint metadata (min/max) */
 	readonly constraints?: TypeConstraints
+	/** For Func types: parameter and return type info */
+	readonly funcInfo?: FuncTypeInfo
 }
 
 /**
