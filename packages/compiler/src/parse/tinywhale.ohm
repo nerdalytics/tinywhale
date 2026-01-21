@@ -46,7 +46,11 @@ TinyWhale {
 
   // Type reference (primitives or user-defined)
   // ListType handles iterative nesting: i32[]<size=4>[]<size=2>
-  TypeRef = ListType | RefinementType | upperIdentifier | typeKeyword
+  TypeRef = ListType | RefinementType | FuncType | upperIdentifier | typeKeyword
+
+  // Function type: (i32, i32) -> i32
+  FuncType = lparen TypeList? rparen arrow TypeRef
+  TypeList = TypeRef (comma TypeRef)*
 
   // Refinement type: i32<min=0, max=100>
   RefinementType = typeKeyword TypeBounds
