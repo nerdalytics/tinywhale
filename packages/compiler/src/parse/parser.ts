@@ -688,7 +688,31 @@ function createNodeEmittingSemantics(
 		},
 	})
 
+	/** Statement-like constructs that use emitStatement in block context */
+	const BLOCK_STATEMENT_CTORS = new Set([
+		'FuncDecl',
+		'FuncBinding',
+		'PrimitiveBinding',
+		'MatchBinding',
+		'MatchExpr',
+	])
+
+	/**
+	 * Emit a BlockExpression - routes to the appropriate handler based on node type.
+	 * BlockExpression = FuncDecl | FuncBinding | PrimitiveBinding | MatchBinding | MatchExpr | Expression
+	 */
+	function emitBlockExpression(node: Node): NodeId {
+		if (BLOCK_STATEMENT_CTORS.has(node.ctorName)) {
+			return node['emitStatement']()
+		}
+		return node['emitExpression']()
+	}
+
 	semantics.addOperation<NodeId>('emitLambda', {
+		// BlockExpression = FuncDecl | FuncBinding | PrimitiveBinding | MatchBinding | MatchExpr | Expression
+		BlockExpression(content: Node): NodeId {
+			return emitBlockExpression(content)
+		},
 		Lambda(
 			_lparen: Node,
 			optParamList: Node,
@@ -706,8 +730,8 @@ function createNodeEmittingSemantics(
 			// Emit return type annotation if present
 			maybeEmitTypeAnnotation(optReturnType)
 
-			// Emit body expression
-			body.child(0)['emitExpression']()
+			// Emit body - either single expression or block
+			body['emitLambda']()
 
 			const childCount = context.nodes.count() - startCount
 			const tid = getTokenIdForOhmNode(this)
@@ -716,6 +740,39 @@ function createNodeEmittingSemantics(
 				subtreeSize: 1 + childCount,
 				tokenId: tid,
 			})
+		},
+		// LambdaBlock = newline LambdaBlockLine (newline LambdaBlockLine)*
+		LambdaBlock(_newline: Node, firstLine: Node, _newlines: Node, restLines: Node): NodeId {
+			const startCount = context.nodes.count()
+
+			// Emit first line
+			firstLine['emitLambda']()
+
+			// Emit rest of the lines
+			for (let i = 0; i < restLines.numChildren; i++) {
+				restLines.child(i)['emitLambda']()
+			}
+
+			const childCount = context.nodes.count() - startCount
+			const tid = getTokenIdForOhmNode(this)
+			return context.nodes.add({
+				kind: NodeKind.ExpressionSequence,
+				subtreeSize: 1 + childCount,
+				tokenId: tid,
+			})
+		},
+		// LambdaBlockLine = indentToken anyDedent* BlockExpression
+		LambdaBlockLine(_indentToken: Node, _anyDedents: Node, blockExpr: Node): NodeId {
+			return emitBlockExpression(blockExpr)
+		},
+		// LambdaBody = LambdaBlock | Expression
+		LambdaBody(content: Node): NodeId {
+			const ctorName = content.ctorName
+			if (ctorName === 'LambdaBlock') {
+				return content['emitLambda']()
+			}
+			// Single expression
+			return content['emitExpression']()
 		},
 		Parameter(ident: Node, _colon: Node, typeRef: Node): NodeId {
 			const startCount = context.nodes.count()
@@ -937,6 +994,18 @@ function createNodeEmittingSemantics(
 		},
 		Statement(stmt: Node): NodeId {
 			return stmt['emitStatement']()
+		},
+		TypeAlias(typeName: Node, _equals: Node, typeRef: Node): NodeId {
+			const startCount = context.nodes.count()
+			emitTypeRefAsTypeAnnotation(typeRef)
+			const childCount = context.nodes.count() - startCount
+
+			const tid = getTokenIdForOhmNode(typeName)
+			return context.nodes.add({
+				kind: NodeKind.TypeAlias,
+				subtreeSize: 1 + childCount,
+				tokenId: tid,
+			})
 		},
 		TypeDecl(_typeKeyword: Node, _typeName: Node): NodeId {
 			const tid = getTokenIdForOhmNode(this)
