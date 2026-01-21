@@ -3,7 +3,7 @@
  * Contains all stores (tokens, nodes, insts) and diagnostic collection.
  */
 
-import type { InstStore, SymbolStore, TypeStore } from '../check/stores.ts'
+import type { FuncStore, InstStore, SymbolStore, TypeStore } from '../check/stores.ts'
 import {
 	type DiagnosticArgs,
 	type DiagnosticCode,
@@ -151,6 +151,9 @@ export class CompilationContext {
 
 	/** Float literal storage (populated by checker) */
 	readonly floats: FloatStore
+
+	/** Function storage (populated by checker) */
+	funcs: FuncStore | null = null
 
 	/** Instruction storage (populated by checker) */
 	insts: InstStore | null = null
