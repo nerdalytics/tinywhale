@@ -291,10 +291,17 @@ function createNodeEmittingSemantics(
 		return typeNode.child(0).ctorName === 'RefinementType'
 	}
 
+	function isFuncTypeRef(typeNode: Node): boolean {
+		if (typeNode.ctorName !== 'TypeRef') return false
+		return typeNode.child(0).ctorName === 'FuncType'
+	}
+
 	function maybeEmitComplexType(typeNode: Node): void {
 		if (isListTypeRef(typeNode)) {
 			typeNode.child(0)['emitTypeAnnotation']()
 		} else if (isRefinementTypeRef(typeNode)) {
+			typeNode.child(0)['emitTypeAnnotation']()
+		} else if (isFuncTypeRef(typeNode)) {
 			typeNode.child(0)['emitTypeAnnotation']()
 		}
 	}
@@ -347,6 +354,29 @@ function createNodeEmittingSemantics(
 			return context.nodes.add({
 				kind: NodeKind.FloatLiteral,
 				subtreeSize: 1,
+				tokenId: tid,
+			})
+		},
+		FuncCall(base: Node, _lparen: Node, optArgList: Node, _rparen: Node): NodeId {
+			const startCount = context.nodes.count()
+			base['emitExpression']()
+			// Emit argument list if present
+			const argListNode = optArgList.children[0]
+			if (argListNode !== undefined) {
+				// ArgumentList = Expression (comma Expression)*
+				const firstArg = argListNode.child(0)
+				firstArg['emitExpression']()
+				const restArgs = argListNode.child(2)
+				for (let i = 0; i < restArgs.numChildren; i++) {
+					restArgs.child(i)['emitExpression']()
+				}
+			}
+			const childCount = context.nodes.count() - startCount
+
+			const tid = getTokenIdForOhmNode(this)
+			return context.nodes.add({
+				kind: NodeKind.FuncCall,
+				subtreeSize: 1 + childCount,
 				tokenId: tid,
 			})
 		},
@@ -452,6 +482,30 @@ function createNodeEmittingSemantics(
 				kind: NodeKind.Bound,
 				subtreeSize: 1,
 				tokenId: valueTid,
+			})
+		},
+		FuncType(_lparen: Node, optTypeList: Node, _rparen: Node, _arrow: Node, returnType: Node): NodeId {
+			const startCount = context.nodes.count()
+			// Emit parameter types if present
+			const typeListNode = optTypeList.children[0]
+			if (typeListNode !== undefined) {
+				// TypeList = TypeRef (comma TypeRef)*
+				const firstType = typeListNode.child(0)
+				maybeEmitComplexType(firstType)
+				const restTypes = typeListNode.child(2)
+				for (let i = 0; i < restTypes.numChildren; i++) {
+					maybeEmitComplexType(restTypes.child(i))
+				}
+			}
+			// Emit return type
+			maybeEmitComplexType(returnType)
+			const childCount = context.nodes.count() - startCount
+
+			const tid = getTokenIdForOhmNode(this)
+			return context.nodes.add({
+				kind: NodeKind.FuncType,
+				subtreeSize: 1 + childCount,
+				tokenId: tid,
 			})
 		},
 		ListType(elementType: Node, suffixes: Node): NodeId {
@@ -570,6 +624,75 @@ function createNodeEmittingSemantics(
 		},
 	})
 
+	semantics.addOperation<NodeId>('emitLambda', {
+		Lambda(_lparen: Node, optParamList: Node, _rparen: Node, _optColon: Node, optReturnType: Node, _arrow: Node, body: Node): NodeId {
+			const startCount = context.nodes.count()
+
+			// Emit parameter list if present
+			const paramListNode = optParamList.children[0]
+			if (paramListNode !== undefined) {
+				// ParameterList = Parameter (comma Parameter)*
+				const firstParam = paramListNode.child(0)
+				firstParam['emitLambda']()
+				const restParams = paramListNode.child(2)
+				for (let i = 0; i < restParams.numChildren; i++) {
+					restParams.child(i)['emitLambda']()
+				}
+			}
+
+			// Emit return type annotation if present
+			// optReturnType is TypeRef? (the colon is separate)
+			const returnTypeNode = optReturnType.children[0]
+			if (returnTypeNode !== undefined) {
+				const typeStartCount = context.nodes.count()
+				maybeEmitComplexType(returnTypeNode)
+				const typeChildCount = context.nodes.count() - typeStartCount
+				const tid = getTokenIdForOhmNode(returnTypeNode)
+				context.nodes.add({
+					kind: NodeKind.TypeAnnotation,
+					subtreeSize: 1 + typeChildCount,
+					tokenId: tid,
+				})
+			}
+
+			// Emit body expression - LambdaBody = Expression
+			const bodyExpr = body.child(0)
+			bodyExpr['emitExpression']()
+
+			const childCount = context.nodes.count() - startCount
+			const tid = getTokenIdForOhmNode(this)
+
+			return context.nodes.add({
+				kind: NodeKind.Lambda,
+				subtreeSize: 1 + childCount,
+				tokenId: tid,
+			})
+		},
+		Parameter(ident: Node, _colon: Node, typeRef: Node): NodeId {
+			const startCount = context.nodes.count()
+			ident['emitExpression']()
+			const typeStartCount = context.nodes.count()
+			maybeEmitComplexType(typeRef)
+			const typeChildCount = context.nodes.count() - typeStartCount
+
+			const tid = getTokenIdForOhmNode(typeRef)
+			context.nodes.add({
+				kind: NodeKind.TypeAnnotation,
+				subtreeSize: 1 + typeChildCount,
+				tokenId: tid,
+			})
+
+			const childCount = context.nodes.count() - startCount
+			const paramTid = getTokenIdForOhmNode(ident)
+
+			return context.nodes.add({
+				kind: NodeKind.Parameter,
+				subtreeSize: 1 + childCount,
+				tokenId: paramTid,
+			})
+		},
+	})
+
 	semantics.addOperation<NodeId>('emitMatchArm', {
 		MatchArm(pattern: Node, _arrow: Node, expr: Node): NodeId {
 			const startCount = context.nodes.count()
@@ -641,6 +764,36 @@ function createNodeEmittingSemantics(
 	})
 
 	semantics.addOperation<NodeId>('emitStatement', {
+		FuncBinding(ident: Node, _equals: Node, lambda: Node): NodeId {
+			const startCount = context.nodes.count()
+			ident['emitExpression']()
+			lambda['emitLambda']()
+			const childCount = context.nodes.count() - startCount
+
+			const lineNumber = getLineNumber(this)
+			const tid = getTokenIdForLine(lineNumber)
+
+			return context.nodes.add({
+				kind: NodeKind.FuncBinding,
+				subtreeSize: 1 + childCount,
+				tokenId: tid,
+			})
+		},
+		FuncDecl(ident: Node, _colon: Node, funcType: Node): NodeId {
+			const startCount = context.nodes.count()
+			ident['emitExpression']()
+			funcType['emitTypeAnnotation']()
+			const childCount = context.nodes.count() - startCount
+
+			const lineNumber = getLineNumber(this)
+			const tid = getTokenIdForLine(lineNumber)
+
+			return context.nodes.add({
+				kind: NodeKind.FuncDecl,
+				subtreeSize: 1 + childCount,
+				tokenId: tid,
+			})
+		},
 		MatchBinding(ident: Node, typeAnnotation: Node, _equals: Node, matchExpr: Node): NodeId {
 			const startCount = context.nodes.count()
 			ident['emitExpression']()
