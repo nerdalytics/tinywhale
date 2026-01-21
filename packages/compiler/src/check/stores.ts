@@ -46,6 +46,8 @@ export interface FuncInfo {
 	readonly parseNodeId: NodeId
 	/** Body instruction ID (null for forward declarations until defined) */
 	bodyInstId: InstId | null
+	/** All instruction IDs in the body (for expression sequences in multi-line bodies) */
+	bodyInstIds: InstId[]
 	/** Parameter symbols (populated when function is defined) */
 	paramSymbols: SymbolId[]
 	/** Whether the function has been defined (has a body) */
@@ -628,6 +630,7 @@ export class FuncStore {
 		const id = funcId(this.funcs.length)
 		this.funcs.push({
 			bodyInstId: null,
+			bodyInstIds: [],
 			isDefined: false,
 			nameId,
 			paramSymbols: [],
@@ -642,12 +645,18 @@ export class FuncStore {
 	 * Define a function (provide body).
 	 * Must have been declared first via declareForward.
 	 */
-	defineFunc(id: FuncId, bodyInstId: InstId, paramSymbols: SymbolId[]): void {
+	defineFunc(
+		id: FuncId,
+		bodyInstId: InstId,
+		bodyInstIds: InstId[],
+		paramSymbols: SymbolId[]
+	): void {
 		const func = this.funcs[id]
 		if (func === undefined) {
 			throw new Error(`Invalid FuncId: ${id}`)
 		}
 		func.bodyInstId = bodyInstId
+		func.bodyInstIds = bodyInstIds
 		func.paramSymbols = paramSymbols
 		func.isDefined = true
 	}

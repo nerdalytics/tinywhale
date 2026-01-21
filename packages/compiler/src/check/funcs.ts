@@ -14,7 +14,14 @@ import { TokenKind } from '../core/tokens.ts'
 import type { CheckerState } from './state.ts'
 import type { FuncId, FuncStore } from './stores.ts'
 import { resolveTypeFromAnnotation } from './type-resolution.ts'
-import { BuiltinTypeId, type InstId, InstKind, type SymbolId, type TypeId } from './types.ts'
+import {
+	BuiltinTypeId,
+	type InstId,
+	InstKind,
+	instId,
+	type SymbolId,
+	type TypeId,
+} from './types.ts'
 
 // ============================================================================
 // Type Resolution Helpers
@@ -505,10 +512,21 @@ export function handleFuncBinding(
 
 	state.symbols.pushScope()
 	const paramSymbols = registerParamSymbols(paramNames, paramTypes, bindingId, state)
+
+	// Track all instructions emitted during body processing
+	const startInstCount = state.insts.count()
 	const bodyResult = checkExpr(bodyExprId, returnType, state, context)
+	const endInstCount = state.insts.count()
+
 	state.symbols.popScope()
 
 	if (bodyResult.instId === null) return
+
+	// Collect all body instructions (bindings + final expression)
+	const bodyInstIds: InstId[] = []
+	for (let i = startInstCount; i < endInstCount; i++) {
+		bodyInstIds.push(instId(i))
+	}
 
 	emitTypeMismatchIfNeeded(bodyResult.typeId, returnType, bindingId, state, context)
 
@@ -520,7 +538,7 @@ export function handleFuncBinding(
 		typeId: BuiltinTypeId.None,
 	})
 
-	funcs.defineFunc(funcId, bodyResult.instId, paramSymbols)
+	funcs.defineFunc(funcId, bodyResult.instId, bodyInstIds, paramSymbols)
 }
 
 // ============================================================================
@@ -531,16 +549,20 @@ function collectCallChildren(
 	callId: NodeId,
 	context: CompilationContext
 ): { calleeId: NodeId | null; argIds: NodeId[] } {
-	let calleeId: NodeId | null = null
-	const argIds: NodeId[] = []
+	const children: NodeId[] = []
 
-	for (const [childId, child] of context.nodes.iterateChildren(callId)) {
-		if (child.kind === NodeKind.Identifier) {
-			calleeId = childId
-		} else {
-			argIds.push(childId)
-		}
+	for (const [childId] of context.nodes.iterateChildren(callId)) {
+		children.push(childId)
 	}
+
+	// Children are in reverse postorder. The callee was emitted first,
+	// so it's the LAST item in the iteration. Arguments follow in reverse order.
+	if (children.length === 0) {
+		return { argIds: [], calleeId: null }
+	}
+
+	const calleeId = children[children.length - 1] ?? null
+	const argIds = children.slice(0, -1)
 
 	return { argIds, calleeId }
 }

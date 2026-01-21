@@ -1,7 +1,7 @@
 # TinyWhale: Record initialization from field access
 # Demonstrates using field access in record initializers
 
-type Point
+Point
     x: i32
     y: i32
 

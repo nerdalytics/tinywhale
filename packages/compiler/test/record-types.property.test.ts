@@ -71,7 +71,7 @@ function generateTypeDecl(def: {
 	fields: { name: string; type: string }[]
 }): string {
 	const fieldLines = def.fields.map((f) => `    ${f.name}: ${f.type}`).join('\n')
-	return `type ${def.typeName}\n${fieldLines}`
+	return `${def.typeName}\n${fieldLines}`
 }
 
 /** Generate TinyWhale source for a record instantiation */
@@ -618,10 +618,9 @@ describe('record types/multiple type declarations properties', () => {
 	it('N type declarations creates N registered types', () => {
 		fc.assert(
 			fc.property(fc.integer({ max: 5, min: 1 }), (typeCount) => {
-				const typeDecls = Array.from(
-					{ length: typeCount },
-					(_, i) => `type T${i}\n    f: i32`
-				).join('\n')
+				const typeDecls = Array.from({ length: typeCount }, (_, i) => `T${i}\n    f: i32`).join(
+					'\n'
+				)
 				const source = `${typeDecls}\npanic\n`
 
 				const ctx = new CompilationContext(source)
@@ -651,9 +650,9 @@ function generateNestedTypes(depth: number): string {
 	let types = ''
 	for (let i = depth - 1; i >= 0; i--) {
 		if (i === depth - 1) {
-			types += `type T${i}\n    val: i32\n`
+			types += `T${i}\n    val: i32\n`
 		} else {
-			types += `type T${i}\n    inner: T${i + 1}\n`
+			types += `T${i}\n    inner: T${i + 1}\n`
 		}
 	}
 	return types
@@ -685,10 +684,10 @@ function generateNestedTypesWithSiblings(depth: number): string {
 	for (let i = depth - 1; i >= 0; i--) {
 		if (i === depth - 1) {
 			// Leaf type: just a primitive
-			types += `type T${i}\n    val: i32\n`
+			types += `T${i}\n    val: i32\n`
 		} else {
 			// Non-leaf: inner record + sibling primitive
-			types += `type T${i}\n    inner: T${i + 1}\n    sib${i}: i32\n`
+			types += `T${i}\n    inner: T${i + 1}\n    sib${i}: i32\n`
 		}
 	}
 	return types
@@ -832,7 +831,7 @@ describe('record types/sibling fields after nested blocks properties', () => {
 				fc.integer({ max: 100, min: 0 }),
 				fc.integer({ max: 100, min: 0 }),
 				(siblingFirst, innerVal, sibVal) => {
-					const types = `type Inner\n    val: i32\ntype Outer\n    inner: Inner\n    sib: i32\n`
+					const types = `Inner\n    val: i32\nOuter\n    inner: Inner\n    sib: i32\n`
 
 					// Two orderings of fields in init
 					const init = siblingFirst
@@ -908,7 +907,7 @@ describe('record types/sibling fields after nested blocks properties', () => {
 					for (let i = 0; i < siblingCount; i++) {
 						typeFields += `    s${i}: i32\n`
 					}
-					const types = `type Inner\n    val: i32\ntype Outer\n${typeFields}`
+					const types = `Inner\n    val: i32\nOuter\n${typeFields}`
 
 					// Init with nested block first, then all siblings
 					let init = `o:Outer\n    inner: Inner\n        val = ${values[0] ?? 0}\n`

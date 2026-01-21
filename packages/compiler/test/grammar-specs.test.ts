@@ -59,8 +59,8 @@ test('Grammar Specs', async (t) => {
 				'panic # comment', // [FULL]
 				'x:i32 = 1', // [FULL]
 				'x:i32 = 1 + 2', // [FULL]
-				'type Point\n\tx: i32', // [FULL] - single field record
-				'type Point\n\tx: i32\n\ty: i32', // [FULL] - multi-field record
+				'Point\n\tx: i32', // [FULL] - single field record
+				'Point\n\tx: i32\n\ty: i32', // [FULL] - multi-field record
 			])
 		)
 
@@ -131,15 +131,15 @@ test('Grammar Specs', async (t) => {
 		}
 	})
 
-	await t.test('Type Declarations', (t) => {
-		const tester = createTester(grammar, 'Type Declarations', 'TypeDecl')
+	await t.test('Record Type Declarations', (t) => {
+		const tester = createTester(grammar, 'Record Type Declarations', 'RecordTypeDecl')
 
-		tester.match(prepareList(['type Point', 'type MyType']))
+		tester.match(prepareList(['Point', 'MyType']))
 
 		tester.reject(
 			prepareList([
-				'type lowerCase', // Must be upper
-				'type', // Missing name
+				'lowerCase', // Must start with uppercase
+				'123Type', // Must start with letter
 			])
 		)
 
@@ -402,24 +402,24 @@ test('Grammar Specs', async (t) => {
 		tester.match(
 			prepareList([
 				// Simple record with fields
-				'type Point\n\tx: i32\n\ty: i32\np:Point\n\tx = 1\n\ty = 2',
+				'Point\n\tx: i32\n\ty: i32\np:Point\n\tx = 1\n\ty = 2',
 				// Record with list field
-				'type Foo\n\titems: i32[]<size=3>\nf:Foo\n\titems = [1, 2, 3]',
+				'Foo\n\titems: i32[]<size=3>\nf:Foo\n\titems = [1, 2, 3]',
 				// Nested record initialization
-				'type Inner\n\tvalue: i32\ntype Outer\n\tinner: Inner\no:Outer\n\tinner: Inner\n\t\tvalue = 42',
+				'Inner\n\tvalue: i32\nOuter\n\tinner: Inner\no:Outer\n\tinner: Inner\n\t\tvalue = 42',
 				// Additional new syntax tests
-				'type Point\n\tx: i32\np:Point\n\tx = 5', // no = after type, = for field value
-				'type Point\n\tx: i32\n\ty: i32\np:Point\n\tx = 5\n\ty = 10', // Multiple fields
-				'type Inner\n\tval: i32\ntype Outer\n\tinner: Inner\no:Outer\n\tinner: Inner\n\t\tval = 5', // Nested
+				'Point\n\tx: i32\np:Point\n\tx = 5', // no = after type, = for field value
+				'Point\n\tx: i32\n\ty: i32\np:Point\n\tx = 5\n\ty = 10', // Multiple fields
+				'Inner\n\tval: i32\nOuter\n\tinner: Inner\no:Outer\n\tinner: Inner\n\t\tval = 5', // Nested
 			])
 		)
 
 		// Old syntax should be rejected
 		tester.reject(
 			prepareList([
-				'type Point\n\tx: i32\np:Point =\n\tx = 5', // Old syntax: = after type name rejected
-				'type Point\n\tx: i32\np:Point\n\tx: 5', // Old syntax: : for values rejected
-				'type Point\n\tx: i32\np:Point =\n\tx: 5', // Old syntax: both = after type and : for value
+				'Point\n\tx: i32\np:Point =\n\tx = 5', // Old syntax: = after type name rejected
+				'Point\n\tx: i32\np:Point\n\tx: 5', // Old syntax: : for values rejected
+				'Point\n\tx: i32\np:Point =\n\tx: 5', // Old syntax: both = after type and : for value
 			])
 		)
 

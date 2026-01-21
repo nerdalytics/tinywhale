@@ -29,8 +29,8 @@ describe('check/checker', () => {
 
 			assert.strictEqual(result.succeeded, false)
 			const errors = getErrors(ctx)
-			// Errors for: IndentedLine (line 2) and DedentLine (from EOF dedent)
-			assert.strictEqual(errors.length, 2)
+			// Error for IndentedLine (line 2) - DedentLine from EOF is processed normally
+			assert.strictEqual(errors.length, 1)
 			assert.ok(errors[0]?.message.includes('unexpected indentation'))
 		})
 
@@ -41,8 +41,9 @@ describe('check/checker', () => {
 
 			assert.strictEqual(result.succeeded, false)
 			const errors = getErrors(ctx)
-			// IndentedLine and DedentLine both produce errors
-			assert.ok(errors.length >= 2)
+			// Only IndentedLine produces error - DedentLine is processed as a root statement
+			assert.strictEqual(errors.length, 1)
+			assert.ok(errors[0]?.message.includes('unexpected indentation'))
 		})
 
 		it('should accept root-level statements', () => {

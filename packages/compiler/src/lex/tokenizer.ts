@@ -183,7 +183,6 @@ const KEYWORDS: Record<string, (typeof TokenKind)[keyof typeof TokenKind]> = {
 	i64: TokenKind.I64,
 	match: TokenKind.Match,
 	panic: TokenKind.Panic,
-	type: TokenKind.Type,
 }
 
 const SIMPLE_OPERATORS: Record<string, TokenKind | undefined> = {

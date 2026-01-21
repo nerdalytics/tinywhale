@@ -31,6 +31,7 @@ import {
 	type InstId,
 	InstKind,
 	instId,
+	type SymbolEntry,
 	type SymbolId,
 	type TypeId,
 } from '../check/types.ts'
@@ -759,6 +760,9 @@ function markExpressionTree(
 	if (!inst) return
 
 	switch (inst.kind) {
+		case InstKind.Bind:
+			markExpressionTree(getBindInitId(inst), context, marked)
+			break
 		case InstKind.BinaryOp:
 			markExpressionTree(getBinaryOpLeftId(inst), context, marked)
 			markExpressionTree(getBinaryOpRightId(inst), context, marked)
@@ -794,15 +798,21 @@ function emitBodyInstruction(
 
 /**
  * Emit the body of a user-defined function, processing instructions with param context.
+ * For multi-line bodies (expression sequences), bodyInstIds contains all instructions.
  */
 function emitFuncBody(
 	mod: binaryen.Module,
 	bodyInstId: InstId,
+	bodyInstIds: readonly InstId[],
 	context: CompilationContext
 ): binaryen.ExpressionRef {
 	const valueMap = new Map<InstId, binaryen.ExpressionRef>()
 	const bodyInsts = new Set<InstId>()
-	markExpressionTree(bodyInstId, context, bodyInsts)
+
+	// Mark all body instructions and their dependencies
+	for (const id of bodyInstIds) {
+		markExpressionTree(id, context, bodyInsts)
+	}
 
 	const sortedInsts = Array.from(bodyInsts).sort((a, b) => (a as number) - (b as number))
 	for (const id of sortedInsts) {
@@ -822,6 +832,70 @@ function setupParamSymbolMap(paramSymbols: readonly SymbolId[]): Map<SymbolId, n
 }
 
 /**
+ * Add a local variable to the locals array at the specified index.
+ * Fills gaps with binaryen.none if needed.
+ */
+function addLocalAtIndex(
+	locals: binaryen.Type[],
+	localIdx: number,
+	binaryenType: binaryen.Type
+): void {
+	while (locals.length <= localIdx) {
+		locals.push(binaryen.none)
+	}
+	locals[localIdx] = binaryenType
+}
+
+/**
+ * Process a Bind instruction to extract local variable info.
+ */
+function processBindForLocal(
+	inst: Inst,
+	paramCount: number,
+	locals: binaryen.Type[],
+	context: CompilationContext
+): void {
+	if (!context.symbols) return
+	const symbolId = getBindSymbolId(inst)
+	const symbol: SymbolEntry = context.symbols.get(symbolId)
+	const localIdx = symbol.localIndex - paramCount
+	const binaryenType = toBinaryenType(symbol.typeId, context)
+	addLocalAtIndex(locals, localIdx, binaryenType)
+}
+
+/**
+ * Process a single instruction, adding to locals if it's a Bind.
+ */
+function maybeAddBindLocal(
+	inst: Inst,
+	paramCount: number,
+	locals: binaryen.Type[],
+	context: CompilationContext
+): void {
+	if (inst.kind === InstKind.Bind) {
+		processBindForLocal(inst, paramCount, locals, context)
+	}
+}
+
+/**
+ * Build locals array for a user-defined function.
+ * Collects symbols from Bind instructions in the body.
+ */
+function buildFuncLocals(
+	bodyInstIds: readonly InstId[],
+	paramCount: number,
+	context: CompilationContext
+): binaryen.Type[] {
+	const locals: binaryen.Type[] = []
+	if (!context.insts || !context.symbols) return locals
+
+	for (const id of bodyInstIds) {
+		maybeAddBindLocal(context.insts.get(id), paramCount, locals, context)
+	}
+	return locals
+}
+
+/**
  * Emit a user-defined function definition.
  */
 function emitFuncDef(mod: binaryen.Module, inst: Inst, context: CompilationContext): void {
@@ -836,14 +910,19 @@ function emitFuncDef(mod: binaryen.Module, inst: Inst, context: CompilationConte
 
 	const paramTypes = typeInfo.paramTypes.map((t) => toBinaryenType(t, context))
 	const returnType = toBinaryenType(typeInfo.returnType, context)
+	const paramCount = paramTypes.length
+	const locals = buildFuncLocals(funcInfo.bodyInstIds, paramCount, context)
 
 	currentParamMap = setupParamSymbolMap(funcInfo.paramSymbols)
-	markExpressionTree(bodyInstId, context, funcBodyInsts)
-	const bodyExpr = emitFuncBody(mod, bodyInstId, context)
+	// Mark all body instructions for proper scoping
+	for (const id of funcInfo.bodyInstIds) {
+		markExpressionTree(id, context, funcBodyInsts)
+	}
+	const bodyExpr = emitFuncBody(mod, bodyInstId, funcInfo.bodyInstIds, context)
 	currentParamMap = null
 
 	const name = context.strings.get(funcInfo.nameId)
-	mod.addFunction(name, binaryen.createType(paramTypes), returnType, [], bodyExpr)
+	mod.addFunction(name, binaryen.createType(paramTypes), returnType, locals, bodyExpr)
 	mod.addFunctionExport(name, name)
 }
 

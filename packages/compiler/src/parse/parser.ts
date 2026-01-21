@@ -21,8 +21,6 @@ function tokenToOhmString(token: Token, context: CompilationContext): string | n
 			return 'panic'
 		case TokenKind.Match:
 			return 'match'
-		case TokenKind.Type:
-			return 'type'
 		case TokenKind.I32:
 			return 'i32'
 		case TokenKind.I64:
@@ -763,7 +761,8 @@ function createNodeEmittingSemantics(
 		},
 		// LambdaBlockLine = indentToken anyDedent* BlockExpression
 		LambdaBlockLine(_indentToken: Node, _anyDedents: Node, blockExpr: Node): NodeId {
-			return emitBlockExpression(blockExpr)
+			// Call the BlockExpression semantic action via emitLambda
+			return blockExpr['emitLambda']()
 		},
 		// LambdaBody = LambdaBlock | Expression
 		LambdaBody(content: Node): NodeId {
@@ -870,9 +869,11 @@ function createNodeEmittingSemantics(
 	})
 
 	semantics.addOperation<NodeId>('emitStatement', {
-		FuncBinding(ident: Node, _equals: Node, lambda: Node): NodeId {
+		FuncBinding(ident: Node, _optColon: Node, optType: Node, _equals: Node, lambda: Node): NodeId {
 			const startCount = context.nodes.count()
 			ident['emitExpression']()
+			// Emit optional type annotation if present (same pattern as Lambda return type)
+			maybeEmitTypeAnnotation(optType)
 			lambda['emitLambda']()
 			const childCount = context.nodes.count() - startCount
 
@@ -992,6 +993,14 @@ function createNodeEmittingSemantics(
 				tokenId: lineTid,
 			})
 		},
+		RecordTypeDecl(_typeName: Node): NodeId {
+			const tid = getTokenIdForOhmNode(this)
+			return context.nodes.add({
+				kind: NodeKind.TypeDecl,
+				subtreeSize: 1,
+				tokenId: tid,
+			})
+		},
 		Statement(stmt: Node): NodeId {
 			return stmt['emitStatement']()
 		},
@@ -1004,14 +1013,6 @@ function createNodeEmittingSemantics(
 			return context.nodes.add({
 				kind: NodeKind.TypeAlias,
 				subtreeSize: 1 + childCount,
-				tokenId: tid,
-			})
-		},
-		TypeDecl(_typeKeyword: Node, _typeName: Node): NodeId {
-			const tid = getTokenIdForOhmNode(this)
-			return context.nodes.add({
-				kind: NodeKind.TypeDecl,
-				subtreeSize: 1,
 				tokenId: tid,
 			})
 		},

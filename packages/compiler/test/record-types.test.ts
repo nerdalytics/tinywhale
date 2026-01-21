@@ -64,12 +64,12 @@ describe('TypeStore record types', () => {
 })
 
 describe('record types tokenization', () => {
-	it('tokenizes type keyword', () => {
-		const ctx = new CompilationContext('type Point')
+	it('tokenizes uppercase identifier as type name', () => {
+		const ctx = new CompilationContext('Point')
 		tokenize(ctx)
 		const tokens = [...ctx.tokens]
-		const typeToken = tokens.find(([, t]) => t.kind === TokenKind.Type)
-		assert.ok(typeToken, 'should have Type token')
+		const identToken = tokens.find(([, t]) => t.kind === TokenKind.Identifier)
+		assert.ok(identToken, 'should have Identifier token for type name')
 	})
 })
 
@@ -93,7 +93,7 @@ describe('record types node kinds', () => {
 
 describe('record types parsing', () => {
 	it('parses type declaration', () => {
-		const source = `type Point
+		const source = `Point
     x: i32
     y: i32
 panic`
@@ -106,7 +106,7 @@ panic`
 
 describe('record literal parsing', () => {
 	it('parses record instantiation', () => {
-		const source = `type Point
+		const source = `Point
     x: i32
     y: i32
 p:Point
@@ -143,7 +143,7 @@ panic`
 describe('parser semantic actions', () => {
 	it('creates TypeDecl node', () => {
 		// Use simple source without field declarations (FieldDecl semantic action comes in a later task)
-		const source = `type Point
+		const source = `Point
 panic`
 		const ctx = new CompilationContext(source)
 		tokenize(ctx)
@@ -155,7 +155,7 @@ panic`
 	})
 
 	it('creates FieldDecl nodes', () => {
-		const source = `type Point
+		const source = `Point
     x: i32
     y: i32
 panic`
@@ -197,7 +197,7 @@ panic`
 
 describe('checker type declarations', () => {
 	it('registers type in TypeStore', () => {
-		const source = `type Point
+		const source = `Point
     x: i32
     y: i32
 panic`
@@ -212,7 +212,7 @@ panic`
 	})
 
 	it('reports error for duplicate field names', () => {
-		const source = `type Point
+		const source = `Point
     x: i32
     x: i32
 panic`
@@ -225,7 +225,7 @@ panic`
 	})
 
 	it('registers fields with correct types', () => {
-		const source = `type Point
+		const source = `Point
     x: i32
     y: i64
 panic`
@@ -245,7 +245,7 @@ panic`
 	})
 
 	it('handles type with no fields', () => {
-		const source = `type Empty
+		const source = `Empty
 panic`
 		const ctx = new CompilationContext(source)
 		tokenize(ctx)
@@ -265,7 +265,7 @@ function createContext(source: string): CompilationContext {
 
 describe('checker record instantiation', () => {
 	it('validates all fields provided', () => {
-		const source = `type Point
+		const source = `Point
     x: i32
     y: i32
 p:Point
@@ -281,7 +281,7 @@ panic`
 	})
 
 	it('reports error for missing field', () => {
-		const source = `type Point
+		const source = `Point
     x: i32
     y: i32
 p:Point
@@ -296,7 +296,7 @@ panic`
 	})
 
 	it('reports error for unknown field', () => {
-		const source = `type Point
+		const source = `Point
     x: i32
     y: i32
 p:Point
@@ -313,7 +313,7 @@ panic`
 	})
 
 	it('reports error for duplicate field in initializer', () => {
-		const source = `type Point
+		const source = `Point
     x: i32
     y: i32
 p:Point
@@ -343,7 +343,7 @@ panic`
 
 describe('checker field access', () => {
 	it('resolves field type', () => {
-		const source = `type Point
+		const source = `Point
     x: i32
     y: i32
 p:Point
@@ -360,7 +360,7 @@ panic`
 	})
 
 	it('reports error for unknown field', () => {
-		const source = `type Point
+		const source = `Point
     x: i32
 p:Point
     x = 5
@@ -387,9 +387,9 @@ panic`
 	})
 
 	it('handles nested field access', () => {
-		const source = `type Inner
+		const source = `Inner
     val: i32
-type Outer
+Outer
     inner: Inner
 o:Outer
     inner: Inner
@@ -407,7 +407,7 @@ panic`
 describe('SymbolStore record bindings', () => {
 	it('creates flattened locals for record fields', () => {
 		// When binding p: Point, should create $p_x and $p_y locals
-		const source = `type Point
+		const source = `Point
     x: i32
     y: i32
 p:Point
@@ -427,7 +427,7 @@ panic`
 
 describe('codegen record types', () => {
 	it('emits flattened locals', () => {
-		const source = `type Point
+		const source = `Point
     x: i32
     y: i32
 p:Point
@@ -451,7 +451,7 @@ panic`
 	})
 
 	it('emits field access as local.get', () => {
-		const source = `type Point
+		const source = `Point
     x: i32
     y: i32
 p:Point
@@ -477,7 +477,7 @@ panic`
 	})
 
 	it('emits local.set for each record field initializer', () => {
-		const source = `type Point
+		const source = `Point
     x: i32
     y: i32
 p:Point
@@ -497,7 +497,7 @@ panic`
 	})
 
 	it('emits correct types for mixed-type record fields', () => {
-		const source = `type Mixed
+		const source = `Mixed
     a: i32
     b: i64
 m:Mixed
@@ -519,10 +519,10 @@ panic`
 
 describe('multiple type declarations', () => {
 	it('supports multiple type declarations in one file', () => {
-		const source = `type Point
+		const source = `Point
     x: i32
     y: i32
-type Line
+Line
     start: i32
     end: i32
 panic`
@@ -537,9 +537,9 @@ panic`
 	})
 
 	it('allows using fields from both types', () => {
-		const source = `type Point
+		const source = `Point
     x: i32
-type Line
+Line
     len: i32
 p:Point
     x = 5
@@ -558,9 +558,9 @@ panic`
 
 describe('nested record instantiation parsing', () => {
 	it('parses nested record init syntax', () => {
-		const source = `type Inner
+		const source = `Inner
     val: i32
-type Outer
+Outer
     inner: Inner
 o:Outer
     inner: Inner
@@ -589,9 +589,9 @@ panic`
 
 describe('nested record types', () => {
 	it('supports field with user-defined type', () => {
-		const source = `type Inner
+		const source = `Inner
     val: i32
-type Outer
+Outer
     inner: Inner
 panic`
 		const ctx = createContext(source)
@@ -608,7 +608,7 @@ panic`
 	})
 
 	it('errors when referencing undefined type', () => {
-		const source = `type Outer
+		const source = `Outer
     inner: Nonexistent
 panic`
 		const ctx = createContext(source)
@@ -620,9 +620,9 @@ panic`
 	})
 
 	it('errors on forward reference (define-before-use)', () => {
-		const source = `type Outer
+		const source = `Outer
     inner: Inner
-type Inner
+Inner
     val: i32
 panic`
 		const ctx = createContext(source)
@@ -635,7 +635,7 @@ panic`
 
 	describe('recursive type detection', () => {
 		it('detects direct self-reference cycle', () => {
-			const source = `type Node
+			const source = `Node
     next: Node
 panic`
 			const ctx = createContext(source)
@@ -655,9 +655,9 @@ panic`
 
 describe('nested field access', () => {
 	it('supports nested field access (o.inner.val)', () => {
-		const source = `type Inner
+		const source = `Inner
     val: i32
-type Outer
+Outer
     inner: Inner
 o:Outer
     inner: Inner
@@ -673,9 +673,9 @@ panic`
 	})
 
 	it('emits correct code for nested field access', () => {
-		const source = `type Inner
+		const source = `Inner
     val: i32
-type Outer
+Outer
     inner: Inner
 o:Outer
     inner: Inner
@@ -696,9 +696,9 @@ panic`
 
 describe('nested record codegen', () => {
 	it('emits correct flattened locals for nested records', () => {
-		const source = `type Inner
+		const source = `Inner
     val: i32
-type Outer
+Outer
     inner: Inner
 o:Outer
     inner: Inner
@@ -718,9 +718,9 @@ panic`
 
 describe('nested record instantiation checker', () => {
 	it('validates nested record init type name', () => {
-		const source = `type Inner
+		const source = `Inner
     val: i32
-type Outer
+Outer
     inner: Inner
 o:Outer
     inner: Inner
@@ -735,11 +735,11 @@ panic`
 	})
 
 	it('errors on type mismatch in nested init', () => {
-		const source = `type A
+		const source = `A
     x: i32
-type B
+B
     y: i32
-type Outer
+Outer
     inner: A
 o:Outer
     inner: B
@@ -756,10 +756,10 @@ panic`
 	})
 
 	it('validates all nested fields provided', () => {
-		const source = `type Inner
+		const source = `Inner
     x: i32
     y: i32
-type Outer
+Outer
     inner: Inner
 o:Outer
     inner: Inner
@@ -778,9 +778,9 @@ panic`
 
 describe('sibling fields after nested blocks', () => {
 	it('parses sibling field after nested record block', () => {
-		const source = `type Inner
+		const source = `Inner
     val: i32
-type Outer
+Outer
     inner: Inner
     x: i32
 o:Outer
@@ -795,9 +795,9 @@ panic`
 	})
 
 	it('compiles sibling field after nested block', () => {
-		const source = `type Inner
+		const source = `Inner
     val: i32
-type Outer
+Outer
     inner: Inner
     x: i32
 o:Outer
@@ -825,9 +825,9 @@ panic`
 	})
 
 	it('compiles multiple siblings after nested block', () => {
-		const source = `type Inner
+		const source = `Inner
     a: i32
-type Outer
+Outer
     inner: Inner
     x: i32
     y: i32
@@ -858,12 +858,12 @@ panic`
 	})
 
 	it('compiles deeply nested with siblings at each level', () => {
-		const source = `type L3
+		const source = `L3
     val: i32
-type L2
+L2
     l3: L3
     b: i32
-type L1
+L1
     l2: L2
     a: i32
 root:L1
