@@ -24,6 +24,7 @@ import {
 	type NestedRecordInitContext,
 	popBlockContext,
 	pushBlockContext,
+	type RecordBlockContext,
 	type RecordLiteralContext,
 } from './state.ts'
 import { type FieldInfo, InstKind, type SymbolId, type TypeId } from './types.ts'
@@ -122,7 +123,7 @@ export function extractFieldDeclName(fieldDeclId: NodeId, context: CompilationCo
 function validateRecordField(
 	fieldInitId: NodeId,
 	fieldName: string,
-	ctx: BlockContext,
+	ctx: RecordBlockContext,
 	state: CheckerState,
 	context: CompilationContext
 ): FieldInfo | null {
@@ -274,7 +275,7 @@ function emitFinalizedRecordLiteral(
  * Type guard for validating RecordLiteral block context has a resolved type.
  */
 function isValidRecordLiteralCtx(
-	ctx: BlockContext
+	ctx: RecordBlockContext
 ): ctx is RecordLiteralContext & { typeId: TypeId } {
 	return ctx.kind === 'RecordLiteral' && ctx.typeId !== null
 }
@@ -320,6 +321,13 @@ export function finalizeRecordLiteral(state: CheckerState, context: CompilationC
 // Nested Record Init
 // ============================================================================
 
+function getParentRecordTypeId(state: CheckerState): TypeId | null {
+	const parentCtx = currentBlockContext(state)
+	if (!parentCtx) return null
+	if (parentCtx.kind === 'FuncDef') return null
+	return parentCtx.typeId ?? null
+}
+
 /**
  * Validate that the nested record init type matches the expected field type.
  * Returns true if valid, false if there's a mismatch (error already emitted).
@@ -332,18 +340,17 @@ function validateNestedRecordTypeMatch(
 	state: CheckerState,
 	context: CompilationContext
 ): boolean {
-	const parentCtx = currentBlockContext(state)
-	if (!parentCtx?.typeId) return true
+	const parentTypeId = getParentRecordTypeId(state)
+	if (parentTypeId === null) return true
 
-	const fieldInfo = state.types.getField(parentCtx.typeId, fieldName)
-	if (fieldInfo && fieldInfo.typeId !== typeId) {
-		context.emitAtNode('TWCHECK033' as DiagnosticCode, nodeId, {
-			expected: state.types.typeName(fieldInfo.typeId),
-			got: typeName,
-		})
-		return false
-	}
-	return true
+	const fieldInfo = state.types.getField(parentTypeId, fieldName)
+	if (!fieldInfo || fieldInfo.typeId === typeId) return true
+
+	context.emitAtNode('TWCHECK033' as DiagnosticCode, nodeId, {
+		expected: state.types.typeName(fieldInfo.typeId),
+		got: typeName,
+	})
+	return false
 }
 
 /**
@@ -415,7 +422,7 @@ export function startNestedRecordInit(
  * Check if a nested record init context can be validated (has resolved type).
  */
 function canValidateNestedRecordFields(
-	ctx: BlockContext
+	ctx: RecordBlockContext
 ): ctx is (RecordLiteralContext | NestedRecordInitContext) & { typeId: TypeId } {
 	return (ctx.kind === 'RecordLiteral' || ctx.kind === 'NestedRecordInit') && ctx.typeId !== null
 }
@@ -424,7 +431,7 @@ function canValidateNestedRecordFields(
  * Type guard for validating NestedRecordInit block context has a resolved type for emission.
  */
 function isValidNestedRecordInitCtx(
-	ctx: BlockContext
+	ctx: RecordBlockContext
 ): ctx is NestedRecordInitContext & { typeId: TypeId } {
 	return ctx.kind === 'NestedRecordInit' && ctx.typeId !== null
 }
@@ -452,7 +459,7 @@ function emitFinalizedNestedRecordInit(
  * Validate that all required fields are provided in a nested record init.
  */
 function validateNestedRecordMissingFields(
-	ctx: BlockContext,
+	ctx: RecordBlockContext,
 	state: CheckerState,
 	context: CompilationContext
 ): void {

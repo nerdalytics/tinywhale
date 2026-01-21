@@ -5,9 +5,13 @@
 
 import type { StringId } from '../core/context.ts'
 import type { NodeId } from '../core/nodes.ts'
+
+export type { StringId } from '../core/context.ts'
+
 import {
 	BuiltinTypeId,
 	type FieldInfo,
+	type FuncTypeInfo,
 	type Inst,
 	type InstId,
 	instId,
@@ -23,6 +27,30 @@ import {
 	TypeKind,
 	typeId,
 } from './types.ts'
+
+export type FuncId = number & { readonly __brand: 'FuncId' }
+
+export function funcId(n: number): FuncId {
+	return n as FuncId
+}
+
+/**
+ * Information about a function stored in FuncStore.
+ */
+export interface FuncInfo {
+	/** Interned name of the function */
+	readonly nameId: StringId
+	/** Function type (parameter types and return type) */
+	readonly typeId: TypeId
+	/** Parse node of the declaration/definition */
+	readonly parseNodeId: NodeId
+	/** Body instruction ID (null for forward declarations until defined) */
+	bodyInstId: InstId | null
+	/** Parameter symbols (populated when function is defined) */
+	paramSymbols: SymbolId[]
+	/** Whether the function has been defined (has a body) */
+	isDefined: boolean
+}
 
 /**
  * Dense array storage for semantic instructions.
@@ -520,10 +548,130 @@ export class TypeStore {
 		return info.constraints
 	}
 
+	private readonly funcTypeCache: Map<string, TypeId> = new Map()
+
+	/**
+	 * Register a function type.
+	 * Function types are interned - same params + return = same TypeId.
+	 */
+	registerFuncType(paramTypes: readonly TypeId[], returnType: TypeId): TypeId {
+		const cacheKey = this.makeFuncTypeCacheKey(paramTypes, returnType)
+		const existing = this.funcTypeCache.get(cacheKey)
+		if (existing !== undefined) {
+			return existing
+		}
+
+		const paramNames = paramTypes.map((t) => this.typeName(t)).join(', ')
+		const returnName = this.typeName(returnType)
+		const name = `(${paramNames}) -> ${returnName}`
+
+		const id = typeId(this.types.length)
+		const funcInfo: FuncTypeInfo = {
+			paramTypes,
+			returnType,
+		}
+		const info: TypeInfo = {
+			funcInfo,
+			kind: TypeKind.Func,
+			name,
+			parseNodeId: null,
+			underlying: id,
+		}
+		this.types.push(info)
+		this.funcTypeCache.set(cacheKey, id)
+		return id
+	}
+
+	private makeFuncTypeCacheKey(paramTypes: readonly TypeId[], returnType: TypeId): string {
+		return `(${paramTypes.join(',')}) -> ${returnType}`
+	}
+
+	isFuncType(id: TypeId): boolean {
+		const info = this.types[id]
+		return info?.kind === TypeKind.Func
+	}
+
+	getFuncInfo(id: TypeId): FuncTypeInfo | undefined {
+		const info = this.types[id]
+		if (info?.kind !== TypeKind.Func) {
+			return undefined
+		}
+		return info.funcInfo
+	}
+
 	*[Symbol.iterator](): Generator<[TypeId, TypeInfo]> {
 		for (let i = 0; i < this.types.length; i++) {
 			const info = this.types[i]
 			if (info !== undefined) yield [typeId(i), info]
+		}
+	}
+}
+
+/**
+ * Dense array storage for functions.
+ * Supports forward declarations (declaring type before body).
+ */
+export class FuncStore {
+	private readonly funcs: FuncInfo[] = []
+	private readonly byName: Map<StringId, FuncId> = new Map()
+
+	/**
+	 * Declare a forward function (type only, no body yet).
+	 * If the function already exists, returns the existing FuncId.
+	 */
+	declareForward(nameId: StringId, typeId: TypeId, parseNodeId: NodeId): FuncId {
+		const existing = this.byName.get(nameId)
+		if (existing !== undefined) {
+			return existing
+		}
+
+		const id = funcId(this.funcs.length)
+		this.funcs.push({
+			bodyInstId: null,
+			isDefined: false,
+			nameId,
+			paramSymbols: [],
+			parseNodeId,
+			typeId,
+		})
+		this.byName.set(nameId, id)
+		return id
+	}
+
+	/**
+	 * Define a function (provide body).
+	 * Must have been declared first via declareForward.
+	 */
+	defineFunc(id: FuncId, bodyInstId: InstId, paramSymbols: SymbolId[]): void {
+		const func = this.funcs[id]
+		if (func === undefined) {
+			throw new Error(`Invalid FuncId: ${id}`)
+		}
+		func.bodyInstId = bodyInstId
+		func.paramSymbols = paramSymbols
+		func.isDefined = true
+	}
+
+	getByName(nameId: StringId): FuncId | undefined {
+		return this.byName.get(nameId)
+	}
+
+	get(id: FuncId): FuncInfo {
+		const func = this.funcs[id]
+		if (func === undefined) {
+			throw new Error(`Invalid FuncId: ${id}`)
+		}
+		return func
+	}
+
+	count(): number {
+		return this.funcs.length
+	}
+
+	*[Symbol.iterator](): Generator<[FuncId, FuncInfo]> {
+		for (let i = 0; i < this.funcs.length; i++) {
+			const func = this.funcs[i]
+			if (func !== undefined) yield [funcId(i), func]
 		}
 	}
 }

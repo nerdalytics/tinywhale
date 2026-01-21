@@ -24,6 +24,8 @@ import {
 	processFieldDecl,
 	startTypeDecl,
 } from './declarations.ts'
+import { checkExpression } from './expressions.ts'
+import { handleFuncBinding, handleFuncDecl } from './funcs.ts'
 import { finalizeMatch, getMatchArmFromLine, processMatchArm, startMatchBinding } from './match.ts'
 import {
 	extractFieldDeclName,
@@ -44,7 +46,7 @@ import {
 	isInRecordLiteralContext,
 	isInTypeDeclContext,
 } from './state.ts'
-import { InstStore, ScopeStore, SymbolStore, TypeStore } from './stores.ts'
+import { FuncStore, InstStore, ScopeStore, SymbolStore, TypeStore } from './stores.ts'
 import { BuiltinTypeId, type CheckResult, InstKind, type TypeId } from './types.ts'
 import { isStatementNode, isTerminator } from './utils.ts'
 
@@ -158,6 +160,12 @@ function emitStatement(
 				parseNodeId: stmtId,
 				typeId: BuiltinTypeId.None,
 			})
+			break
+		case NodeKind.FuncDecl:
+			handleFuncDecl(stmtId, state, context)
+			break
+		case NodeKind.FuncBinding:
+			handleFuncBinding(stmtId, state, context, checkExpression)
 			break
 		case NodeKind.PrimitiveBinding:
 			processPrimitiveBinding(stmtId, state, context)
@@ -307,7 +315,8 @@ function processIndentedLineAsFieldInit(
  */
 function shouldFinalizeNestedForIndent(state: CheckerState, lineIndentLevel: number): boolean {
 	const ctx = currentBlockContext(state)
-	return ctx?.childIndentLevel !== undefined && lineIndentLevel < ctx.childIndentLevel
+	if (!ctx || ctx.kind === 'FuncDef') return false
+	return ctx.childIndentLevel !== undefined && lineIndentLevel < ctx.childIndentLevel
 }
 
 /**
@@ -468,11 +477,13 @@ function assignCheckResultsToContext(
 	context: CompilationContext,
 	insts: InstStore,
 	symbols: SymbolStore,
-	types: TypeStore
+	types: TypeStore,
+	funcs: FuncStore
 ): void {
 	context.insts = insts
 	context.symbols = symbols
 	context.types = types
+	context.funcs = funcs
 }
 
 function finalizePendingContexts(state: CheckerState, context: CompilationContext): void {
@@ -508,8 +519,12 @@ export function check(context: CompilationContext): CheckResult {
 	const scopes = new ScopeStore()
 	const symbols = new SymbolStore()
 	const types = new TypeStore()
+	const funcs = new FuncStore()
 	const mainScopeId = scopes.createMainScope()
 	const mainScope = scopes.get(mainScopeId)
+
+	// Initialize funcs in context early so handlers can access it
+	context.funcs = funcs
 
 	const state: CheckerState = {
 		blockContextStack: [],
@@ -524,7 +539,7 @@ export function check(context: CompilationContext): CheckResult {
 
 	const nodeCount = context.nodes.count()
 	if (nodeCount === 0) {
-		assignCheckResultsToContext(context, insts, symbols, types)
+		assignCheckResultsToContext(context, insts, symbols, types, funcs)
 		return { succeeded: true }
 	}
 
@@ -532,7 +547,7 @@ export function check(context: CompilationContext): CheckResult {
 	const program = context.nodes.get(programId)
 
 	if (program.kind !== NodeKind.Program) {
-		assignCheckResultsToContext(context, insts, symbols, types)
+		assignCheckResultsToContext(context, insts, symbols, types, funcs)
 		return { succeeded: !context.hasErrors() }
 	}
 
@@ -543,7 +558,7 @@ export function check(context: CompilationContext): CheckResult {
 
 	finalizePendingContexts(state, context)
 	flushUnreachableWarning(state, context)
-	assignCheckResultsToContext(context, insts, symbols, types)
+	assignCheckResultsToContext(context, insts, symbols, types, funcs)
 
 	return { succeeded: !context.hasErrors() }
 }

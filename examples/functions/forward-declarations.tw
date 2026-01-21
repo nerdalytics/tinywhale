@@ -1,0 +1,13 @@
+# Forward declarations specify function types before definition
+# This enables using a function before its definition appears
+
+double: (i32) -> i32
+triple: (i32) -> i32
+
+# Definitions must match their forward declaration types
+double = (x: i32): i32 -> x * 2
+triple = (x: i32): i32 -> x * 3
+
+# Using declared functions
+a:i32 = double(5)
+b:i32 = triple(3)

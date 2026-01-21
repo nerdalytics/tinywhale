@@ -328,4 +328,65 @@ test('Semantic Specs', async (t) => {
 			},
 		])
 	)
+
+	await t.test(
+		'Functions - Basic',
+		semanticTests([
+			{
+				description: 'simple function definition',
+				expect: 'valid',
+				input: 'double = (x: i32): i32 -> x * 2',
+			},
+			{
+				description: 'function with two parameters',
+				expect: 'valid',
+				input: 'add = (a: i32, b: i32): i32 -> a + b',
+			},
+			{
+				description: 'function call',
+				expect: 'valid',
+				input: 'double = (x: i32): i32 -> x * 2\nresult:i32 = double(21)',
+			},
+			{
+				description: 'function with multiple params called',
+				expect: 'valid',
+				input: 'add = (a: i32, b: i32): i32 -> a + b\nresult:i32 = add(10, 20)',
+			},
+			{
+				description: 'forward declaration with definition',
+				expect: 'valid',
+				input: 'double: (i32) -> i32\ndouble = (x: i32): i32 -> x * 2\nresult:i32 = double(5)',
+			},
+		])
+	)
+
+	await t.test(
+		'Functions - Type Errors',
+		semanticTests([
+			{
+				description: 'wrong argument type',
+				errorCode: 'TWCHECK016',
+				expect: 'check-error',
+				input: 'double = (x: i32): i32 -> x * 2\nresult:i32 = double(1.5)',
+			},
+			{
+				description: 'wrong number of arguments - too few',
+				errorCode: 'TWCHECK010',
+				expect: 'check-error',
+				input: 'add = (a: i32, b: i32): i32 -> a + b\nresult:i32 = add(10)',
+			},
+			{
+				description: 'wrong number of arguments - too many',
+				errorCode: 'TWCHECK010',
+				expect: 'check-error',
+				input: 'double = (x: i32): i32 -> x * 2\nresult:i32 = double(1, 2)',
+			},
+			{
+				description: 'calling non-function',
+				errorCode: 'TWCHECK016',
+				expect: 'check-error',
+				input: 'x:i32 = 42\nresult:i32 = x(5)',
+			},
+		])
+	)
 })

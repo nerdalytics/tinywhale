@@ -1,7 +1,8 @@
 TinyWhale {
   // Program structure: newlines are required between lines, not consumed as whitespace
   // This ensures "panic panic" (two statements on one line) is rejected
-  Program (a program) = Line? (newline Line)* newline?
+  // Line? after newline allows blank lines between statements
+  Program (a program) = Line? (newline Line?)* newline?
   Line (a line) = IndentedLine | DedentLine | RootLine
 
   // RootLine is just a statement (newlines handled by Program rule)
@@ -20,8 +21,20 @@ TinyWhale {
   DedentLine = anyDedent+ Statement?
 
   // Statements
-  Statement = TypeDecl | MatchBinding | MatchExpr | PrimitiveBinding | RecordBinding | PanicStatement
+  Statement = TypeDecl | MatchBinding | MatchExpr | FuncDecl | FuncBinding | PrimitiveBinding | RecordBinding | PanicStatement
   PanicStatement = panic
+
+  // Function forward declaration: factorial: (i32) -> i32
+  FuncDecl = identifier colon FuncType
+
+  // Lambda expression: (x: i32): i32 -> x * 2
+  Lambda = lparen ParameterList? rparen (colon TypeRef)? arrow LambdaBody
+  ParameterList = Parameter (comma Parameter)*
+  Parameter = identifier colon TypeRef
+  LambdaBody = Expression
+
+  // Function binding: double = (x: i32): i32 -> x * 2
+  FuncBinding = identifier equals Lambda
 
   // Type declaration: type Point
   TypeDecl = typeKeywordToken upperIdentifier
@@ -46,7 +59,11 @@ TinyWhale {
 
   // Type reference (primitives or user-defined)
   // ListType handles iterative nesting: i32[]<size=4>[]<size=2>
-  TypeRef = ListType | RefinementType | upperIdentifier | typeKeyword
+  TypeRef = ListType | RefinementType | FuncType | upperIdentifier | typeKeyword
+
+  // Function type: (i32, i32) -> i32
+  FuncType = lparen TypeList? rparen arrow TypeRef
+  TypeList = TypeRef (comma TypeRef)*
 
   // Refinement type: i32<min=0, max=100>
   RefinementType = typeKeyword TypeBounds
@@ -111,7 +128,9 @@ TinyWhale {
               | intLiteral
 
   // Postfix expressions: only identifiers can be postfix bases
-  PostfixExpr = IndexAccess | FieldAccess
+  PostfixExpr = FuncCall | IndexAccess | FieldAccess
+  FuncCall = PostfixableBase lparen ArgumentList? rparen
+  ArgumentList = Expression (comma Expression)*
   FieldAccess = PostfixableBase (dot lowerIdentifier)+
   IndexAccess = PostfixIndexBase (lbracket intLiteral rbracket)+
   PostfixIndexBase = FieldAccess | PostfixableBase

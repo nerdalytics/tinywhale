@@ -1,7 +1,7 @@
 # mise configuration for tinywhale monorepo
 [tools]
 node = "24.13.0"
-pnpm = "10.28.0"
+pnpm = "10.28.1"
 
 [tasks.install]
 description = "Install dependencies"

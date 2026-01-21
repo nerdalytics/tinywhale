@@ -22,7 +22,7 @@ import {
 } from './expressions.ts'
 import type { CheckerState, ExprResult } from './state.ts'
 import { resolveTypeFromAnnotation } from './type-resolution.ts'
-import { InstKind, type SymbolId, type TypeId } from './types.ts'
+import { InstKind, type SymbolId, type TypeId, TypeKind } from './types.ts'
 import { isExpressionNode, isValidExprResult } from './utils.ts'
 
 // ============================================================================
@@ -188,6 +188,16 @@ export function emitSimpleBinding(
 	state: CheckerState,
 	context: CompilationContext
 ): void {
+	const existingSymId = state.symbols.lookupByName(nameId)
+	if (existingSymId !== undefined) {
+		const existingEntry = state.symbols.get(existingSymId)
+		const existingTypeInfo = state.types.get(existingEntry.typeId)
+		if (existingTypeInfo.kind === TypeKind.Func) {
+			const name = context.strings.get(nameId)
+			context.emitAtNode('TWCHECK051' as DiagnosticCode, bindingId, { name })
+		}
+	}
+
 	const exprResult = checkExpression(exprId, declaredType, state, context)
 	if (!isValidExprResult(exprResult)) return
 

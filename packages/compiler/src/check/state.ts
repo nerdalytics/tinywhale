@@ -11,8 +11,8 @@
 
 import type { StringId } from '../core/context.ts'
 import type { NodeId, NodeKind } from '../core/nodes.ts'
-import type { InstStore, ScopeStore, SymbolStore, TypeStore } from './stores.ts'
-import type { InstId, Scope, TypeId } from './types.ts'
+import type { FuncId, InstStore, ScopeStore, SymbolStore, TypeStore } from './stores.ts'
+import type { InstId, Scope, SymbolId, TypeId } from './types.ts'
 
 /**
  * Result of evaluating an expression.
@@ -93,10 +93,28 @@ export interface NestedRecordInitContext extends BlockContextBase {
 }
 
 /**
+ * Context for function definition blocks.
+ */
+export interface FuncDefContext {
+	kind: 'FuncDef'
+	funcId: FuncId
+	paramSymbols: SymbolId[]
+	returnType: TypeId
+	bodyInsts: InstId[]
+	funcNodeId: NodeId
+}
+
+/**
+ * Union type for record-related block contexts.
+ * These share a common structure for field handling.
+ */
+export type RecordBlockContext = TypeDeclContext | RecordLiteralContext | NestedRecordInitContext
+
+/**
  * Discriminated union for block-based constructs.
  * All share the pattern: header starts block, indented lines are children, dedent finalizes.
  */
-export type BlockContext = TypeDeclContext | RecordLiteralContext | NestedRecordInitContext
+export type BlockContext = RecordBlockContext | FuncDefContext
 
 /**
  * Core checker state passed through all checking functions.
@@ -170,4 +188,12 @@ export function isInRecordInitContext(state: CheckerState): boolean {
 export function isInNestedRecordInitContext(state: CheckerState): boolean {
 	const ctx = currentBlockContext(state)
 	return ctx !== null && ctx.kind === 'NestedRecordInit'
+}
+
+/**
+ * Check if we're in a FuncDef block context.
+ */
+export function isInFuncDefContext(state: CheckerState): boolean {
+	const ctx = currentBlockContext(state)
+	return ctx !== null && ctx.kind === 'FuncDef'
 }

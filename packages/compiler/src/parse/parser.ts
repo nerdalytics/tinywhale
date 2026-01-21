@@ -291,12 +291,94 @@ function createNodeEmittingSemantics(
 		return typeNode.child(0).ctorName === 'RefinementType'
 	}
 
+	function isFuncTypeRef(typeNode: Node): boolean {
+		if (typeNode.ctorName !== 'TypeRef') return false
+		return typeNode.child(0).ctorName === 'FuncType'
+	}
+
+	function isComplexTypeRef(typeNode: Node): boolean {
+		return isListTypeRef(typeNode) || isRefinementTypeRef(typeNode) || isFuncTypeRef(typeNode)
+	}
+
 	function maybeEmitComplexType(typeNode: Node): void {
-		if (isListTypeRef(typeNode)) {
-			typeNode.child(0)['emitTypeAnnotation']()
-		} else if (isRefinementTypeRef(typeNode)) {
+		if (isComplexTypeRef(typeNode)) {
 			typeNode.child(0)['emitTypeAnnotation']()
 		}
+	}
+
+	/**
+	 * Emit a TypeAnnotation node for any TypeRef (simple or complex).
+	 * For complex types (ListType, RefinementType, FuncType), emits the complex type as child.
+	 * For simple types (typeKeyword, upperIdentifier), emits just the TypeAnnotation with the token.
+	 */
+	function emitTypeRefAsTypeAnnotation(typeNode: Node): NodeId {
+		const startCount = context.nodes.count()
+		maybeEmitComplexType(typeNode)
+		const childCount = context.nodes.count() - startCount
+
+		// Get token from the type node - for TypeRef, get from its child
+		const typeChild = typeNode.ctorName === 'TypeRef' ? typeNode.child(0) : typeNode
+		const tid = getTokenIdForOhmNode(typeChild)
+		return context.nodes.add({
+			kind: NodeKind.TypeAnnotation,
+			subtreeSize: 1 + childCount,
+			tokenId: tid,
+		})
+	}
+
+	/**
+	 * Emit nodes from an Ohm "first (sep rest)*" pattern.
+	 * @param optListNode - Optional node that may contain the list
+	 * @param emitNode - Function to call on each list element
+	 * @returns true if list was present and emitted
+	 */
+	function emitFirstRestList(
+		optListNode: { children: Node[] },
+		emitNode: (node: Node) => void
+	): boolean {
+		const listNode = optListNode.children[0]
+		if (listNode === undefined) return false
+		// Pattern: First (separator Rest)*
+		emitNode(listNode.child(0))
+		const restNodes = listNode.child(2)
+		for (let i = 0; i < restNodes.numChildren; i++) {
+			emitNode(restNodes.child(i))
+		}
+		return true
+	}
+
+	/**
+	 * Emit a TypeList node wrapping TypeAnnotation nodes for each type in the list.
+	 */
+	function emitTypeListIfPresent(optTypeList: { children: Node[] }): void {
+		const typeListNode = optTypeList.children[0]
+		if (typeListNode === undefined) return
+		const typeListStartCount = context.nodes.count()
+		emitFirstRestList(optTypeList, emitTypeRefAsTypeAnnotation)
+		const typeListChildCount = context.nodes.count() - typeListStartCount
+		const typeListTid = getTokenIdForOhmNode(typeListNode)
+		context.nodes.add({
+			kind: NodeKind.TypeList,
+			subtreeSize: 1 + typeListChildCount,
+			tokenId: typeListTid,
+		})
+	}
+
+	/**
+	 * Emit a TypeAnnotation node for an optional TypeRef (used in return types).
+	 */
+	function maybeEmitTypeAnnotation(optTypeRef: { children: Node[] }): void {
+		const typeNode = optTypeRef.children[0]
+		if (typeNode === undefined) return
+		const typeStartCount = context.nodes.count()
+		maybeEmitComplexType(typeNode)
+		const typeChildCount = context.nodes.count() - typeStartCount
+		const tid = getTokenIdForOhmNode(typeNode)
+		context.nodes.add({
+			kind: NodeKind.TypeAnnotation,
+			subtreeSize: 1 + typeChildCount,
+			tokenId: tid,
+		})
 	}
 
 	semantics.addOperation<NodeId>('emitExpression', {
@@ -334,6 +416,19 @@ function createNodeEmittingSemantics(
 				})
 			}
 			return currentId
+		},
+		FuncCall(base: Node, _lparen: Node, optArgList: Node, _rparen: Node): NodeId {
+			const startCount = context.nodes.count()
+			base['emitExpression']()
+			emitFirstRestList(optArgList, (n) => n['emitExpression']())
+			const childCount = context.nodes.count() - startCount
+
+			const tid = getTokenIdForOhmNode(this)
+			return context.nodes.add({
+				kind: NodeKind.FuncCall,
+				subtreeSize: 1 + childCount,
+				tokenId: tid,
+			})
 		},
 		floatLiteral(
 			_intPart: Node,
@@ -454,6 +549,29 @@ function createNodeEmittingSemantics(
 				tokenId: valueTid,
 			})
 		},
+		FuncType(
+			_lparen: Node,
+			optTypeList: Node,
+			_rparen: Node,
+			_arrow: Node,
+			returnType: Node
+		): NodeId {
+			const startCount = context.nodes.count()
+
+			// Emit parameter types wrapped in TypeList if present
+			emitTypeListIfPresent(optTypeList)
+
+			// Emit return type as TypeAnnotation
+			emitTypeRefAsTypeAnnotation(returnType)
+
+			const childCount = context.nodes.count() - startCount
+			const tid = getTokenIdForOhmNode(this)
+			return context.nodes.add({
+				kind: NodeKind.FuncType,
+				subtreeSize: 1 + childCount,
+				tokenId: tid,
+			})
+		},
 		ListType(elementType: Node, suffixes: Node): NodeId {
 			const startCount = context.nodes.count()
 			// Handle bounded primitives as base element type
@@ -570,6 +688,60 @@ function createNodeEmittingSemantics(
 		},
 	})
 
+	semantics.addOperation<NodeId>('emitLambda', {
+		Lambda(
+			_lparen: Node,
+			optParamList: Node,
+			_rparen: Node,
+			_optColon: Node,
+			optReturnType: Node,
+			_arrow: Node,
+			body: Node
+		): NodeId {
+			const startCount = context.nodes.count()
+
+			// Emit parameters
+			emitFirstRestList(optParamList, (n) => n['emitLambda']())
+
+			// Emit return type annotation if present
+			maybeEmitTypeAnnotation(optReturnType)
+
+			// Emit body expression
+			body.child(0)['emitExpression']()
+
+			const childCount = context.nodes.count() - startCount
+			const tid = getTokenIdForOhmNode(this)
+			return context.nodes.add({
+				kind: NodeKind.Lambda,
+				subtreeSize: 1 + childCount,
+				tokenId: tid,
+			})
+		},
+		Parameter(ident: Node, _colon: Node, typeRef: Node): NodeId {
+			const startCount = context.nodes.count()
+			ident['emitExpression']()
+			const typeStartCount = context.nodes.count()
+			maybeEmitComplexType(typeRef)
+			const typeChildCount = context.nodes.count() - typeStartCount
+
+			const tid = getTokenIdForOhmNode(typeRef)
+			context.nodes.add({
+				kind: NodeKind.TypeAnnotation,
+				subtreeSize: 1 + typeChildCount,
+				tokenId: tid,
+			})
+
+			const childCount = context.nodes.count() - startCount
+			const paramTid = getTokenIdForOhmNode(ident)
+
+			return context.nodes.add({
+				kind: NodeKind.Parameter,
+				subtreeSize: 1 + childCount,
+				tokenId: paramTid,
+			})
+		},
+	})
+
 	semantics.addOperation<NodeId>('emitMatchArm', {
 		MatchArm(pattern: Node, _arrow: Node, expr: Node): NodeId {
 			const startCount = context.nodes.count()
@@ -641,6 +813,36 @@ function createNodeEmittingSemantics(
 	})
 
 	semantics.addOperation<NodeId>('emitStatement', {
+		FuncBinding(ident: Node, _equals: Node, lambda: Node): NodeId {
+			const startCount = context.nodes.count()
+			ident['emitExpression']()
+			lambda['emitLambda']()
+			const childCount = context.nodes.count() - startCount
+
+			const lineNumber = getLineNumber(this)
+			const tid = getTokenIdForLine(lineNumber)
+
+			return context.nodes.add({
+				kind: NodeKind.FuncBinding,
+				subtreeSize: 1 + childCount,
+				tokenId: tid,
+			})
+		},
+		FuncDecl(ident: Node, _colon: Node, funcType: Node): NodeId {
+			const startCount = context.nodes.count()
+			ident['emitExpression']()
+			funcType['emitTypeAnnotation']()
+			const childCount = context.nodes.count() - startCount
+
+			const lineNumber = getLineNumber(this)
+			const tid = getTokenIdForLine(lineNumber)
+
+			return context.nodes.add({
+				kind: NodeKind.FuncDecl,
+				subtreeSize: 1 + childCount,
+				tokenId: tid,
+			})
+		},
 		MatchBinding(ident: Node, typeAnnotation: Node, _equals: Node, matchExpr: Node): NodeId {
 			const startCount = context.nodes.count()
 			ident['emitExpression']()
@@ -801,13 +1003,17 @@ function createNodeEmittingSemantics(
 		},
 	})
 
-	function emitProgramLines(optFirstLine: Node, lines: Node): void {
-		const firstLine = optFirstLine.children[0]
-		if (firstLine !== undefined) {
-			firstLine['emitLine']()
-		}
-		for (const line of lines.children) {
+	function maybeEmitLine(optNode: { children: Node[] }): void {
+		const line = optNode.children[0]
+		if (line !== undefined) {
 			line['emitLine']()
+		}
+	}
+
+	function emitProgramLines(optFirstLine: Node, lines: Node): void {
+		maybeEmitLine(optFirstLine)
+		for (const lineOpt of lines.children) {
+			maybeEmitLine(lineOpt)
 		}
 	}
 

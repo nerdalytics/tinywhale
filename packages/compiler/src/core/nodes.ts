@@ -8,29 +8,45 @@ import type { TokenId } from './tokens.ts'
 
 /** Node kinds - one per grammar production. */
 export const NodeKind = {
+	ArgumentList: 115,
+	// Expressions (100-149)
 	BinaryExpr: 104,
+
+	// Patterns (200-249)
 	BindingPattern: 202,
 	Bound: 153,
 	CompareChain: 106,
-	DedentLine: 1,
 
+	// Structure (0-9, 255)
+	DedentLine: 1,
 	FieldAccess: 109,
+
+	// Type/Field declarations (50-59)
 	FieldDecl: 51,
 	FieldInit: 108,
 	FloatLiteral: 103,
 
+	// Statements (10-99)
+	FuncBinding: 17,
+	FuncCall: 114,
+	FuncDecl: 16,
+
+	// Types (150-159)
+	FuncType: 156,
 	Identifier: 100,
 	IndentedLine: 0,
 	IndexAccess: 111,
 	IntLiteral: 101,
+	Lambda: 113,
 	ListLiteral: 112,
 	ListType: 151,
 	LiteralPattern: 201,
 	MatchArm: 13,
 	MatchExpr: 12,
 	OrPattern: 203,
-
 	PanicStatement: 10,
+	Parameter: 52,
+	ParameterList: 53,
 	ParenExpr: 105,
 	PrimitiveBinding: 14,
 	Program: 255,
@@ -41,9 +57,9 @@ export const NodeKind = {
 	TypeAnnotation: 150,
 	TypeBounds: 155,
 	TypeDecl: 50,
+	TypeList: 157,
 	UnaryExpr: 102,
 	VariableBinding: 11,
-
 	WildcardPattern: 200,
 } as const
 

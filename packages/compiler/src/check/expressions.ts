@@ -19,6 +19,7 @@ import type { CompilationContext, StringId } from '../core/context.ts'
 import type { DiagnosticCode } from '../core/diagnostics.ts'
 import { type NodeId, NodeKind, offsetNodeId, type ParseNode, prevNodeId } from '../core/nodes.ts'
 import { type TokenId, TokenKind } from '../core/tokens.ts'
+import { handleFuncCall } from './funcs.ts'
 import type { CheckerState, ExprResult } from './state.ts'
 import {
 	checkRefinementConstraints,
@@ -1224,6 +1225,8 @@ export function checkExpressionInferred(
 			return checkFieldAccessInferred(exprId, state, context)
 		case NodeKind.IndexAccess:
 			return checkIndexAccessInferred(exprId, state, context)
+		case NodeKind.FuncCall:
+			return handleFuncCall(exprId, state, context, checkExpressionInferred)
 		default:
 			return { instId: null, typeId: BuiltinTypeId.Invalid }
 	}
@@ -1262,6 +1265,8 @@ export function checkExpression(
 			return checkIndexAccess(exprId, expectedType, state, context)
 		case NodeKind.ListLiteral:
 			return checkListLiteral(exprId, expectedType, state, context)
+		case NodeKind.FuncCall:
+			return handleFuncCall(exprId, state, context, checkExpressionInferred)
 		default:
 			console.assert(false, 'checkExpression: unhandled expression kind %d', node.kind)
 			return { instId: null, typeId: BuiltinTypeId.Invalid }
