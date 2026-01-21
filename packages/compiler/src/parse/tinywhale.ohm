@@ -20,8 +20,11 @@ TinyWhale {
   DedentLine = anyDedent+ Statement?
 
   // Statements
-  Statement = TypeDecl | MatchBinding | MatchExpr | PrimitiveBinding | RecordBinding | PanicStatement
+  Statement = TypeDecl | MatchBinding | MatchExpr | FuncDecl | PrimitiveBinding | RecordBinding | PanicStatement
   PanicStatement = panic
+
+  // Function forward declaration: factorial: (i32) -> i32
+  FuncDecl = identifier colon FuncType
 
   // Type declaration: type Point
   TypeDecl = typeKeywordToken upperIdentifier
