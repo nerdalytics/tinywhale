@@ -307,7 +307,8 @@ function processIndentedLineAsFieldInit(
  */
 function shouldFinalizeNestedForIndent(state: CheckerState, lineIndentLevel: number): boolean {
 	const ctx = currentBlockContext(state)
-	return ctx?.childIndentLevel !== undefined && lineIndentLevel < ctx.childIndentLevel
+	if (!ctx || ctx.kind === 'FuncDef') return false
+	return ctx.childIndentLevel !== undefined && lineIndentLevel < ctx.childIndentLevel
 }
 
 /**
