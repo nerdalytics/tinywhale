@@ -516,6 +516,36 @@ test('Grammar Specs', async (t) => {
 		}
 	})
 
+	await t.test('Type Aliases', (t) => {
+		const tester = createTester(grammar, 'Type Aliases', 'Program')
+
+		tester.match(
+			prepareList([
+				// [GRAMMAR] Type alias without type keyword (PascalCase = TypeRef)
+				'Add = (i32, i32) -> i32\npanic',
+				'Percentage = i32\npanic', // Simple type alias
+				'IntList = i32[]<size=4>\npanic', // List type alias
+			])
+		)
+
+		tester.reject(
+			prepareList([
+				'add = (i32, i32) -> i32\npanic', // lowercase not a type alias (but valid func binding with lambda)
+			])
+		)
+
+		const result = tester.run()
+		if (result.failed > 0) {
+			for (const r of result.results) {
+				if (!r.passed) {
+					t.diagnostic(`[FAILED] ${r.expected} '${r.input}': ${r.errorMessage}`)
+					t.diagnostic(`Prepared Input: ${JSON.stringify(r.input)}`)
+				}
+			}
+			assert.fail(`Failed ${result.failed} grammar tests`)
+		}
+	})
+
 	await t.test('Identifiers', (t) => {
 		const tester = createTester(grammar, 'Identifiers', 'Program')
 

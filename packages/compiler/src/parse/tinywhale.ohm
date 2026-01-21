@@ -21,7 +21,7 @@ TinyWhale {
   DedentLine = anyDedent+ Statement?
 
   // Statements
-  Statement = TypeDecl | MatchBinding | MatchExpr | FuncDecl | FuncBinding | PrimitiveBinding | RecordBinding | PanicStatement
+  Statement = TypeDecl | TypeAlias | MatchBinding | MatchExpr | FuncDecl | FuncBinding | PrimitiveBinding | RecordBinding | PanicStatement
   PanicStatement = panic
 
   // Function forward declaration: factorial: (i32) -> i32
@@ -38,6 +38,9 @@ TinyWhale {
 
   // Type declaration: type Point
   TypeDecl = typeKeywordToken upperIdentifier
+
+  // Type alias (no `type` keyword): Add = (i32, i32) -> i32
+  TypeAlias = upperIdentifier equals TypeRef
 
   // Primitive type reference (types that require inline expression)
   PrimitiveTypeRef = ListType | RefinementType | typeKeyword
