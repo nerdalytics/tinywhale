@@ -516,6 +516,37 @@ test('Grammar Specs', async (t) => {
 		}
 	})
 
+	await t.test('Expression Sequences in Lambda Bodies', (t) => {
+		const tester = createTester(grammar, 'Expression Sequences', 'Program')
+
+		tester.match(
+			prepareList([
+				// Multi-line function body with binding then expression
+				`f = (x: i32): i32 ->
+    y: i32 = x * 2
+    y + 1
+panic`,
+				// Nested function definition inside lambda body
+				`compute = (x: i32): i32 ->
+    helper: (i32) -> i32
+    helper = (n: i32): i32 -> n * 2
+    helper(x)
+panic`,
+			])
+		)
+
+		const result = tester.run()
+		if (result.failed > 0) {
+			for (const r of result.results) {
+				if (!r.passed) {
+					t.diagnostic(`[FAILED] ${r.expected} '${r.input}': ${r.errorMessage}`)
+					t.diagnostic(`Prepared Input: ${JSON.stringify(r.input)}`)
+				}
+			}
+			assert.fail(`Failed ${result.failed} grammar tests`)
+		}
+	})
+
 	await t.test('Type Aliases', (t) => {
 		const tester = createTester(grammar, 'Type Aliases', 'Program')
 

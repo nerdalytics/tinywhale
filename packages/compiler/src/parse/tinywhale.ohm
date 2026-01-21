@@ -28,10 +28,19 @@ TinyWhale {
   FuncDecl = identifier colon FuncType
 
   // Lambda expression: (x: i32): i32 -> x * 2
+  // LambdaBody can be:
+  //   - Single inline expression: (x: i32): i32 -> x * 2
+  //   - Block with expression sequence:
+  //       (x: i32): i32 ->
+  //           y: i32 = x * 2
+  //           y + 1
   Lambda = lparen ParameterList? rparen (colon TypeRef)? arrow LambdaBody
   ParameterList = Parameter (comma Parameter)*
   Parameter = identifier colon TypeRef
-  LambdaBody = Expression
+  LambdaBody = LambdaBlock | Expression
+  LambdaBlock = newline LambdaBlockLine (newline LambdaBlockLine)*
+  LambdaBlockLine = indentToken anyDedent* BlockExpression
+  BlockExpression = FuncDecl | FuncBinding | PrimitiveBinding | MatchBinding | MatchExpr | Expression
 
   // Function binding: double = (x: i32): i32 -> x * 2
   FuncBinding = identifier equals Lambda
