@@ -5,6 +5,7 @@
 
 import type { StringId } from '../core/context.ts'
 import type { NodeId } from '../core/nodes.ts'
+export type { StringId } from '../core/context.ts'
 import {
 	BuiltinTypeId,
 	type FieldInfo,
@@ -24,6 +25,30 @@ import {
 	TypeKind,
 	typeId,
 } from './types.ts'
+
+export type FuncId = number & { readonly __brand: 'FuncId' }
+
+export function funcId(n: number): FuncId {
+	return n as FuncId
+}
+
+/**
+ * Information about a function stored in FuncStore.
+ */
+export interface FuncInfo {
+	/** Interned name of the function */
+	readonly nameId: StringId
+	/** Function type (parameter types and return type) */
+	readonly typeId: TypeId
+	/** Parse node of the declaration/definition */
+	readonly parseNodeId: NodeId
+	/** Body instruction ID (null for forward declarations until defined) */
+	bodyInstId: InstId | null
+	/** Parameter symbols (populated when function is defined) */
+	paramSymbols: SymbolId[]
+	/** Whether the function has been defined (has a body) */
+	isDefined: boolean
+}
 
 /**
  * Dense array storage for semantic instructions.
@@ -576,6 +601,75 @@ export class TypeStore {
 		for (let i = 0; i < this.types.length; i++) {
 			const info = this.types[i]
 			if (info !== undefined) yield [typeId(i), info]
+		}
+	}
+}
+
+/**
+ * Dense array storage for functions.
+ * Supports forward declarations (declaring type before body).
+ */
+export class FuncStore {
+	private readonly funcs: FuncInfo[] = []
+	private readonly byName: Map<StringId, FuncId> = new Map()
+
+	/**
+	 * Declare a forward function (type only, no body yet).
+	 * If the function already exists, returns the existing FuncId.
+	 */
+	declareForward(nameId: StringId, typeId: TypeId, parseNodeId: NodeId): FuncId {
+		const existing = this.byName.get(nameId)
+		if (existing !== undefined) {
+			return existing
+		}
+
+		const id = funcId(this.funcs.length)
+		this.funcs.push({
+			nameId,
+			typeId,
+			parseNodeId,
+			bodyInstId: null,
+			paramSymbols: [],
+			isDefined: false,
+		})
+		this.byName.set(nameId, id)
+		return id
+	}
+
+	/**
+	 * Define a function (provide body).
+	 * Must have been declared first via declareForward.
+	 */
+	defineFunc(id: FuncId, bodyInstId: InstId, paramSymbols: SymbolId[]): void {
+		const func = this.funcs[id]
+		if (func === undefined) {
+			throw new Error(`Invalid FuncId: ${id}`)
+		}
+		func.bodyInstId = bodyInstId
+		func.paramSymbols = paramSymbols
+		func.isDefined = true
+	}
+
+	getByName(nameId: StringId): FuncId | undefined {
+		return this.byName.get(nameId)
+	}
+
+	get(id: FuncId): FuncInfo {
+		const func = this.funcs[id]
+		if (func === undefined) {
+			throw new Error(`Invalid FuncId: ${id}`)
+		}
+		return func
+	}
+
+	count(): number {
+		return this.funcs.length
+	}
+
+	*[Symbol.iterator](): Generator<[FuncId, FuncInfo]> {
+		for (let i = 0; i < this.funcs.length; i++) {
+			const func = this.funcs[i]
+			if (func !== undefined) yield [funcId(i), func]
 		}
 	}
 }
