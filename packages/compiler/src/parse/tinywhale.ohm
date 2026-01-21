@@ -127,7 +127,9 @@ TinyWhale {
               | intLiteral
 
   // Postfix expressions: only identifiers can be postfix bases
-  PostfixExpr = IndexAccess | FieldAccess
+  PostfixExpr = FuncCall | IndexAccess | FieldAccess
+  FuncCall = PostfixableBase lparen ArgumentList? rparen
+  ArgumentList = Expression (comma Expression)*
   FieldAccess = PostfixableBase (dot lowerIdentifier)+
   IndexAccess = PostfixIndexBase (lbracket intLiteral rbracket)+
   PostfixIndexBase = FieldAccess | PostfixableBase
