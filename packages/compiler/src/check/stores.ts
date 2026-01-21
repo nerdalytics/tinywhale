@@ -8,6 +8,7 @@ import type { NodeId } from '../core/nodes.ts'
 import {
 	BuiltinTypeId,
 	type FieldInfo,
+	type FuncTypeInfo,
 	type Inst,
 	type InstId,
 	instId,
@@ -518,6 +519,57 @@ export class TypeStore {
 			return undefined
 		}
 		return info.constraints
+	}
+
+	private readonly funcTypeCache: Map<string, TypeId> = new Map()
+
+	/**
+	 * Register a function type.
+	 * Function types are interned - same params + return = same TypeId.
+	 */
+	registerFuncType(paramTypes: readonly TypeId[], returnType: TypeId): TypeId {
+		const cacheKey = this.makeFuncTypeCacheKey(paramTypes, returnType)
+		const existing = this.funcTypeCache.get(cacheKey)
+		if (existing !== undefined) {
+			return existing
+		}
+
+		const paramNames = paramTypes.map((t) => this.typeName(t)).join(', ')
+		const returnName = this.typeName(returnType)
+		const name = `(${paramNames}) -> ${returnName}`
+
+		const id = typeId(this.types.length)
+		const funcInfo: FuncTypeInfo = {
+			paramTypes,
+			returnType,
+		}
+		const info: TypeInfo = {
+			funcInfo,
+			kind: TypeKind.Func,
+			name,
+			parseNodeId: null,
+			underlying: id,
+		}
+		this.types.push(info)
+		this.funcTypeCache.set(cacheKey, id)
+		return id
+	}
+
+	private makeFuncTypeCacheKey(paramTypes: readonly TypeId[], returnType: TypeId): string {
+		return `(${paramTypes.join(',')}) -> ${returnType}`
+	}
+
+	isFuncType(id: TypeId): boolean {
+		const info = this.types[id]
+		return info?.kind === TypeKind.Func
+	}
+
+	getFuncInfo(id: TypeId): FuncTypeInfo | undefined {
+		const info = this.types[id]
+		if (info?.kind !== TypeKind.Func) {
+			return undefined
+		}
+		return info.funcInfo
 	}
 
 	*[Symbol.iterator](): Generator<[TypeId, TypeInfo]> {
