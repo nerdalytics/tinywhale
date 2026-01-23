@@ -27,7 +27,6 @@
 !README.md
 !tsconfig.json
 !AGENTS.md
-!**/AGENTS.md
 
 # Ignore planning documents (local only)
 docs/plans/**
