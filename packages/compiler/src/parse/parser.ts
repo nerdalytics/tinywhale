@@ -521,6 +521,18 @@ function createNodeEmittingSemantics(
 		LogicalAndExpr(first: Node, ops: Node, rest: Node): NodeId {
 			return emitBinaryChain(first, ops, rest)
 		},
+		MatchExpr(_matchKeyword: Node, scrutinee: Node): NodeId {
+			const startCount = context.nodes.count()
+			scrutinee['emitExpression']()
+			const childCount = context.nodes.count() - startCount
+
+			const tid = getTokenIdForOhmNode(this)
+			return context.nodes.add({
+				kind: NodeKind.MatchExpr,
+				subtreeSize: 1 + childCount,
+				tokenId: tid,
+			})
+		},
 		LogicalOrExpr(first: Node, ops: Node, rest: Node): NodeId {
 			return emitBinaryChain(first, ops, rest)
 		},

@@ -140,6 +140,7 @@ TinyWhale {
   PrimaryExpr = PostfixExpr
               | lparen Expression rparen  -- paren
               | ListLiteral
+              | MatchExpr
               | PanicExpr
               | identifier
               | floatLiteral

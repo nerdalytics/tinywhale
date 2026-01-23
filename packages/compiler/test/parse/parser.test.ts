@@ -841,6 +841,44 @@ panic`
 		})
 	})
 
+	describe('MatchExpr in expression position', () => {
+		it('should parse match as expression in binding RHS', () => {
+			// Grammar parses x = match y as BindingExpr with MatchExpr RHS
+			// Match arms on subsequent indented lines are parsed separately
+			// The checker associates arms with their match expr based on indentation
+			const source = `x = match y
+	0 -> 100
+	_ -> 0`
+			const ctx = tokenizeAndParse(source)
+			assert.strictEqual(ctx.hasErrors(), false, 'should have no errors')
+			let hasMatchExpr = false
+			let hasBindingExpr = false
+			let hasMatchArm = false
+			for (const [, node] of ctx.nodes) {
+				if (node.kind === NodeKind.MatchExpr) hasMatchExpr = true
+				if (node.kind === NodeKind.BindingExpr) hasBindingExpr = true
+				if (node.kind === NodeKind.MatchArm) hasMatchArm = true
+			}
+			assert.strictEqual(hasMatchExpr, true, 'should have MatchExpr')
+			assert.strictEqual(hasBindingExpr, true, 'should have BindingExpr')
+			assert.strictEqual(hasMatchArm, true, 'should have MatchArm from indented lines')
+		})
+
+		it('should parse single-line match in expression position', () => {
+			// Inline match without arms (e.g., passing to function)
+			const ctx = tokenizeAndParse('result = match x')
+			assert.strictEqual(ctx.hasErrors(), false)
+			let hasMatchExpr = false
+			let hasBindingExpr = false
+			for (const [, node] of ctx.nodes) {
+				if (node.kind === NodeKind.MatchExpr) hasMatchExpr = true
+				if (node.kind === NodeKind.BindingExpr) hasBindingExpr = true
+			}
+			assert.strictEqual(hasMatchExpr, true, 'should have MatchExpr')
+			assert.strictEqual(hasBindingExpr, true, 'should have BindingExpr')
+		})
+	})
+
 	describe('PanicExpr', () => {
 		it('should parse panic as expression in binding RHS', () => {
 			const ctx = tokenizeAndParse('x = panic')
