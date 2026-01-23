@@ -11,6 +11,7 @@ export const NodeKind = {
 	ArgumentList: 115,
 	// Expressions (100-149)
 	BinaryExpr: 104,
+	BindingExpr: 117,
 
 	// Patterns (200-249)
 	BindingPattern: 202,

@@ -841,6 +841,41 @@ panic`
 		})
 	})
 
+	describe('BindingExpr', () => {
+		it('should parse binding expression without type annotation', () => {
+			const ctx = tokenizeAndParse('x = 42')
+			assert.strictEqual(ctx.hasErrors(), false)
+			let hasBindingExpr = false
+			for (const [, node] of ctx.nodes) {
+				if (node.kind === NodeKind.BindingExpr) hasBindingExpr = true
+			}
+			assert.strictEqual(hasBindingExpr, true)
+		})
+
+		it('should parse record instantiation with new syntax', () => {
+			// p = Point is the new syntax for record instantiation
+			// (requires Point to be a defined type in checker, but grammar should parse it)
+			const ctx = tokenizeAndParse('p = Point')
+			assert.strictEqual(ctx.hasErrors(), false)
+			let hasBindingExpr = false
+			for (const [, node] of ctx.nodes) {
+				if (node.kind === NodeKind.BindingExpr) hasBindingExpr = true
+			}
+			assert.strictEqual(hasBindingExpr, true)
+		})
+
+		it('should still parse explicit type annotation as PrimitiveBinding', () => {
+			// x: i32 = 42 continues to parse as PrimitiveBinding for backward compatibility
+			const ctx = tokenizeAndParse('x: i32 = 42')
+			assert.strictEqual(ctx.hasErrors(), false)
+			let hasPrimitiveBinding = false
+			for (const [, node] of ctx.nodes) {
+				if (node.kind === NodeKind.PrimitiveBinding) hasPrimitiveBinding = true
+			}
+			assert.strictEqual(hasPrimitiveBinding, true)
+		})
+	})
+
 	describe('list literal in record init parsing', () => {
 		it('should parse record initialization with list field', () => {
 			const source = `Foo

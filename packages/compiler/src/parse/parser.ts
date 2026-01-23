@@ -383,6 +383,26 @@ function createNodeEmittingSemantics(
 		AddExpr(first: Node, ops: Node, rest: Node): NodeId {
 			return emitBinaryChain(first, ops, rest)
 		},
+		BindingExpr(ident: Node, _optColons: Node, optTypeRefs: Node, _equals: Node, expr: Node): NodeId {
+			const startCount = context.nodes.count()
+			ident['emitExpression']()
+
+			// Check if optional type annotation is present (both colon and typeRef iterations have 1 child)
+			const typeRefNode = optTypeRefs.children[0]
+			if (typeRefNode !== undefined) {
+				emitTypeRefAsTypeAnnotation(typeRefNode)
+			}
+
+			expr['emitExpression']()
+			const childCount = context.nodes.count() - startCount
+
+			const tid = getTokenIdForOhmNode(ident)
+			return context.nodes.add({
+				kind: NodeKind.BindingExpr,
+				subtreeSize: 1 + childCount,
+				tokenId: tid,
+			})
+		},
 		BitwiseAndExpr(first: Node, ops: Node, rest: Node): NodeId {
 			return emitBinaryChain(first, ops, rest)
 		},
@@ -1002,6 +1022,10 @@ function createNodeEmittingSemantics(
 			})
 		},
 		Statement(stmt: Node): NodeId {
+			// BindingExpr is the only Statement that uses emitExpression
+			if (stmt.ctorName === 'BindingExpr') {
+				return stmt['emitExpression']()
+			}
 			return stmt['emitStatement']()
 		},
 		TypeAlias(typeName: Node, _equals: Node, typeRef: Node): NodeId {

@@ -21,7 +21,8 @@ TinyWhale {
   DedentLine = anyDedent+ Statement?
 
   // Statements
-  Statement = RecordTypeDecl | TypeAlias | MatchBinding | MatchExpr | FuncDecl | FuncBinding | PrimitiveBinding | RecordBinding | PanicStatement
+  // BindingExpr added as catch-all for new `x = value` syntax without explicit type
+  Statement = RecordTypeDecl | TypeAlias | MatchBinding | MatchExpr | FuncDecl | FuncBinding | PrimitiveBinding | RecordBinding | PanicStatement | BindingExpr
   PanicStatement = panic
 
   // Function forward declaration: factorial: (i32) -> i32
@@ -120,7 +121,9 @@ TinyWhale {
   BindingPattern = ~keyword ~underscore identifier
 
   // Expressions (precedence from lowest to highest)
-  Expression = LogicalOrExpr
+  // BindingExpr has lowest precedence - allows x = 42 and x: Type = 42
+  Expression = BindingExpr | LogicalOrExpr
+  BindingExpr = identifier (colon TypeRef)? equals Expression
 
   LogicalOrExpr = LogicalAndExpr (pipePipe LogicalAndExpr)*
   LogicalAndExpr = BitwiseOrExpr (ampAmp BitwiseOrExpr)*
