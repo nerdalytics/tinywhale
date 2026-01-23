@@ -383,9 +383,6 @@ function createNodeEmittingSemantics(
 		AddExpr(first: Node, ops: Node, rest: Node): NodeId {
 			return emitBinaryChain(first, ops, rest)
 		},
-		DeclarationExpr(decl: Node): NodeId {
-			return decl['emitExpression']()
-		},
 		BindingExpr(
 			ident: Node,
 			_optColons: Node,
@@ -426,6 +423,9 @@ function createNodeEmittingSemantics(
 			if (ops.numChildren === 1) return emitBinaryChain(first, ops, rest)
 			return emitCompareChain(first, ops, rest)
 		},
+		DeclarationExpr(decl: Node): NodeId {
+			return decl['emitExpression']()
+		},
 		Expression(expr: Node): NodeId {
 			return expr['emitExpression']()
 		},
@@ -453,6 +453,21 @@ function createNodeEmittingSemantics(
 			const tid = getTokenIdForOhmNode(this)
 			return context.nodes.add({
 				kind: NodeKind.FuncCall,
+				subtreeSize: 1 + childCount,
+				tokenId: tid,
+			})
+		},
+		FuncDecl(ident: Node, _colon: Node, funcType: Node): NodeId {
+			const startCount = context.nodes.count()
+			ident['emitExpression']()
+			funcType['emitTypeAnnotation']()
+			const childCount = context.nodes.count() - startCount
+
+			const lineNumber = getLineNumber(this)
+			const tid = getTokenIdForLine(lineNumber)
+
+			return context.nodes.add({
+				kind: NodeKind.FuncDecl,
 				subtreeSize: 1 + childCount,
 				tokenId: tid,
 			})
@@ -572,19 +587,6 @@ function createNodeEmittingSemantics(
 				tokenId: tid,
 			})
 		},
-		UnaryExpr_primary(expr: Node): NodeId {
-			return expr['emitExpression']()
-		},
-		UnaryExpr_unary(op: Node, expr: Node): NodeId {
-			const childId = expr['emitExpression']() as NodeId
-			const tid = getTokenIdForOhmNode(op)
-			const childSize = context.nodes.get(childId).subtreeSize
-			return context.nodes.add({
-				kind: NodeKind.UnaryExpr,
-				subtreeSize: 1 + childSize,
-				tokenId: tid,
-			})
-		},
 		RecordTypeDecl(_typeName: Node): NodeId {
 			const tid = getTokenIdForOhmNode(this)
 			return context.nodes.add({
@@ -605,18 +607,16 @@ function createNodeEmittingSemantics(
 				tokenId: tid,
 			})
 		},
-		FuncDecl(ident: Node, _colon: Node, funcType: Node): NodeId {
-			const startCount = context.nodes.count()
-			ident['emitExpression']()
-			funcType['emitTypeAnnotation']()
-			const childCount = context.nodes.count() - startCount
-
-			const lineNumber = getLineNumber(this)
-			const tid = getTokenIdForLine(lineNumber)
-
+		UnaryExpr_primary(expr: Node): NodeId {
+			return expr['emitExpression']()
+		},
+		UnaryExpr_unary(op: Node, expr: Node): NodeId {
+			const childId = expr['emitExpression']() as NodeId
+			const tid = getTokenIdForOhmNode(op)
+			const childSize = context.nodes.get(childId).subtreeSize
 			return context.nodes.add({
-				kind: NodeKind.FuncDecl,
-				subtreeSize: 1 + childCount,
+				kind: NodeKind.UnaryExpr,
+				subtreeSize: 1 + childSize,
 				tokenId: tid,
 			})
 		},

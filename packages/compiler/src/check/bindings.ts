@@ -272,4 +272,3 @@ export function processVariableBinding(
 	emitSimpleBinding(bindingId, exprId as NodeId, declaredType, nameId, state, context)
 	return null
 }
-

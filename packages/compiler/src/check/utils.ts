@@ -36,11 +36,7 @@ export function isTerminator(kind: NodeKind): boolean {
  * at statement position in the "everything is expression" design.
  */
 export function isStatementNode(kind: NodeKind): boolean {
-	return (
-		(kind >= 10 && kind < 100) ||
-		kind === NodeKind.BindingExpr ||
-		kind === NodeKind.PanicExpr
-	)
+	return (kind >= 10 && kind < 100) || kind === NodeKind.BindingExpr || kind === NodeKind.PanicExpr
 }
 
 /**
