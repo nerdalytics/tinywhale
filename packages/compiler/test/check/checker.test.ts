@@ -288,4 +288,87 @@ p = Point
 			)
 		})
 	})
+
+	describe('Everything is Expression - Integration', () => {
+		it('should compile complete example with records, functions, and match', () => {
+			const source = `Point
+\tx: i32
+\ty: i32
+
+Inner
+\tval: i32
+
+Outer
+\tinner: Inner
+\tx: i32
+
+squared = (s: i32): i32 -> s * s
+distance_2d = (x: i32, y: i32): i32 -> squared(x) + squared(y)
+
+p = Point
+\tx = 3
+\ty = 4
+
+result: i32 = distance_2d(p.x, p.y)
+
+o = Outer
+\tinner: Inner
+\t\tval = 42
+\tx = 10
+
+P = Point
+
+q = P
+\tx = 100
+\ty = 200
+
+match_result: i32 = match result
+\t25 -> 100
+\t_ -> 50
+panic
+`
+			const ctx = prepareContext(source)
+			check(ctx)
+			assert.strictEqual(
+				ctx.hasErrors(),
+				false,
+				`Expected no errors, got: ${getErrors(ctx)
+					.map((e) => e.message)
+					.join(', ')}`
+			)
+		})
+
+		it('should handle panic in match arm', () => {
+			const source = `result: i32 = match 5
+\t10 -> panic
+\t_ -> 42
+panic
+`
+			const ctx = prepareContext(source)
+			check(ctx)
+			assert.strictEqual(
+				ctx.hasErrors(),
+				false,
+				`Expected no errors, got: ${getErrors(ctx)
+					.map((e) => e.message)
+					.join(', ')}`
+			)
+		})
+
+		it('should handle lambda binding and function call', () => {
+			const source = `double = (x: i32): i32 -> x * 2
+result: i32 = double(21)
+panic
+`
+			const ctx = prepareContext(source)
+			check(ctx)
+			assert.strictEqual(
+				ctx.hasErrors(),
+				false,
+				`Expected no errors, got: ${getErrors(ctx)
+					.map((e) => e.message)
+					.join(', ')}`
+			)
+		})
+	})
 })
