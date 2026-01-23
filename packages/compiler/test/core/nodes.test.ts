@@ -11,8 +11,8 @@ describe('core/nodes', () => {
 			assert.strictEqual(NodeKind.RootLine, 2)
 		})
 
-		it('should have correct value for statements', () => {
-			assert.strictEqual(NodeKind.PanicStatement, 10)
+		it('should have correct value for expressions', () => {
+			assert.strictEqual(NodeKind.PanicExpr, 118)
 		})
 
 		it('should have correct value for Program', () => {
@@ -36,7 +36,7 @@ describe('core/nodes', () => {
 		it('should add nodes and return sequential IDs', () => {
 			const store = new NodeStore()
 			const node1: ParseNode = {
-				kind: NodeKind.PanicStatement,
+				kind: NodeKind.PanicExpr,
 				subtreeSize: 1,
 				tokenId: tokenId(0),
 			}
@@ -57,7 +57,7 @@ describe('core/nodes', () => {
 		it('should retrieve nodes by ID', () => {
 			const store = new NodeStore()
 			const node: ParseNode = {
-				kind: NodeKind.PanicStatement,
+				kind: NodeKind.PanicExpr,
 				subtreeSize: 1,
 				tokenId: tokenId(5),
 			}
@@ -65,7 +65,7 @@ describe('core/nodes', () => {
 			const id = store.add(node)
 			const retrieved = store.get(id)
 
-			assert.strictEqual(retrieved.kind, NodeKind.PanicStatement)
+			assert.strictEqual(retrieved.kind, NodeKind.PanicExpr)
 			assert.strictEqual(retrieved.tokenId, 5)
 			assert.strictEqual(retrieved.subtreeSize, 1)
 		})
@@ -93,7 +93,7 @@ describe('core/nodes', () => {
 		it('should calculate child range correctly for leaf node', () => {
 			const store = new NodeStore()
 			const leaf: ParseNode = {
-				kind: NodeKind.PanicStatement,
+				kind: NodeKind.PanicExpr,
 				subtreeSize: 1,
 				tokenId: tokenId(0),
 			}
@@ -109,7 +109,7 @@ describe('core/nodes', () => {
 
 			// Add child first (postorder)
 			store.add({
-				kind: NodeKind.PanicStatement,
+				kind: NodeKind.PanicExpr,
 				subtreeSize: 1,
 				tokenId: tokenId(0),
 			})
@@ -134,9 +134,9 @@ describe('core/nodes', () => {
 			// Storage order: panic1, line1, panic2, line2, program
 			// Indices:       0       1      2       3      4
 
-			// First panic statement (child of line1)
+			// First panic expression (child of line1)
 			store.add({
-				kind: NodeKind.PanicStatement,
+				kind: NodeKind.PanicExpr,
 				subtreeSize: 1,
 				tokenId: tokenId(0),
 			})
@@ -148,9 +148,9 @@ describe('core/nodes', () => {
 				tokenId: tokenId(0),
 			})
 
-			// Second panic statement (child of line2)
+			// Second panic expression (child of line2)
 			store.add({
-				kind: NodeKind.PanicStatement,
+				kind: NodeKind.PanicExpr,
 				subtreeSize: 1,
 				tokenId: tokenId(1),
 			})
@@ -188,7 +188,7 @@ describe('core/nodes', () => {
 
 			// panic at index 0
 			store.add({
-				kind: NodeKind.PanicStatement,
+				kind: NodeKind.PanicExpr,
 				subtreeSize: 1,
 				tokenId: tokenId(0),
 			})
@@ -207,13 +207,13 @@ describe('core/nodes', () => {
 			}
 
 			assert.strictEqual(subtree.length, 2)
-			assert.strictEqual(subtree[0]!.kind, NodeKind.PanicStatement)
+			assert.strictEqual(subtree[0]!.kind, NodeKind.PanicExpr)
 			assert.strictEqual(subtree[1]!.kind, NodeKind.RootLine)
 		})
 
 		it('should iterate over all nodes', () => {
 			const store = new NodeStore()
-			store.add({ kind: NodeKind.PanicStatement, subtreeSize: 1, tokenId: tokenId(0) })
+			store.add({ kind: NodeKind.PanicExpr, subtreeSize: 1, tokenId: tokenId(0) })
 			store.add({ kind: NodeKind.RootLine, subtreeSize: 2, tokenId: tokenId(0) })
 			store.add({ kind: NodeKind.Program, subtreeSize: 3, tokenId: tokenId(0) })
 
