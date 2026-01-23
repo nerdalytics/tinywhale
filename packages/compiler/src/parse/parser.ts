@@ -383,6 +383,9 @@ function createNodeEmittingSemantics(
 		AddExpr(first: Node, ops: Node, rest: Node): NodeId {
 			return emitBinaryChain(first, ops, rest)
 		},
+		DeclarationExpr(decl: Node): NodeId {
+			return decl['emitExpression']()
+		},
 		BindingExpr(
 			ident: Node,
 			_optColons: Node,
@@ -582,6 +585,41 @@ function createNodeEmittingSemantics(
 				tokenId: tid,
 			})
 		},
+		RecordTypeDecl(_typeName: Node): NodeId {
+			const tid = getTokenIdForOhmNode(this)
+			return context.nodes.add({
+				kind: NodeKind.TypeDecl,
+				subtreeSize: 1,
+				tokenId: tid,
+			})
+		},
+		TypeAlias(typeName: Node, _equals: Node, typeRef: Node): NodeId {
+			const startCount = context.nodes.count()
+			emitTypeRefAsTypeAnnotation(typeRef)
+			const childCount = context.nodes.count() - startCount
+
+			const tid = getTokenIdForOhmNode(typeName)
+			return context.nodes.add({
+				kind: NodeKind.TypeAlias,
+				subtreeSize: 1 + childCount,
+				tokenId: tid,
+			})
+		},
+		FuncDecl(ident: Node, _colon: Node, funcType: Node): NodeId {
+			const startCount = context.nodes.count()
+			ident['emitExpression']()
+			funcType['emitTypeAnnotation']()
+			const childCount = context.nodes.count() - startCount
+
+			const lineNumber = getLineNumber(this)
+			const tid = getTokenIdForLine(lineNumber)
+
+			return context.nodes.add({
+				kind: NodeKind.FuncDecl,
+				subtreeSize: 1 + childCount,
+				tokenId: tid,
+			})
+		},
 	})
 
 	semantics.addOperation<NodeId>('emitTypeAnnotation', {
@@ -735,30 +773,10 @@ function createNodeEmittingSemantics(
 		},
 	})
 
-	/** Statement-like constructs that use emitStatement in block context */
-	const BLOCK_STATEMENT_CTORS = new Set([
-		'FuncDecl',
-		'FuncBinding',
-		'PrimitiveBinding',
-		'MatchBinding',
-		'MatchExpr',
-	])
-
-	/**
-	 * Emit a BlockExpression - routes to the appropriate handler based on node type.
-	 * BlockExpression = FuncDecl | FuncBinding | PrimitiveBinding | MatchBinding | MatchExpr | Expression
-	 */
-	function emitBlockExpression(node: Node): NodeId {
-		if (BLOCK_STATEMENT_CTORS.has(node.ctorName)) {
-			return node['emitStatement']()
-		}
-		return node['emitExpression']()
-	}
-
 	semantics.addOperation<NodeId>('emitLambda', {
-		// BlockExpression = FuncDecl | FuncBinding | PrimitiveBinding | MatchBinding | MatchExpr | Expression
+		// BlockExpression = DeclarationExpr | Expression
 		BlockExpression(content: Node): NodeId {
-			return emitBlockExpression(content)
+			return content['emitExpression']()
 		},
 		Lambda(
 			_lparen: Node,
@@ -899,7 +917,7 @@ function createNodeEmittingSemantics(
 				FieldInit: 'emitIndentedContent',
 				MatchArm: 'emitMatchArm',
 			}
-			const operation = routeMap[content.ctorName] ?? 'emitStatement'
+			const operation = routeMap[content.ctorName] ?? 'emitExpression'
 			return content[operation]()
 		},
 		MatchArm(pattern: Node, _arrow: Node, expr: Node): NodeId {
@@ -917,168 +935,14 @@ function createNodeEmittingSemantics(
 		},
 	})
 
-	semantics.addOperation<NodeId>('emitStatement', {
-		FuncBinding(ident: Node, _optColon: Node, optType: Node, _equals: Node, lambda: Node): NodeId {
-			const startCount = context.nodes.count()
-			ident['emitExpression']()
-			// Emit optional type annotation if present (same pattern as Lambda return type)
-			maybeEmitTypeAnnotation(optType)
-			lambda['emitLambda']()
-			const childCount = context.nodes.count() - startCount
-
-			const lineNumber = getLineNumber(this)
-			const tid = getTokenIdForLine(lineNumber)
-
-			return context.nodes.add({
-				kind: NodeKind.FuncBinding,
-				subtreeSize: 1 + childCount,
-				tokenId: tid,
-			})
-		},
-		FuncDecl(ident: Node, _colon: Node, funcType: Node): NodeId {
-			const startCount = context.nodes.count()
-			ident['emitExpression']()
-			funcType['emitTypeAnnotation']()
-			const childCount = context.nodes.count() - startCount
-
-			const lineNumber = getLineNumber(this)
-			const tid = getTokenIdForLine(lineNumber)
-
-			return context.nodes.add({
-				kind: NodeKind.FuncDecl,
-				subtreeSize: 1 + childCount,
-				tokenId: tid,
-			})
-		},
-		MatchBinding(ident: Node, typeAnnotation: Node, _equals: Node, matchExpr: Node): NodeId {
-			const startCount = context.nodes.count()
-			ident['emitExpression']()
-			typeAnnotation['emitTypeAnnotation']()
-			matchExpr['emitStatement']()
-			const childCount = context.nodes.count() - startCount
-
-			const lineNumber = getLineNumber(this)
-			const tid = getTokenIdForLine(lineNumber)
-
-			return context.nodes.add({
-				kind: NodeKind.VariableBinding,
-				subtreeSize: 1 + childCount,
-				tokenId: tid,
-			})
-		},
-		MatchExpr(_matchKeyword: Node, scrutinee: Node): NodeId {
-			const startCount = context.nodes.count()
-			scrutinee['emitExpression']()
-			const childCount = context.nodes.count() - startCount
-
-			const tid = getTokenIdForOhmNode(this)
-			return context.nodes.add({
-				kind: NodeKind.MatchExpr,
-				subtreeSize: 1 + childCount,
-				tokenId: tid,
-			})
-		},
-		PanicStatement(_panicKeyword: Node): NodeId {
-			const lineNumber = getLineNumber(this)
-			const tid = getTokenIdForLine(lineNumber)
-
-			return context.nodes.add({
-				kind: NodeKind.PanicStatement,
-				subtreeSize: 1,
-				tokenId: tid,
-			})
-		},
-		PrimitiveBinding(ident: Node, _colon: Node, typeRef: Node, _equals: Node, expr: Node): NodeId {
-			const startCount = context.nodes.count()
-			ident['emitExpression']()
-
-			// Emit type annotation node with possible complex type children
-			// typeRef is PrimitiveTypeRef, need to check its child for the actual type
-			const innerType = typeRef.child(0)
-			if (innerType.ctorName === 'ListType' || innerType.ctorName === 'RefinementType') {
-				innerType['emitTypeAnnotation']()
-			}
-
-			const tid = getTokenIdForOhmNode(typeRef)
-			context.nodes.add({
-				kind: NodeKind.TypeAnnotation,
-				subtreeSize: 1 + (context.nodes.count() - startCount - 1),
-				tokenId: tid,
-			})
-
-			expr['emitExpression']()
-
-			const childCount = context.nodes.count() - startCount
-
-			const lineNumber = getLineNumber(this)
-			const lineTid = getTokenIdForLine(lineNumber)
-
-			return context.nodes.add({
-				kind: NodeKind.PrimitiveBinding,
-				subtreeSize: 1 + childCount,
-				tokenId: lineTid,
-			})
-		},
-		RecordBinding(ident: Node, _colon: Node, typeName: Node): NodeId {
-			const startCount = context.nodes.count()
-			ident['emitExpression']()
-
-			// Emit type annotation node (simple upperIdentifier, no complex type)
-			const tid = getTokenIdForOhmNode(typeName)
-			context.nodes.add({
-				kind: NodeKind.TypeAnnotation,
-				subtreeSize: 1,
-				tokenId: tid,
-			})
-
-			const childCount = context.nodes.count() - startCount
-
-			const lineNumber = getLineNumber(this)
-			const lineTid = getTokenIdForLine(lineNumber)
-
-			return context.nodes.add({
-				kind: NodeKind.RecordBinding,
-				subtreeSize: 1 + childCount,
-				tokenId: lineTid,
-			})
-		},
-		RecordTypeDecl(_typeName: Node): NodeId {
-			const tid = getTokenIdForOhmNode(this)
-			return context.nodes.add({
-				kind: NodeKind.TypeDecl,
-				subtreeSize: 1,
-				tokenId: tid,
-			})
-		},
-		Statement(stmt: Node): NodeId {
-			// BindingExpr is the only Statement that uses emitExpression
-			if (stmt.ctorName === 'BindingExpr') {
-				return stmt['emitExpression']()
-			}
-			return stmt['emitStatement']()
-		},
-		TypeAlias(typeName: Node, _equals: Node, typeRef: Node): NodeId {
-			const startCount = context.nodes.count()
-			emitTypeRefAsTypeAnnotation(typeRef)
-			const childCount = context.nodes.count() - startCount
-
-			const tid = getTokenIdForOhmNode(typeName)
-			return context.nodes.add({
-				kind: NodeKind.TypeAlias,
-				subtreeSize: 1 + childCount,
-				tokenId: tid,
-			})
-		},
-	})
-
 	semantics.addOperation<NodeId | null>('emitLine', {
-		DedentLine(_anyDedents: Node, optionalStatement: Node) {
+		DedentLine(_anyDedents: Node, optionalExpr: Node) {
 			const lineNumber = getLineNumber(this)
 			const startCount = context.nodes.count()
 
-			const stmtNode = optionalStatement.children[0]
-			if (stmtNode !== undefined) {
-				stmtNode['emitStatement']()
+			const exprNode = optionalExpr.children[0]
+			if (exprNode !== undefined) {
+				exprNode['emitExpression']()
 			}
 
 			const childCount = context.nodes.count() - startCount
@@ -1112,21 +976,9 @@ function createNodeEmittingSemantics(
 		},
 		RootLine(content: Node) {
 			const startCount = context.nodes.count()
-			// RootLine = Statement | Expression
-			// Statement uses emitStatement, Expression uses emitExpression
-			// Check the ctorName to determine which grammar rule matched
-			const ctorName = content.ctorName
-			// Expression rules all start with specific prefixes or are in Expression hierarchy
-			const isExpression =
-				ctorName === 'Expression' ||
-				ctorName === 'BindingExpr' ||
-				ctorName === 'LogicalOrExpr' ||
-				ctorName.endsWith('Expr')
-			if (isExpression) {
-				content['emitExpression']()
-			} else {
-				content['emitStatement']()
-			}
+			// RootLine = DeclarationExpr | Expression
+			// Both route through emitExpression
+			content['emitExpression']()
 			const childCount = context.nodes.count() - startCount
 
 			const lineNumber = getLineNumber(this)
