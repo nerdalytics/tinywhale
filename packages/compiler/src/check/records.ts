@@ -27,7 +27,7 @@ import {
 	type RecordBlockContext,
 	type RecordLiteralContext,
 } from './state.ts'
-import { type FieldInfo, InstKind, type SymbolId, type TypeId } from './types.ts'
+import { BuiltinTypeId, type FieldInfo, InstKind, type SymbolId, type TypeId } from './types.ts'
 
 // ============================================================================
 // Field Init Detection
@@ -281,6 +281,20 @@ function isValidRecordLiteralCtx(
 }
 
 /**
+ * Check for fields with Never type (from panic) that don't produce runtime values.
+ */
+function checkFieldsHaveRuntimeValues(
+	fieldInits: RecordLiteralContext['fieldInits'],
+	context: CompilationContext
+): void {
+	for (const field of fieldInits) {
+		if (field.exprResult.typeId === BuiltinTypeId.None) {
+			context.emitAtNode('TWCHECK038' as DiagnosticCode, field.nodeId, { name: field.name })
+		}
+	}
+}
+
+/**
  * Finalize a record literal by validating all required fields are present
  * and emitting the binding instruction.
  *
@@ -304,6 +318,7 @@ export function finalizeRecordLiteral(state: CheckerState, context: CompilationC
 	} = ctx
 
 	checkMissingRecordFields(recordTypeId, fieldNames, bindingNodeId, typeName, state, context)
+	checkFieldsHaveRuntimeValues(fieldInits, context)
 
 	if (!context.hasErrors()) {
 		emitFinalizedRecordLiteral(

@@ -302,6 +302,14 @@ export const TWCHECK037: DiagnosticDef = {
 	suggestion: 'Provide exactly {expected} elements or change the size annotation.',
 }
 
+export const TWCHECK038: DiagnosticDef = {
+	code: 'TWCHECK038',
+	description: 'A record field was initialized with an expression that never produces a value.',
+	message: 'field `{name}` initialized with expression that never returns',
+	severity: DiagnosticSeverity.Error,
+	suggestion: 'Use an expression that produces a value of the expected type.',
+}
+
 export const TWCHECK040: DiagnosticDef = {
 	code: 'TWCHECK040',
 	description: 'Type hints min/max can only be applied to integer types (i32, i64).',
@@ -392,6 +400,7 @@ export const COMPILER_DIAGNOSTICS = {
 	TWCHECK035,
 	TWCHECK036,
 	TWCHECK037,
+	TWCHECK038,
 	TWCHECK040,
 	TWCHECK041,
 	TWCHECK042,

@@ -521,6 +521,9 @@ function createNodeEmittingSemantics(
 		LogicalAndExpr(first: Node, ops: Node, rest: Node): NodeId {
 			return emitBinaryChain(first, ops, rest)
 		},
+		LogicalOrExpr(first: Node, ops: Node, rest: Node): NodeId {
+			return emitBinaryChain(first, ops, rest)
+		},
 		MatchExpr(_matchKeyword: Node, scrutinee: Node): NodeId {
 			const startCount = context.nodes.count()
 			scrutinee['emitExpression']()
@@ -532,9 +535,6 @@ function createNodeEmittingSemantics(
 				subtreeSize: 1 + childCount,
 				tokenId: tid,
 			})
-		},
-		LogicalOrExpr(first: Node, ops: Node, rest: Node): NodeId {
-			return emitBinaryChain(first, ops, rest)
 		},
 		MulExpr(first: Node, ops: Node, rest: Node): NodeId {
 			return emitBinaryChain(first, ops, rest)
@@ -555,6 +555,9 @@ function createNodeEmittingSemantics(
 		},
 		PostfixIndexBase(expr: Node): NodeId {
 			return expr['emitExpression']()
+		},
+		PrimaryExpr_lambda(lambda: Node): NodeId {
+			return lambda['emitLambda']()
 		},
 		PrimaryExpr_paren(_lparen: Node, expr: Node, _rparen: Node): NodeId {
 			const childId = expr['emitExpression']() as NodeId
@@ -1107,9 +1110,23 @@ function createNodeEmittingSemantics(
 				tokenId: tid,
 			})
 		},
-		RootLine(statement: Node) {
+		RootLine(content: Node) {
 			const startCount = context.nodes.count()
-			statement['emitStatement']()
+			// RootLine = Statement | Expression
+			// Statement uses emitStatement, Expression uses emitExpression
+			// Check the ctorName to determine which grammar rule matched
+			const ctorName = content.ctorName
+			// Expression rules all start with specific prefixes or are in Expression hierarchy
+			const isExpression =
+				ctorName === 'Expression' ||
+				ctorName === 'BindingExpr' ||
+				ctorName === 'LogicalOrExpr' ||
+				ctorName.endsWith('Expr')
+			if (isExpression) {
+				content['emitExpression']()
+			} else {
+				content['emitStatement']()
+			}
 			const childCount = context.nodes.count() - startCount
 
 			const lineNumber = getLineNumber(this)

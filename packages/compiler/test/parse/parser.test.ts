@@ -976,4 +976,37 @@ panic`
 			assert.ok(result, 'should match record init with multiple list fields')
 		})
 	})
+
+	describe('Lambda as expression', () => {
+		it('should parse lambda in expression position', () => {
+			const source = `f = (x: i32): i32 -> x * 2
+`
+			const ctx = new CompilationContext(source)
+			tokenize(ctx)
+			const result = matchOnly(ctx)
+			assert.ok(result, 'should match lambda in binding expression')
+		})
+
+		it('should parse lambda assigned via BindingExpr', () => {
+			const source = `double = (x: i32): i32 -> x * 2
+`
+			const ctx = tokenizeAndParse(source)
+			assert.strictEqual(
+				ctx.hasErrors(),
+				false,
+				'Lambda in BindingExpr should parse without errors'
+			)
+		})
+
+		it('should parse lambda with block body', () => {
+			const source = `compute = (x: i32): i32 ->
+\ty: i32 = x * 2
+\ty + 1
+`
+			const ctx = new CompilationContext(source)
+			tokenize(ctx)
+			const result = matchOnly(ctx)
+			assert.ok(result, 'should match lambda with block body')
+		})
+	})
 })

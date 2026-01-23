@@ -44,7 +44,7 @@ export const NodeKind = {
 	ListType: 151,
 	LiteralPattern: 201,
 	MatchArm: 13,
-	MatchExpr: 12,
+	MatchExpr: 119, // Moved to expression range (100-149)
 	OrPattern: 203,
 	PanicExpr: 118,
 	PanicStatement: 10,
@@ -86,7 +86,7 @@ export function isPatternNode(kind: NodeKind): boolean {
 
 /** Check if a node kind is a terminator (ends control flow) */
 export function isTerminator(kind: NodeKind): boolean {
-	return kind === NodeKind.PanicStatement
+	return kind === NodeKind.PanicStatement || kind === NodeKind.PanicExpr
 }
 
 /**

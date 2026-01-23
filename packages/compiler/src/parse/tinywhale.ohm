@@ -5,8 +5,10 @@ TinyWhale {
   Program (a program) = Line? (newline Line?)* newline?
   Line (a line) = IndentedLine | DedentLine | RootLine
 
-  // RootLine is just a statement (newlines handled by Program rule)
-  RootLine = Statement
+  // RootLine tries Statement first, then falls back to Expression
+  // Statement covers specific constructs (FuncDecl, RecordTypeDecl, TypeAlias, etc.)
+  // Expression covers the general case (BindingExpr, PanicExpr, etc.)
+  RootLine = Statement | Expression
 
   // Newline (required between lines, not treated as whitespace)
   newline = "\n" | "\r\n" | "\r"
@@ -138,6 +140,7 @@ TinyWhale {
             | PrimaryExpr        -- primary
 
   PrimaryExpr = PostfixExpr
+              | Lambda              -- lambda
               | lparen Expression rparen  -- paren
               | ListLiteral
               | MatchExpr

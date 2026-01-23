@@ -407,3 +407,49 @@ export function startMatchBinding(
 		scrutineeNodeId: nodes.scrutineeId,
 	}
 }
+
+/**
+ * Find scrutinee expression in a MatchExpr node.
+ */
+function findScrutineeInMatchExpr(matchExprId: NodeId, context: CompilationContext): NodeId | null {
+	for (const [childId, child] of context.nodes.iterateChildren(matchExprId)) {
+		if (isExpressionNode(child.kind)) return childId
+	}
+	return null
+}
+
+/**
+ * Start processing a match expression from a BindingExpr context.
+ * Pattern: name: Type = match scrutinee
+ *
+ * This handles BindingExpr where the RHS is a MatchExpr.
+ */
+export function startMatchFromBindingExpr(
+	bindingId: NodeId,
+	matchExprId: NodeId,
+	bindingNameId: StringId,
+	expectedType: TypeId,
+	state: CheckerState,
+	context: CompilationContext
+): void {
+	const scrutineeId = findScrutineeInMatchExpr(matchExprId, context)
+	if (scrutineeId === null) {
+		context.emitAtNode('TWCHECK010' as DiagnosticCode, matchExprId, {
+			found: 'match without scrutinee',
+		})
+		return
+	}
+
+	const scrutineeResult = checkExpression(scrutineeId, expectedType, state, context)
+	if (scrutineeResult.typeId === BuiltinTypeId.Invalid) return
+
+	state.matchContext = {
+		arms: [],
+		bindingNameId,
+		bindingNodeId: bindingId,
+		expectedType,
+		matchNodeId: bindingId,
+		scrutinee: scrutineeResult,
+		scrutineeNodeId: scrutineeId,
+	}
+}

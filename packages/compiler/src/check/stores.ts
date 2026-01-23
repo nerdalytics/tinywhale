@@ -389,6 +389,15 @@ export class TypeStore {
 		return a === b
 	}
 
+	/**
+	 * Check if subType is a subtype of superType.
+	 * None (bottom/Never type) is a subtype of all types.
+	 */
+	isSubtype(subType: TypeId, superType: TypeId): boolean {
+		if (subType === BuiltinTypeId.None) return true // Never <: T for all T
+		return subType === superType
+	}
+
 	typeName(id: TypeId): string {
 		if (id === BuiltinTypeId.Invalid) {
 			return '<invalid>'

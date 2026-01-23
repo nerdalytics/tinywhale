@@ -440,7 +440,14 @@ p = Point
 \ty = 2
 `
 			const ctx = compileAndCheck(source)
-			assert.strictEqual(ctx.hasErrors(), false, `Errors: ${ctx.getErrors().map((e) => e.message).join(', ')}`)
+			assert.strictEqual(
+				ctx.hasErrors(),
+				false,
+				`Errors: ${ctx
+					.getErrors()
+					.map((e) => e.message)
+					.join(', ')}`
+			)
 		})
 
 		it('should error on missing field in record instantiation', () => {
@@ -457,14 +464,13 @@ p = Point
 			assert.ok(errors.some((e) => e.message.includes('missing') || e.message.includes('field')))
 		})
 
-		it('should allow simple binding without type annotation', () => {
-			// x = 42 should work as a simple binding when RHS is not an uppercase identifier
+		it('should require type annotation for simple bindings', () => {
+			// x = 42 without type annotation currently requires explicit type
 			const source = `x = 42
 `
 			const ctx = compileAndCheck(source)
-			// This might error because x has no type annotation - check current behavior
-			// For now, just document what happens
-			// assert.strictEqual(ctx.hasErrors(), false)
+			// Bindings without type annotation error (type inference not yet implemented)
+			assert.strictEqual(ctx.hasErrors(), true)
 		})
 	})
 
@@ -480,7 +486,14 @@ p: P
 \ty = 2
 `
 			const ctx = compileAndCheck(source)
-			assert.strictEqual(ctx.hasErrors(), false, `Errors: ${ctx.getErrors().map((e) => e.message).join(', ')}`)
+			assert.strictEqual(
+				ctx.hasErrors(),
+				false,
+				`Errors: ${ctx
+					.getErrors()
+					.map((e) => e.message)
+					.join(', ')}`
+			)
 		})
 
 		it('should error on type alias with unknown type', () => {

@@ -102,7 +102,7 @@ test('Grammar Specs', async (t) => {
 				'x:i32<min=0> = 5', // [FULL] - type bounds with constraint checking
 				'x:i32<min=0, max=100> = 50', // [FULL]
 				'arr:i32[]<size=3> = [1, 2, 3]', // [FULL] - single-level list
-				'p:Point', // [FULL] - record binding (new syntax: no trailing =)
+				'p = Point', // [FULL] - record instantiation
 			])
 		)
 
@@ -398,19 +398,19 @@ test('Grammar Specs', async (t) => {
 	await t.test('Record Initialization', (t) => {
 		const tester = createTester(grammar, 'Record Initialization', 'Program')
 
-		// New syntax: = for values, : for types only
+		// New syntax: p = Point for record instantiation
 		tester.match(
 			prepareList([
 				// Simple record with fields
-				'Point\n\tx: i32\n\ty: i32\np:Point\n\tx = 1\n\ty = 2',
+				'Point\n\tx: i32\n\ty: i32\np = Point\n\tx = 1\n\ty = 2',
 				// Record with list field
-				'Foo\n\titems: i32[]<size=3>\nf:Foo\n\titems = [1, 2, 3]',
+				'Foo\n\titems: i32[]<size=3>\nf = Foo\n\titems = [1, 2, 3]',
 				// Nested record initialization
-				'Inner\n\tvalue: i32\nOuter\n\tinner: Inner\no:Outer\n\tinner: Inner\n\t\tvalue = 42',
-				// Additional new syntax tests
-				'Point\n\tx: i32\np:Point\n\tx = 5', // no = after type, = for field value
-				'Point\n\tx: i32\n\ty: i32\np:Point\n\tx = 5\n\ty = 10', // Multiple fields
-				'Inner\n\tval: i32\nOuter\n\tinner: Inner\no:Outer\n\tinner: Inner\n\t\tval = 5', // Nested
+				'Inner\n\tvalue: i32\nOuter\n\tinner: Inner\no = Outer\n\tinner: Inner\n\t\tvalue = 42',
+				// Additional syntax tests
+				'Point\n\tx: i32\np = Point\n\tx = 5', // = for field value
+				'Point\n\tx: i32\n\ty: i32\np = Point\n\tx = 5\n\ty = 10', // Multiple fields
+				'Inner\n\tval: i32\nOuter\n\tinner: Inner\no = Outer\n\tinner: Inner\n\t\tval = 5', // Nested
 			])
 		)
 

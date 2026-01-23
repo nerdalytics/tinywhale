@@ -27,8 +27,14 @@ import {
 	startTypeDecl,
 } from './declarations.ts'
 import { checkExpression } from './expressions.ts'
-import { handleFuncBinding, handleFuncDecl, resolveFuncType } from './funcs.ts'
-import { finalizeMatch, getMatchArmFromLine, processMatchArm, startMatchBinding } from './match.ts'
+import { handleFuncBinding, handleFuncDecl, handleLambdaBinding, resolveFuncType } from './funcs.ts'
+import {
+	finalizeMatch,
+	getMatchArmFromLine,
+	processMatchArm,
+	startMatchBinding,
+	startMatchFromBindingExpr,
+} from './match.ts'
 import {
 	extractFieldDeclName,
 	finalizeNestedRecordInit,
@@ -158,10 +164,7 @@ function isUppercaseName(name: string): boolean {
 /**
  * Find FuncType child of a TypeAnnotation node (if present).
  */
-function findFuncTypeChild(
-	typeAnnotationId: NodeId,
-	context: CompilationContext
-): NodeId | null {
+function findFuncTypeChild(typeAnnotationId: NodeId, context: CompilationContext): NodeId | null {
 	for (const [childId, child] of context.nodes.iterateChildren(typeAnnotationId)) {
 		if (child.kind === NodeKind.FuncType) {
 			return childId
@@ -171,51 +174,57 @@ function findFuncTypeChild(
 }
 
 /**
+ * Try to resolve a function type alias.
+ * Returns true if this was a function type (resolved or not).
+ */
+function tryResolveFuncTypeAlias(
+	typeAnnotationId: NodeId,
+	aliasName: string,
+	state: CheckerState,
+	context: CompilationContext
+): boolean {
+	const funcTypeChildId = findFuncTypeChild(typeAnnotationId, context)
+	if (funcTypeChildId === null) return false
+
+	const funcTypeId = resolveFuncType(funcTypeChildId, state, context)
+	if (funcTypeId !== BuiltinTypeId.Invalid) {
+		state.types.addAlias(aliasName, funcTypeId)
+	}
+	return true
+}
+
+/**
+ * Emit error for unknown type in type alias.
+ */
+function emitUnknownTypeAliasError(typeAnnotationId: NodeId, context: CompilationContext): void {
+	const typeAnnotationNode = context.nodes.get(typeAnnotationId)
+	const typeToken = context.tokens.get(typeAnnotationNode.tokenId)
+	const targetName =
+		typeToken.kind === TokenKind.Identifier
+			? context.strings.get(typeToken.payload as StringId)
+			: 'unknown'
+	context.emitAtNode('TWCHECK010' as DiagnosticCode, typeAnnotationId, { found: targetName })
+}
+
+/**
  * Handle a TypeAlias statement.
  * Syntax: UppercaseId = TypeRef
  * Creates a type alias that maps the name to the target type.
  */
-function handleTypeAlias(
-	aliasId: NodeId,
-	state: CheckerState,
-	context: CompilationContext
-): void {
-	// TypeAlias structure in postorder: [TypeAnnotation, TypeAlias]
-	// TypeAlias tokenId has the alias name
+function handleTypeAlias(aliasId: NodeId, state: CheckerState, context: CompilationContext): void {
 	const aliasNode = context.nodes.get(aliasId)
 	const aliasToken = context.tokens.get(aliasNode.tokenId)
-	const aliasNameId = aliasToken.payload as StringId
-	const aliasName = context.strings.get(aliasNameId)
-
-	// Get the TypeAnnotation child (target type)
+	const aliasName = context.strings.get(aliasToken.payload as StringId)
 	const typeAnnotationId = prevNodeId(aliasId)
 
-	// Check for FuncType (e.g., Add = (i32, i32) -> i32)
-	const funcTypeChildId = findFuncTypeChild(typeAnnotationId, context)
-	if (funcTypeChildId !== null) {
-		const funcTypeId = resolveFuncType(funcTypeChildId, state, context)
-		if (funcTypeId !== BuiltinTypeId.Invalid) {
-			state.types.addAlias(aliasName, funcTypeId)
-		}
-		return
-	}
+	if (tryResolveFuncTypeAlias(typeAnnotationId, aliasName, state, context)) return
 
-	// Try regular type resolution
 	const typeInfo = resolveTypeFromAnnotation(typeAnnotationId, state, context)
-
 	if (!typeInfo) {
-		// Get target type name for error message
-		const typeAnnotationNode = context.nodes.get(typeAnnotationId)
-		const typeToken = context.tokens.get(typeAnnotationNode.tokenId)
-		const targetName =
-			typeToken.kind === TokenKind.Identifier
-				? context.strings.get(typeToken.payload as StringId)
-				: 'unknown'
-		context.emitAtNode('TWCHECK010' as DiagnosticCode, typeAnnotationId, { found: targetName })
+		emitUnknownTypeAliasError(typeAnnotationId, context)
 		return
 	}
 
-	// Register the alias
 	state.types.addAlias(aliasName, typeInfo.typeId)
 }
 
@@ -251,8 +260,170 @@ function extractBindingExprNodes(
 }
 
 /**
+ * Check if expression is an uppercase identifier (for record instantiation pattern).
+ */
+function getUppercaseIdentifier(exprId: NodeId, context: CompilationContext): string | null {
+	const exprNode = context.nodes.get(exprId)
+	if (exprNode.kind !== NodeKind.Identifier) return null
+
+	const rhsToken = context.tokens.get(exprNode.tokenId)
+	const rhsName = context.strings.get(rhsToken.payload as StringId)
+	return isUppercaseName(rhsName) ? rhsName : null
+}
+
+/**
+ * Try to handle record instantiation pattern: lowercase = Uppercase
+ * Returns true if this was a record instantiation (handled or errored).
+ */
+function tryHandleRecordInstantiation(
+	bindingId: NodeId,
+	exprId: NodeId,
+	identName: string,
+	nameId: StringId,
+	state: CheckerState,
+	context: CompilationContext
+): boolean {
+	const rhsName = getUppercaseIdentifier(exprId, context)
+	if (!rhsName || isUppercaseName(identName)) return false
+
+	const typeId = state.types.lookup(rhsName)
+	if (typeId !== undefined && state.types.isRecordType(typeId)) {
+		startRecordLiteral(bindingId, typeId, rhsName, nameId, state, context)
+		return true
+	}
+
+	context.emitAtNode('TWCHECK010' as DiagnosticCode, exprId, { found: rhsName })
+	return true
+}
+
+/**
+ * Emit binding with type inferred from expression.
+ */
+function emitInferredBinding(
+	bindingId: NodeId,
+	exprId: NodeId,
+	nameId: StringId,
+	state: CheckerState,
+	context: CompilationContext
+): void {
+	const result = checkExpression(exprId, BuiltinTypeId.None, state, context)
+	if (result.instId === null || result.typeId === BuiltinTypeId.Invalid) return
+
+	const symId = state.symbols.add({
+		nameId,
+		parseNodeId: bindingId,
+		typeId: result.typeId,
+	})
+	state.insts.add({
+		arg0: symId as number,
+		arg1: result.instId as number,
+		kind: InstKind.Bind,
+		parseNodeId: bindingId,
+		typeId: result.typeId,
+	})
+}
+
+/**
+ * Extract identifier info from an identifier node.
+ */
+function getIdentifierInfo(
+	identId: NodeId,
+	context: CompilationContext
+): { nameId: StringId; name: string } {
+	const identNode = context.nodes.get(identId)
+	const identToken = context.tokens.get(identNode.tokenId)
+	const nameId = identToken.payload as StringId
+	return { name: context.strings.get(nameId), nameId }
+}
+
+/**
+ * Handle typed binding with explicit type annotation.
+ */
+function handleTypedBinding(
+	bindingId: NodeId,
+	exprId: NodeId,
+	typeAnnotationId: NodeId,
+	nameId: StringId,
+	state: CheckerState,
+	context: CompilationContext
+): void {
+	const typeInfo = resolveTypeFromAnnotation(typeAnnotationId, state, context)
+	if (typeInfo) {
+		emitSimpleBinding(bindingId, exprId, typeInfo.typeId, nameId, state, context)
+	}
+}
+
+/**
+ * Try to handle Lambda binding: name = (params) -> body
+ * Returns true if this was a Lambda binding.
+ */
+function tryHandleLambdaBinding(
+	bindingId: NodeId,
+	exprId: NodeId,
+	nameId: StringId,
+	state: CheckerState,
+	context: CompilationContext
+): boolean {
+	const exprNode = context.nodes.get(exprId)
+	if (exprNode.kind !== NodeKind.Lambda) return false
+
+	handleLambdaBinding(bindingId, exprId, nameId, state, context, checkExpressionWithSequence)
+	return true
+}
+
+/**
+ * Try to handle MatchExpr binding: name: Type = match scrutinee
+ * Returns true if this was a MatchExpr binding.
+ */
+function tryHandleMatchExprBinding(
+	bindingId: NodeId,
+	exprId: NodeId,
+	nameId: StringId,
+	typeAnnotationId: NodeId | null,
+	state: CheckerState,
+	context: CompilationContext
+): boolean {
+	const exprNode = context.nodes.get(exprId)
+	if (exprNode.kind !== NodeKind.MatchExpr) return false
+
+	// MatchExpr requires type annotation
+	if (!typeAnnotationId) {
+		context.emitAtNode('TWCHECK010' as DiagnosticCode, exprId, {
+			found: 'match expression requires type annotation',
+		})
+		return true
+	}
+
+	const typeInfo = resolveTypeFromAnnotation(typeAnnotationId, state, context)
+	if (!typeInfo) return true
+
+	startMatchFromBindingExpr(bindingId, exprId, nameId, typeInfo.typeId, state, context)
+	return true
+}
+
+/**
+ * Handle regular binding (not record, lambda, or match).
+ */
+function handleRegularBinding(
+	bindingId: NodeId,
+	exprId: NodeId,
+	nameId: StringId,
+	typeAnnotationId: NodeId | null,
+	state: CheckerState,
+	context: CompilationContext
+): void {
+	if (typeAnnotationId) {
+		handleTypedBinding(bindingId, exprId, typeAnnotationId, nameId, state, context)
+	} else {
+		emitInferredBinding(bindingId, exprId, nameId, state, context)
+	}
+}
+
+/**
  * Handle a BindingExpr statement.
  * Detects record instantiation pattern: lowercase = Uppercase
+ * Detects Lambda binding pattern: name = (params) -> body
+ * Detects MatchExpr binding pattern: name: Type = match scrutinee
  */
 function handleBindingExpr(
 	bindingId: NodeId,
@@ -263,62 +434,13 @@ function handleBindingExpr(
 	if (!nodes) return
 
 	const { exprId, identId, typeAnnotationId } = nodes
+	const { name: identName, nameId } = getIdentifierInfo(identId, context)
 
-	// Extract identifier name
-	const identNode = context.nodes.get(identId)
-	const identToken = context.tokens.get(identNode.tokenId)
-	const nameId = identToken.payload as StringId
-	const identName = context.strings.get(nameId)
+	if (tryHandleRecordInstantiation(bindingId, exprId, identName, nameId, state, context)) return
+	if (tryHandleLambdaBinding(bindingId, exprId, nameId, state, context)) return
+	if (tryHandleMatchExprBinding(bindingId, exprId, nameId, typeAnnotationId, state, context)) return
 
-	// Check if RHS is an uppercase identifier (record instantiation pattern)
-	// Note: Uppercase = Uppercase is handled by TypeAlias at grammar level, not BindingExpr
-	const exprNode = context.nodes.get(exprId)
-	if (exprNode.kind === NodeKind.Identifier) {
-		const rhsToken = context.tokens.get(exprNode.tokenId)
-		const rhsNameId = rhsToken.payload as StringId
-		const rhsName = context.strings.get(rhsNameId)
-
-		if (isUppercaseName(rhsName) && !isUppercaseName(identName)) {
-			// lowercase = Uppercase → record instantiation
-			const typeId = state.types.lookup(rhsName)
-			if (typeId !== undefined && state.types.isRecordType(typeId)) {
-				startRecordLiteral(bindingId, typeId, rhsName, nameId, state, context)
-				return
-			}
-			// Type not found or not a record type - emit error
-			context.emitAtNode('TWCHECK010' as DiagnosticCode, exprId, { found: rhsName })
-			return
-		}
-	}
-
-	// Regular binding - check expression with expected type
-	if (typeAnnotationId) {
-		// Has type annotation - resolve and use it
-		const typeInfo = resolveTypeFromAnnotation(typeAnnotationId, state, context)
-		if (!typeInfo) {
-			return
-		}
-		emitSimpleBinding(bindingId, exprId, typeInfo.typeId, nameId, state, context)
-	} else {
-		// No type annotation - infer from expression
-		const result = checkExpression(exprId, BuiltinTypeId.None, state, context)
-		if (result.instId === null || result.typeId === BuiltinTypeId.Invalid) {
-			return
-		}
-		// Create binding with inferred type
-		const symId = state.symbols.add({
-			nameId,
-			parseNodeId: bindingId,
-			typeId: result.typeId,
-		})
-		state.insts.add({
-			arg0: symId as number,
-			arg1: result.instId as number,
-			kind: InstKind.Bind,
-			parseNodeId: bindingId,
-			typeId: result.typeId,
-		})
-	}
+	handleRegularBinding(bindingId, exprId, nameId, typeAnnotationId, state, context)
 }
 
 function emitStatement(
