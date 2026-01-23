@@ -269,5 +269,23 @@ p = Point
 				`Expected error about field never returning, got: ${errors.map((e) => e.message).join(', ')}`
 			)
 		})
+
+		it('should error on type mismatch in record field', () => {
+			const source = `Point
+\tx: i32
+\ty: i32
+p = Point
+\tx = 1.5
+\ty = 2
+`
+			const ctx = prepareContext(source)
+			check(ctx)
+			const errors = getErrors(ctx)
+			assert.ok(errors.length > 0, 'Expected type mismatch error')
+			assert.ok(
+				errors.some((e) => e.message.includes('type mismatch')),
+				`Expected type mismatch error, got: ${errors.map((e) => e.message).join(', ')}`
+			)
+		})
 	})
 })

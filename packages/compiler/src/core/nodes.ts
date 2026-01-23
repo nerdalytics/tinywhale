@@ -47,12 +47,15 @@ export const NodeKind = {
 	MatchExpr: 119, // Moved to expression range (100-149)
 	OrPattern: 203,
 	PanicExpr: 118,
+	/** @deprecated Use PanicExpr instead. Kept for backwards compatibility. */
 	PanicStatement: 10,
 	Parameter: 52,
 	ParameterList: 53,
 	ParenExpr: 105,
+	/** @deprecated Use BindingExpr instead. Kept for backwards compatibility. */
 	PrimitiveBinding: 14,
 	Program: 255,
+	/** @deprecated Use BindingExpr with record type instead. Kept for backwards compatibility. */
 	RecordBinding: 15,
 	RecordLiteral: 107,
 	RefinementType: 154,
