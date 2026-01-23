@@ -26,7 +26,7 @@ export function isValidExprResult(
  * Checks if a node kind is a terminator (e.g., panic).
  */
 export function isTerminator(kind: NodeKind): boolean {
-	return kind === NodeKind.PanicStatement || kind === NodeKind.PanicExpr
+	return kind === NodeKind.PanicExpr
 }
 
 /**
