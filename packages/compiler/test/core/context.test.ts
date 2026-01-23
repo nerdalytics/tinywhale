@@ -108,7 +108,7 @@ describe('core/context', () => {
 				})
 
 				const nodeId = ctx.nodes.add({
-					kind: NodeKind.PanicStatement,
+					kind: NodeKind.PanicExpr,
 					subtreeSize: 1,
 					tokenId,
 				})
