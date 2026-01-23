@@ -365,6 +365,15 @@ export class TypeStore {
 		return this.nameToId.get(name)
 	}
 
+	/**
+	 * Add a type alias. Unlike declareDistinct, this creates a simple name alias
+	 * that resolves to the same TypeId.
+	 * Example: `P = Point` makes P an alias for Point's TypeId.
+	 */
+	addAlias(aliasName: string, targetTypeId: TypeId): void {
+		this.nameToId.set(aliasName, targetTypeId)
+	}
+
 	get(id: TypeId): TypeInfo {
 		if (id === BuiltinTypeId.Invalid) {
 			throw new Error('Cannot get TypeInfo for Invalid sentinel')
@@ -378,6 +387,15 @@ export class TypeStore {
 
 	areEqual(a: TypeId, b: TypeId): boolean {
 		return a === b
+	}
+
+	/**
+	 * Check if subType is a subtype of superType.
+	 * None (bottom/Never type) is a subtype of all types.
+	 */
+	isSubtype(subType: TypeId, superType: TypeId): boolean {
+		if (subType === BuiltinTypeId.None) return true // Never <: T for all T
+		return subType === superType
 	}
 
 	typeName(id: TypeId): string {

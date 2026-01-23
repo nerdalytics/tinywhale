@@ -841,6 +841,102 @@ panic`
 		})
 	})
 
+	describe('MatchExpr in expression position', () => {
+		it('should parse match as expression in binding RHS', () => {
+			// Grammar parses x = match y as BindingExpr with MatchExpr RHS
+			// Match arms on subsequent indented lines are parsed separately
+			// The checker associates arms with their match expr based on indentation
+			const source = `x = match y
+	0 -> 100
+	_ -> 0`
+			const ctx = tokenizeAndParse(source)
+			assert.strictEqual(ctx.hasErrors(), false, 'should have no errors')
+			let hasMatchExpr = false
+			let hasBindingExpr = false
+			let hasMatchArm = false
+			for (const [, node] of ctx.nodes) {
+				if (node.kind === NodeKind.MatchExpr) hasMatchExpr = true
+				if (node.kind === NodeKind.BindingExpr) hasBindingExpr = true
+				if (node.kind === NodeKind.MatchArm) hasMatchArm = true
+			}
+			assert.strictEqual(hasMatchExpr, true, 'should have MatchExpr')
+			assert.strictEqual(hasBindingExpr, true, 'should have BindingExpr')
+			assert.strictEqual(hasMatchArm, true, 'should have MatchArm from indented lines')
+		})
+
+		it('should parse single-line match in expression position', () => {
+			// Inline match without arms (e.g., passing to function)
+			const ctx = tokenizeAndParse('result = match x')
+			assert.strictEqual(ctx.hasErrors(), false)
+			let hasMatchExpr = false
+			let hasBindingExpr = false
+			for (const [, node] of ctx.nodes) {
+				if (node.kind === NodeKind.MatchExpr) hasMatchExpr = true
+				if (node.kind === NodeKind.BindingExpr) hasBindingExpr = true
+			}
+			assert.strictEqual(hasMatchExpr, true, 'should have MatchExpr')
+			assert.strictEqual(hasBindingExpr, true, 'should have BindingExpr')
+		})
+	})
+
+	describe('PanicExpr', () => {
+		it('should parse panic as expression in binding RHS', () => {
+			const ctx = tokenizeAndParse('x = panic')
+			assert.strictEqual(ctx.hasErrors(), false)
+			let hasPanicExpr = false
+			for (const [, node] of ctx.nodes) {
+				if (node.kind === NodeKind.PanicExpr) hasPanicExpr = true
+			}
+			assert.strictEqual(hasPanicExpr, true)
+		})
+
+		it('should still parse standalone panic as PanicStatement', () => {
+			// Standalone panic at root level continues to work
+			const ctx = tokenizeAndParse('panic')
+			assert.strictEqual(ctx.hasErrors(), false)
+			let hasPanicStatement = false
+			for (const [, node] of ctx.nodes) {
+				if (node.kind === NodeKind.PanicStatement) hasPanicStatement = true
+			}
+			assert.strictEqual(hasPanicStatement, true)
+		})
+	})
+
+	describe('BindingExpr', () => {
+		it('should parse binding expression without type annotation', () => {
+			const ctx = tokenizeAndParse('x = 42')
+			assert.strictEqual(ctx.hasErrors(), false)
+			let hasBindingExpr = false
+			for (const [, node] of ctx.nodes) {
+				if (node.kind === NodeKind.BindingExpr) hasBindingExpr = true
+			}
+			assert.strictEqual(hasBindingExpr, true)
+		})
+
+		it('should parse record instantiation with new syntax', () => {
+			// p = Point is the new syntax for record instantiation
+			// (requires Point to be a defined type in checker, but grammar should parse it)
+			const ctx = tokenizeAndParse('p = Point')
+			assert.strictEqual(ctx.hasErrors(), false)
+			let hasBindingExpr = false
+			for (const [, node] of ctx.nodes) {
+				if (node.kind === NodeKind.BindingExpr) hasBindingExpr = true
+			}
+			assert.strictEqual(hasBindingExpr, true)
+		})
+
+		it('should still parse explicit type annotation as PrimitiveBinding', () => {
+			// x: i32 = 42 continues to parse as PrimitiveBinding for backward compatibility
+			const ctx = tokenizeAndParse('x: i32 = 42')
+			assert.strictEqual(ctx.hasErrors(), false)
+			let hasPrimitiveBinding = false
+			for (const [, node] of ctx.nodes) {
+				if (node.kind === NodeKind.PrimitiveBinding) hasPrimitiveBinding = true
+			}
+			assert.strictEqual(hasPrimitiveBinding, true)
+		})
+	})
+
 	describe('list literal in record init parsing', () => {
 		it('should parse record initialization with list field', () => {
 			const source = `Foo
@@ -878,6 +974,39 @@ panic`
 			tokenize(ctx)
 			const result = matchOnly(ctx)
 			assert.ok(result, 'should match record init with multiple list fields')
+		})
+	})
+
+	describe('Lambda as expression', () => {
+		it('should parse lambda in expression position', () => {
+			const source = `f = (x: i32): i32 -> x * 2
+`
+			const ctx = new CompilationContext(source)
+			tokenize(ctx)
+			const result = matchOnly(ctx)
+			assert.ok(result, 'should match lambda in binding expression')
+		})
+
+		it('should parse lambda assigned via BindingExpr', () => {
+			const source = `double = (x: i32): i32 -> x * 2
+`
+			const ctx = tokenizeAndParse(source)
+			assert.strictEqual(
+				ctx.hasErrors(),
+				false,
+				'Lambda in BindingExpr should parse without errors'
+			)
+		})
+
+		it('should parse lambda with block body', () => {
+			const source = `compute = (x: i32): i32 ->
+\ty: i32 = x * 2
+\ty + 1
+`
+			const ctx = new CompilationContext(source)
+			tokenize(ctx)
+			const result = matchOnly(ctx)
+			assert.ok(result, 'should match lambda with block body')
 		})
 	})
 })

@@ -130,55 +130,55 @@ test('Semantic Specs', async (t) => {
 			{
 				description: 'simple record with fields',
 				expect: 'valid',
-				input: 'Point\n\tx: i32\n\ty: i32\np:Point\n\tx = 1\n\ty = 2',
+				input: 'Point\n\tx: i32\n\ty: i32\np = Point\n\tx = 1\n\ty = 2',
 			},
 			{
 				description: 'unknown field in initializer',
 				expect: 'check-error',
-				input: 'Point\n\tx: i32\np:Point\n\tx = 1\n\ty = 2',
+				input: 'Point\n\tx: i32\np = Point\n\tx = 1\n\ty = 2',
 			},
 			{
 				description: 'missing field in initializer',
 				expect: 'check-error',
-				input: 'Point\n\tx: i32\n\ty: i32\np:Point\n\tx = 1',
+				input: 'Point\n\tx: i32\n\ty: i32\np = Point\n\tx = 1',
 			},
 			{
 				description: 'refinement type in field - constraint satisfied',
 				expect: 'valid',
-				input: 'Point\n\tx: i32<min=0>\n\ty: i32\np:Point\n\tx = 5\n\ty = 10',
+				input: 'Point\n\tx: i32<min=0>\n\ty: i32\np = Point\n\tx = 5\n\ty = 10',
 			},
 			{
 				description: 'refinement type in field - constraint violated',
 				errorCode: 'TWCHECK041',
 				expect: 'check-error',
-				input: 'Point\n\tx: i32<min=0>\n\ty: i32\np:Point\n\tx = -5\n\ty = 10',
+				input: 'Point\n\tx: i32<min=0>\n\ty: i32\np = Point\n\tx = -5\n\ty = 10',
 			},
 			{
 				description: 'multiple refinement fields',
 				expect: 'valid',
 				input:
-					'Bounded\n\ta: i32<min=0, max=100>\n\tb: i32<min=-10>\np:Bounded\n\ta = 50\n\tb = -5',
+					'Bounded\n\ta: i32<min=0, max=100>\n\tb: i32<min=-10>\np = Bounded\n\ta = 50\n\tb = -5',
 			},
 			{
 				description: 'refinement field max constraint violated',
 				errorCode: 'TWCHECK041',
 				expect: 'check-error',
-				input: 'Bounded\n\ta: i32<max=10>\np:Bounded\n\ta = 100',
+				input: 'Bounded\n\ta: i32<max=10>\np = Bounded\n\ta = 100',
 			},
 			{
 				description: 'record instantiation with new syntax',
 				expect: 'valid',
-				input: 'Point\n\tx: i32\n\ty: i32\np:Point\n\tx = 5\n\ty = 10',
+				input: 'Point\n\tx: i32\n\ty: i32\np = Point\n\tx = 5\n\ty = 10',
 			},
 			{
 				description: 'nested record init with new syntax',
 				expect: 'valid',
-				input: 'Inner\n\tval: i32\nOuter\n\tinner: Inner\no:Outer\n\tinner: Inner\n\t\tval = 5',
+				input: 'Inner\n\tval: i32\nOuter\n\tinner: Inner\no = Outer\n\tinner: Inner\n\t\tval = 5',
 			},
 			{
 				description: 'record field access with new syntax',
 				expect: 'valid',
-				input: 'Point\n\tx: i32\np:Point\n\tx = 5\nresult:i32 = p.x',
+				input: 'Point\n\tx: i32\np = Point\n\tx = 5\nresult:i32 = p.x',
 			},
 		])
 	)
@@ -237,13 +237,13 @@ test('Semantic Specs', async (t) => {
 			{
 				description: 'simple field access',
 				expect: 'valid',
-				input: 'Point\n\tx: i32\n\ty: i32\np:Point\n\tx = 1\n\ty = 2\nv:i32 = p.x',
+				input: 'Point\n\tx: i32\n\ty: i32\np = Point\n\tx = 1\n\ty = 2\nv:i32 = p.x',
 			},
 			{
 				description: 'nested field access',
 				expect: 'valid',
 				input:
-					'Inner\n\tval: i32\nOuter\n\tinner: Inner\no:Outer\n\tinner: Inner\n\t\tval = 42\nv:i32 = o.inner.val',
+					'Inner\n\tval: i32\nOuter\n\tinner: Inner\no = Outer\n\tinner: Inner\n\t\tval = 42\nv:i32 = o.inner.val',
 			},
 		])
 	)

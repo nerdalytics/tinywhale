@@ -7,7 +7,7 @@ Outer
     x: i32
 
 # Create with nested construction and sibling field
-o:Outer
+o = Outer
     inner: Inner
         val = 42
     x = 10

@@ -109,7 +109,7 @@ describe('record literal parsing', () => {
 		const source = `Point
     x: i32
     y: i32
-p:Point
+p = Point
     x = 5
     y = 10
 panic`
@@ -169,7 +169,7 @@ panic`
 	})
 
 	it('creates FieldInit nodes', () => {
-		const source = `p:Point
+		const source = `p = Point
     x = 5
     y = 10
 panic`
@@ -268,7 +268,7 @@ describe('checker record instantiation', () => {
 		const source = `Point
     x: i32
     y: i32
-p:Point
+p = Point
     x = 5
     y = 10
 panic`
@@ -284,7 +284,7 @@ panic`
 		const source = `Point
     x: i32
     y: i32
-p:Point
+p = Point
     x = 5
 panic`
 		const ctx = createContext(source)
@@ -299,7 +299,7 @@ panic`
 		const source = `Point
     x: i32
     y: i32
-p:Point
+p = Point
     x = 5
     y = 10
     z = 15
@@ -316,7 +316,7 @@ panic`
 		const source = `Point
     x: i32
     y: i32
-p:Point
+p = Point
     x = 5
     x = 10
 panic`
@@ -329,7 +329,7 @@ panic`
 	})
 
 	it('allows record instantiation without type declaration (error expected)', () => {
-		const source = `p:UnknownType
+		const source = `p = UnknownType
     x = 5
 panic`
 		const ctx = createContext(source)
@@ -346,7 +346,7 @@ describe('checker field access', () => {
 		const source = `Point
     x: i32
     y: i32
-p:Point
+p = Point
     x = 5
     y = 10
 result: i32 = p.x
@@ -362,7 +362,7 @@ panic`
 	it('reports error for unknown field', () => {
 		const source = `Point
     x: i32
-p:Point
+p = Point
     x = 5
 result: i32 = p.z
 panic`
@@ -391,7 +391,7 @@ panic`
     val: i32
 Outer
     inner: Inner
-o:Outer
+o = Outer
     inner: Inner
         val = 42
 result: i32 = o.inner.val
@@ -410,7 +410,7 @@ describe('SymbolStore record bindings', () => {
 		const source = `Point
     x: i32
     y: i32
-p:Point
+p = Point
     x = 5
     y = 10
 panic`
@@ -430,7 +430,7 @@ describe('codegen record types', () => {
 		const source = `Point
     x: i32
     y: i32
-p:Point
+p = Point
     x = 5
     y = 10
 panic`
@@ -454,7 +454,7 @@ panic`
 		const source = `Point
     x: i32
     y: i32
-p:Point
+p = Point
     x = 5
     y = 10
 result: i32 = p.x + p.y
@@ -480,7 +480,7 @@ panic`
 		const source = `Point
     x: i32
     y: i32
-p:Point
+p = Point
     x = 42
     y = 99
 panic`
@@ -500,7 +500,7 @@ panic`
 		const source = `Mixed
     a: i32
     b: i64
-m:Mixed
+m = Mixed
     a = 1
     b = 2
 panic`
@@ -541,9 +541,9 @@ panic`
     x: i32
 Line
     len: i32
-p:Point
+p = Point
     x = 5
-l:Line
+l = Line
     len = 10
 sum: i32 = p.x + l.len
 panic`
@@ -562,7 +562,7 @@ describe('nested record instantiation parsing', () => {
     val: i32
 Outer
     inner: Inner
-o:Outer
+o = Outer
     inner: Inner
         val = 42
 panic`
@@ -573,7 +573,7 @@ panic`
 	})
 
 	it('creates FieldDecl node for type name in nested record init', () => {
-		const source = `o:Outer
+		const source = `o = Outer
     inner: Inner
         val = 42
 panic`
@@ -659,7 +659,7 @@ describe('nested field access', () => {
     val: i32
 Outer
     inner: Inner
-o:Outer
+o = Outer
     inner: Inner
         val = 42
 result: i32 = o.inner.val
@@ -677,7 +677,7 @@ panic`
     val: i32
 Outer
     inner: Inner
-o:Outer
+o = Outer
     inner: Inner
         val = 42
 result: i32 = o.inner.val
@@ -700,7 +700,7 @@ describe('nested record codegen', () => {
     val: i32
 Outer
     inner: Inner
-o:Outer
+o = Outer
     inner: Inner
         val = 42
 panic`
@@ -722,7 +722,7 @@ describe('nested record instantiation checker', () => {
     val: i32
 Outer
     inner: Inner
-o:Outer
+o = Outer
     inner: Inner
         val = 42
 panic`
@@ -741,7 +741,7 @@ B
     y: i32
 Outer
     inner: A
-o:Outer
+o = Outer
     inner: B
         y = 5
 panic`
@@ -761,7 +761,7 @@ panic`
     y: i32
 Outer
     inner: Inner
-o:Outer
+o = Outer
     inner: Inner
         x = 1
 panic`
@@ -783,7 +783,7 @@ describe('sibling fields after nested blocks', () => {
 Outer
     inner: Inner
     x: i32
-o:Outer
+o = Outer
     inner: Inner
         val = 42
     x = 10
@@ -800,7 +800,7 @@ panic`
 Outer
     inner: Inner
     x: i32
-o:Outer
+o = Outer
     inner: Inner
         val = 42
     x = 10
@@ -831,7 +831,7 @@ Outer
     inner: Inner
     x: i32
     y: i32
-o:Outer
+o = Outer
     inner: Inner
         a = 1
     x = 2
@@ -866,7 +866,7 @@ L2
 L1
     l2: L2
     a: i32
-root:L1
+root = L1
     l2: L2
         l3: L3
             val = 100

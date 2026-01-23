@@ -59,8 +59,10 @@ Outer
 
 ## Record Instantiation
 
+Records are instantiated using `name = TypeName` followed by indented field initializers:
+
 ```
-p1: Point
+p1 = Point
     x = 10
     y = 20
 
@@ -71,7 +73,7 @@ sum: i32 = p1.x + p1.y
 Nested instantiation:
 
 ```
-o: Outer
+o = Outer
     inner: Inner
         val = 42
     x = 10
@@ -81,8 +83,11 @@ result: i32 = o.inner.val
 
 ## Type Alias
 
+Type aliases use uppercase on both sides:
+
 ```
-Add = (i32, i32) -> i32
+Add = (i32, i32) -> i32     # Function type alias
+P = Point                    # Record type alias
 ```
 
 ## Function Binding
@@ -251,15 +256,15 @@ quadrant = (p: Point): i32 ->
         _ -> 0       # on axis
 
 # Create points and compute results
-origin: Point
+origin = Point
     x = 0
     y = 0
 
-p1: Point
+p1 = Point
     x = 30
     y = 40
 
-p2: Point
+p2 = Point
     x = -15
     y = 25
 

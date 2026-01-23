@@ -1192,6 +1192,30 @@ function checkListLiteral(
 }
 
 // ============================================================================
+// Panic Expression
+// ============================================================================
+
+/**
+ * Check a panic expression.
+ * Panic has type None (bottom type) - it can be assigned to any type.
+ * Emits an Unreachable instruction.
+ */
+function checkPanicExpr(
+	exprId: NodeId,
+	state: CheckerState,
+	_context: CompilationContext
+): ExprResult {
+	const instId = state.insts.add({
+		arg0: 0,
+		arg1: 0,
+		kind: InstKind.Unreachable,
+		parseNodeId: exprId,
+		typeId: BuiltinTypeId.None,
+	})
+	return { instId, typeId: BuiltinTypeId.None }
+}
+
+// ============================================================================
 // Main Expression Dispatch
 // ============================================================================
 
@@ -1227,6 +1251,8 @@ export function checkExpressionInferred(
 			return checkIndexAccessInferred(exprId, state, context)
 		case NodeKind.FuncCall:
 			return handleFuncCall(exprId, state, context, checkExpressionInferred)
+		case NodeKind.PanicExpr:
+			return checkPanicExpr(exprId, state, context)
 		default:
 			return { instId: null, typeId: BuiltinTypeId.Invalid }
 	}
@@ -1267,6 +1293,8 @@ export function checkExpression(
 			return checkListLiteral(exprId, expectedType, state, context)
 		case NodeKind.FuncCall:
 			return handleFuncCall(exprId, state, context, checkExpressionInferred)
+		case NodeKind.PanicExpr:
+			return checkPanicExpr(exprId, state, context)
 		default:
 			console.assert(false, 'checkExpression: unhandled expression kind %d', node.kind)
 			return { instId: null, typeId: BuiltinTypeId.Invalid }

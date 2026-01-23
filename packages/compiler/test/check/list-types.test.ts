@@ -97,9 +97,9 @@ panic`
 				const source = `Point
     x: i32
     y: i32
-p: Point =
-    x: 1
-    y: 2
+p = Point
+    x = 1
+    y = 2
 z: i32 = p[0]
 panic`
 				const ctx = prepareAndCheck(source)

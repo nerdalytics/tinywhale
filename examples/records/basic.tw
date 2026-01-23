@@ -3,11 +3,11 @@ Point
     x: i32
     y: i32
 
-origin:Point
+origin = Point
     x = 0
     y = 0
 
-p:Point
+p = Point
     y = 10
     x = 5
 

@@ -541,6 +541,72 @@ export function handleFuncBinding(
 	funcs.defineFunc(funcId, bodyResult.instId, bodyInstIds, paramSymbols)
 }
 
+/**
+ * Handle a Lambda expression in a BindingExpr context.
+ * Pattern: name = (params): ReturnType -> body
+ *
+ * This is called from handleBindingExpr when the RHS is a Lambda node.
+ */
+export function handleLambdaBinding(
+	bindingId: NodeId,
+	lambdaId: NodeId,
+	nameId: StringId,
+	state: CheckerState,
+	context: CompilationContext,
+	checkExpr: (
+		exprId: NodeId,
+		expectedType: TypeId,
+		state: CheckerState,
+		context: CompilationContext
+	) => { instId: InstId | null; typeId: TypeId }
+): void {
+	const funcs = context.funcs
+	if (!funcs) return
+
+	const { paramNames, paramTypes, returnType, bodyExprId } = parseLambdaSignature(
+		lambdaId,
+		state,
+		context
+	)
+
+	if (bodyExprId === null) {
+		context.emitAtNode('TWCHECK010' as DiagnosticCode, bindingId, { found: 'lambda without body' })
+		return
+	}
+
+	const funcTypeId = state.types.registerFuncType(paramTypes, returnType)
+	const funcId = ensureFuncDeclared(nameId, funcTypeId, bindingId, funcs, state)
+	checkFuncTypeConsistency(funcId, funcTypeId, bindingId, funcs, state, context)
+
+	state.symbols.pushScope()
+	const paramSymbols = registerParamSymbols(paramNames, paramTypes, bindingId, state)
+
+	const startInstCount = state.insts.count()
+	const bodyResult = checkExpr(bodyExprId, returnType, state, context)
+	const endInstCount = state.insts.count()
+
+	state.symbols.popScope()
+
+	if (bodyResult.instId === null) return
+
+	const bodyInstIds: InstId[] = []
+	for (let i = startInstCount; i < endInstCount; i++) {
+		bodyInstIds.push(instId(i))
+	}
+
+	emitTypeMismatchIfNeeded(bodyResult.typeId, returnType, bindingId, state, context)
+
+	state.insts.add({
+		arg0: funcId as number,
+		arg1: bodyResult.instId as number,
+		kind: InstKind.FuncDef,
+		parseNodeId: bindingId,
+		typeId: BuiltinTypeId.None,
+	})
+
+	funcs.defineFunc(funcId, bodyResult.instId, bodyInstIds, paramSymbols)
+}
+
 // ============================================================================
 // FuncCall Handling
 // ============================================================================

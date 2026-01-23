@@ -3,6 +3,7 @@ import { describe, it } from 'node:test'
 import { check } from '../../src/check/checker.ts'
 import { InstKind, instId } from '../../src/check/types.ts'
 import { CompilationContext, DiagnosticSeverity } from '../../src/core/context.ts'
+import { isExpressionNode, isStatementNode, isTerminator, NodeKind } from '../../src/core/nodes.ts'
 import { tokenize } from '../../src/lex/tokenizer.ts'
 import { parse } from '../../src/parse/parser.ts'
 
@@ -154,6 +155,220 @@ describe('check/checker', () => {
 			assert.strictEqual(result.succeeded, true)
 			const warnings = getWarnings(ctx)
 			assert.strictEqual(warnings.length, 0)
+		})
+	})
+
+	describe('PanicExpr type checking', () => {
+		it('should type panic as bottom type (compatible with any type)', () => {
+			const source = 'x: i32 = panic\n'
+			const ctx = prepareContext(source)
+			check(ctx)
+			// panic has type None which is compatible with any expected type
+			assert.strictEqual(
+				ctx.hasErrors(),
+				false,
+				`Errors: ${getErrors(ctx)
+					.map((e) => e.message)
+					.join(', ')}`
+			)
+		})
+
+		it('should allow panic in function return position', () => {
+			const source = `f = (x: i32): i32 -> panic
+`
+			const ctx = prepareContext(source)
+			check(ctx)
+			assert.strictEqual(
+				ctx.hasErrors(),
+				false,
+				`Errors: ${getErrors(ctx)
+					.map((e) => e.message)
+					.join(', ')}`
+			)
+		})
+
+		it('should allow panic in match arm', () => {
+			const source = `result: i32 = match 5
+\t0 -> panic
+\t_ -> 42
+`
+			const ctx = prepareContext(source)
+			check(ctx)
+			assert.strictEqual(
+				ctx.hasErrors(),
+				false,
+				`Errors: ${getErrors(ctx)
+					.map((e) => e.message)
+					.join(', ')}`
+			)
+		})
+	})
+
+	describe('Never type (bottom type)', () => {
+		it('Never should be subtype of i32', () => {
+			const source = `f = (x: i32): i32 -> panic
+`
+			const ctx = prepareContext(source)
+			check(ctx)
+			assert.strictEqual(
+				ctx.hasErrors(),
+				false,
+				`Errors: ${getErrors(ctx)
+					.map((e) => e.message)
+					.join(', ')}`
+			)
+		})
+
+		it('Never should be subtype of f64', () => {
+			const source = `g = (x: f64): f64 -> panic
+`
+			const ctx = prepareContext(source)
+			check(ctx)
+			assert.strictEqual(
+				ctx.hasErrors(),
+				false,
+				`Errors: ${getErrors(ctx)
+					.map((e) => e.message)
+					.join(', ')}`
+			)
+		})
+	})
+
+	describe('Node kind helpers', () => {
+		it('should classify BindingExpr as expression', () => {
+			assert.strictEqual(isExpressionNode(NodeKind.BindingExpr), true)
+			assert.strictEqual(isStatementNode(NodeKind.BindingExpr), false)
+		})
+
+		it('should classify PanicExpr as expression', () => {
+			assert.strictEqual(isExpressionNode(NodeKind.PanicExpr), true)
+			assert.strictEqual(isStatementNode(NodeKind.PanicExpr), false)
+		})
+
+		it('should recognize PanicExpr as terminator', () => {
+			assert.strictEqual(isTerminator(NodeKind.PanicExpr), true)
+			assert.strictEqual(isTerminator(NodeKind.PanicStatement), true)
+		})
+	})
+
+	describe('Binding completeness', () => {
+		it('should error when record field is initialized with panic', () => {
+			const source = `Point
+\tx: i32
+\ty: i32
+p = Point
+\tx = panic
+\ty = 10
+`
+			const ctx = prepareContext(source)
+			check(ctx)
+			const errors = getErrors(ctx)
+			assert.ok(errors.length > 0, 'Expected an error for field initialized with panic')
+			assert.ok(
+				errors.some((e) => e.message.includes('never returns')),
+				`Expected error about field never returning, got: ${errors.map((e) => e.message).join(', ')}`
+			)
+		})
+
+		it('should error on type mismatch in record field', () => {
+			const source = `Point
+\tx: i32
+\ty: i32
+p = Point
+\tx = 1.5
+\ty = 2
+`
+			const ctx = prepareContext(source)
+			check(ctx)
+			const errors = getErrors(ctx)
+			assert.ok(errors.length > 0, 'Expected type mismatch error')
+			assert.ok(
+				errors.some((e) => e.message.includes('type mismatch')),
+				`Expected type mismatch error, got: ${errors.map((e) => e.message).join(', ')}`
+			)
+		})
+	})
+
+	describe('Everything is Expression - Integration', () => {
+		it('should compile complete example with records, functions, and match', () => {
+			const source = `Point
+\tx: i32
+\ty: i32
+
+Inner
+\tval: i32
+
+Outer
+\tinner: Inner
+\tx: i32
+
+squared = (s: i32): i32 -> s * s
+distance_2d = (x: i32, y: i32): i32 -> squared(x) + squared(y)
+
+p = Point
+\tx = 3
+\ty = 4
+
+result: i32 = distance_2d(p.x, p.y)
+
+o = Outer
+\tinner: Inner
+\t\tval = 42
+\tx = 10
+
+P = Point
+
+q = P
+\tx = 100
+\ty = 200
+
+match_result: i32 = match result
+\t25 -> 100
+\t_ -> 50
+panic
+`
+			const ctx = prepareContext(source)
+			check(ctx)
+			assert.strictEqual(
+				ctx.hasErrors(),
+				false,
+				`Expected no errors, got: ${getErrors(ctx)
+					.map((e) => e.message)
+					.join(', ')}`
+			)
+		})
+
+		it('should handle panic in match arm', () => {
+			const source = `result: i32 = match 5
+\t10 -> panic
+\t_ -> 42
+panic
+`
+			const ctx = prepareContext(source)
+			check(ctx)
+			assert.strictEqual(
+				ctx.hasErrors(),
+				false,
+				`Expected no errors, got: ${getErrors(ctx)
+					.map((e) => e.message)
+					.join(', ')}`
+			)
+		})
+
+		it('should handle lambda binding and function call', () => {
+			const source = `double = (x: i32): i32 -> x * 2
+result: i32 = double(21)
+panic
+`
+			const ctx = prepareContext(source)
+			check(ctx)
+			assert.strictEqual(
+				ctx.hasErrors(),
+				false,
+				`Expected no errors, got: ${getErrors(ctx)
+					.map((e) => e.message)
+					.join(', ')}`
+			)
 		})
 	})
 })

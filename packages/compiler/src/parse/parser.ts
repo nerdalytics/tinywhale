@@ -383,6 +383,32 @@ function createNodeEmittingSemantics(
 		AddExpr(first: Node, ops: Node, rest: Node): NodeId {
 			return emitBinaryChain(first, ops, rest)
 		},
+		BindingExpr(
+			ident: Node,
+			_optColons: Node,
+			optTypeRefs: Node,
+			_equals: Node,
+			expr: Node
+		): NodeId {
+			const startCount = context.nodes.count()
+			ident['emitExpression']()
+
+			// Check if optional type annotation is present (both colon and typeRef iterations have 1 child)
+			const typeRefNode = optTypeRefs.children[0]
+			if (typeRefNode !== undefined) {
+				emitTypeRefAsTypeAnnotation(typeRefNode)
+			}
+
+			expr['emitExpression']()
+			const childCount = context.nodes.count() - startCount
+
+			const tid = getTokenIdForOhmNode(ident)
+			return context.nodes.add({
+				kind: NodeKind.BindingExpr,
+				subtreeSize: 1 + childCount,
+				tokenId: tid,
+			})
+		},
 		BitwiseAndExpr(first: Node, ops: Node, rest: Node): NodeId {
 			return emitBinaryChain(first, ops, rest)
 		},
@@ -498,8 +524,28 @@ function createNodeEmittingSemantics(
 		LogicalOrExpr(first: Node, ops: Node, rest: Node): NodeId {
 			return emitBinaryChain(first, ops, rest)
 		},
+		MatchExpr(_matchKeyword: Node, scrutinee: Node): NodeId {
+			const startCount = context.nodes.count()
+			scrutinee['emitExpression']()
+			const childCount = context.nodes.count() - startCount
+
+			const tid = getTokenIdForOhmNode(this)
+			return context.nodes.add({
+				kind: NodeKind.MatchExpr,
+				subtreeSize: 1 + childCount,
+				tokenId: tid,
+			})
+		},
 		MulExpr(first: Node, ops: Node, rest: Node): NodeId {
 			return emitBinaryChain(first, ops, rest)
+		},
+		PanicExpr(_panicKeyword: Node): NodeId {
+			const tid = getTokenIdForOhmNode(this)
+			return context.nodes.add({
+				kind: NodeKind.PanicExpr,
+				subtreeSize: 1,
+				tokenId: tid,
+			})
 		},
 		PostfixableBase(expr: Node): NodeId {
 			return expr['emitExpression']()
@@ -509,6 +555,9 @@ function createNodeEmittingSemantics(
 		},
 		PostfixIndexBase(expr: Node): NodeId {
 			return expr['emitExpression']()
+		},
+		PrimaryExpr_lambda(lambda: Node): NodeId {
+			return lambda['emitLambda']()
 		},
 		PrimaryExpr_paren(_lparen: Node, expr: Node, _rparen: Node): NodeId {
 			const childId = expr['emitExpression']() as NodeId
@@ -1002,6 +1051,10 @@ function createNodeEmittingSemantics(
 			})
 		},
 		Statement(stmt: Node): NodeId {
+			// BindingExpr is the only Statement that uses emitExpression
+			if (stmt.ctorName === 'BindingExpr') {
+				return stmt['emitExpression']()
+			}
 			return stmt['emitStatement']()
 		},
 		TypeAlias(typeName: Node, _equals: Node, typeRef: Node): NodeId {
@@ -1057,9 +1110,23 @@ function createNodeEmittingSemantics(
 				tokenId: tid,
 			})
 		},
-		RootLine(statement: Node) {
+		RootLine(content: Node) {
 			const startCount = context.nodes.count()
-			statement['emitStatement']()
+			// RootLine = Statement | Expression
+			// Statement uses emitStatement, Expression uses emitExpression
+			// Check the ctorName to determine which grammar rule matched
+			const ctorName = content.ctorName
+			// Expression rules all start with specific prefixes or are in Expression hierarchy
+			const isExpression =
+				ctorName === 'Expression' ||
+				ctorName === 'BindingExpr' ||
+				ctorName === 'LogicalOrExpr' ||
+				ctorName.endsWith('Expr')
+			if (isExpression) {
+				content['emitExpression']()
+			} else {
+				content['emitStatement']()
+			}
 			const childCount = context.nodes.count() - startCount
 
 			const lineNumber = getLineNumber(this)
