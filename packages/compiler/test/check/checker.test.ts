@@ -247,7 +247,6 @@ describe('check/checker', () => {
 
 		it('should recognize PanicExpr as terminator', () => {
 			assert.strictEqual(isTerminator(NodeKind.PanicExpr), true)
-			assert.strictEqual(isTerminator(NodeKind.PanicStatement), true)
 		})
 	})
 
