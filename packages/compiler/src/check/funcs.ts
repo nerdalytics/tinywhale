@@ -381,36 +381,8 @@ function parseLambdaSignature(
 }
 
 // ============================================================================
-// FuncBinding Handling
+// Lambda Binding Handling
 // ============================================================================
-
-function findFuncBindingName(bindingId: NodeId, context: CompilationContext): StringId | null {
-	for (const [_childId, child] of context.nodes.iterateChildren(bindingId)) {
-		if (child.kind !== NodeKind.Identifier) continue
-		const token = context.tokens.get(child.tokenId)
-		return token.payload as StringId
-	}
-	return null
-}
-
-function findFuncBindingLambda(bindingId: NodeId, context: CompilationContext): NodeId | null {
-	for (const [childId, child] of context.nodes.iterateChildren(bindingId)) {
-		if (child.kind === NodeKind.Lambda) return childId
-	}
-	return null
-}
-
-function extractFuncBindingParts(
-	bindingId: NodeId,
-	context: CompilationContext
-): { nameId: StringId; lambdaId: NodeId } {
-	const nameId = findFuncBindingName(bindingId, context)
-	const lambdaId = findFuncBindingLambda(bindingId, context)
-	if (nameId === null || lambdaId === null) {
-		throw new Error('FuncBinding missing identifier or lambda')
-	}
-	return { lambdaId, nameId }
-}
 
 function registerParamSymbols(
 	paramNames: StringId[],
@@ -475,70 +447,6 @@ function checkFuncTypeConsistency(
 	context.emitAtNode('TWCHECK010' as DiagnosticCode, bindingId, {
 		found: state.types.typeName(expectedTypeId),
 	})
-}
-
-/**
- * Handle a function binding: double = (x: i32): i32 -> expr
- */
-export function handleFuncBinding(
-	bindingId: NodeId,
-	state: CheckerState,
-	context: CompilationContext,
-	checkExpr: (
-		exprId: NodeId,
-		expectedType: TypeId,
-		state: CheckerState,
-		context: CompilationContext
-	) => { instId: InstId | null; typeId: TypeId }
-): void {
-	const funcs = context.funcs
-	if (!funcs) return
-
-	const { nameId, lambdaId } = extractFuncBindingParts(bindingId, context)
-	const { paramNames, paramTypes, returnType, bodyExprId } = parseLambdaSignature(
-		lambdaId,
-		state,
-		context
-	)
-
-	if (bodyExprId === null) {
-		context.emitAtNode('TWCHECK010' as DiagnosticCode, bindingId, { found: 'lambda without body' })
-		return
-	}
-
-	const funcTypeId = state.types.registerFuncType(paramTypes, returnType)
-	const funcId = ensureFuncDeclared(nameId, funcTypeId, bindingId, funcs, state)
-	checkFuncTypeConsistency(funcId, funcTypeId, bindingId, funcs, state, context)
-
-	state.symbols.pushScope()
-	const paramSymbols = registerParamSymbols(paramNames, paramTypes, bindingId, state)
-
-	// Track all instructions emitted during body processing
-	const startInstCount = state.insts.count()
-	const bodyResult = checkExpr(bodyExprId, returnType, state, context)
-	const endInstCount = state.insts.count()
-
-	state.symbols.popScope()
-
-	if (bodyResult.instId === null) return
-
-	// Collect all body instructions (bindings + final expression)
-	const bodyInstIds: InstId[] = []
-	for (let i = startInstCount; i < endInstCount; i++) {
-		bodyInstIds.push(instId(i))
-	}
-
-	emitTypeMismatchIfNeeded(bodyResult.typeId, returnType, bindingId, state, context)
-
-	state.insts.add({
-		arg0: funcId as number,
-		arg1: bodyResult.instId as number,
-		kind: InstKind.FuncDef,
-		parseNodeId: bindingId,
-		typeId: BuiltinTypeId.None,
-	})
-
-	funcs.defineFunc(funcId, bodyResult.instId, bodyInstIds, paramSymbols)
 }
 
 /**

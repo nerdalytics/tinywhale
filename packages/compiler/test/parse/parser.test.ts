@@ -58,15 +58,15 @@ describe('parse/parser', () => {
 			assert.strictEqual(hasRootLine, true)
 		})
 
-		it('should create PanicStatement node', () => {
+		it('should create PanicExpr node', () => {
 			const ctx = new CompilationContext('panic')
 			tokenize(ctx)
 			parse(ctx)
 
-			// Find PanicStatement node
+			// Find PanicExpr node
 			let hasPanic = false
 			for (const [, node] of ctx.nodes) {
-				if (node.kind === NodeKind.PanicStatement) hasPanic = true
+				if (node.kind === NodeKind.PanicExpr) hasPanic = true
 			}
 			assert.strictEqual(hasPanic, true)
 		})
@@ -104,8 +104,8 @@ describe('parse/parser', () => {
 			tokenize(ctx)
 			parse(ctx)
 
-			// Order should be: PanicStatement(0), RootLine(1), Program(2)
-			assert.strictEqual(ctx.nodes.get(0 as NodeId).kind, NodeKind.PanicStatement)
+			// Order should be: PanicExpr(0), RootLine(1), Program(2)
+			assert.strictEqual(ctx.nodes.get(0 as NodeId).kind, NodeKind.PanicExpr)
 			assert.strictEqual(ctx.nodes.get(1 as NodeId).kind, NodeKind.RootLine)
 			assert.strictEqual(ctx.nodes.get(2 as NodeId).kind, NodeKind.Program)
 		})
@@ -139,14 +139,14 @@ describe('parse/parser', () => {
 	})
 
 	describe('multiple statements', () => {
-		it('should parse multiple panic statements', () => {
+		it('should parse multiple panic expressions', () => {
 			const ctx = new CompilationContext('panic\npanic\npanic')
 			tokenize(ctx)
 			parse(ctx)
 
 			let panicCount = 0
 			for (const [, node] of ctx.nodes) {
-				if (node.kind === NodeKind.PanicStatement) panicCount++
+				if (node.kind === NodeKind.PanicExpr) panicCount++
 			}
 			assert.strictEqual(panicCount, 3)
 		})
@@ -201,10 +201,10 @@ describe('parse/parser', () => {
 
 			assert.strictEqual(result.succeeded, true)
 
-			// Should have 1 panic statement
+			// Should have 1 panic expression
 			let panicCount = 0
 			for (const [, node] of ctx.nodes) {
-				if (node.kind === NodeKind.PanicStatement) panicCount++
+				if (node.kind === NodeKind.PanicExpr) panicCount++
 			}
 			assert.strictEqual(panicCount, 1)
 		})
@@ -890,15 +890,15 @@ panic`
 			assert.strictEqual(hasPanicExpr, true)
 		})
 
-		it('should still parse standalone panic as PanicStatement', () => {
-			// Standalone panic at root level continues to work
+		it('should parse standalone panic as PanicExpr', () => {
+			// Standalone panic at root level parses as PanicExpr
 			const ctx = tokenizeAndParse('panic')
 			assert.strictEqual(ctx.hasErrors(), false)
-			let hasPanicStatement = false
+			let hasPanicExpr = false
 			for (const [, node] of ctx.nodes) {
-				if (node.kind === NodeKind.PanicStatement) hasPanicStatement = true
+				if (node.kind === NodeKind.PanicExpr) hasPanicExpr = true
 			}
-			assert.strictEqual(hasPanicStatement, true)
+			assert.strictEqual(hasPanicExpr, true)
 		})
 	})
 
@@ -925,23 +925,24 @@ panic`
 			assert.strictEqual(hasBindingExpr, true)
 		})
 
-		it('should still parse explicit type annotation as PrimitiveBinding', () => {
-			// x: i32 = 42 continues to parse as PrimitiveBinding for backward compatibility
+		it('should parse explicit type annotation as BindingExpr', () => {
+			// x: i32 = 42 parses as BindingExpr (unified binding syntax)
 			const ctx = tokenizeAndParse('x: i32 = 42')
 			assert.strictEqual(ctx.hasErrors(), false)
-			let hasPrimitiveBinding = false
+			let hasBindingExpr = false
 			for (const [, node] of ctx.nodes) {
-				if (node.kind === NodeKind.PrimitiveBinding) hasPrimitiveBinding = true
+				if (node.kind === NodeKind.BindingExpr) hasBindingExpr = true
 			}
-			assert.strictEqual(hasPrimitiveBinding, true)
+			assert.strictEqual(hasBindingExpr, true)
 		})
 	})
 
 	describe('list literal in record init parsing', () => {
 		it('should parse record initialization with list field', () => {
+			// New syntax uses f = Foo (not f:Foo) for record instantiation
 			const source = `Foo
     items: i32[]<size=3>
-f:Foo
+f = Foo
     items = [1, 2, 3]
 panic`
 			const ctx = new CompilationContext(source)
@@ -951,9 +952,10 @@ panic`
 		})
 
 		it('should parse record initialization with nested list field', () => {
+			// New syntax uses m = Matrix (not m:Matrix) for record instantiation
 			const source = `Matrix
     data: i32[]<size=2>[]<size=2>
-m:Matrix
+m = Matrix
     data = [[1, 2], [3, 4]]
 panic`
 			const ctx = new CompilationContext(source)
@@ -963,10 +965,11 @@ panic`
 		})
 
 		it('should parse record initialization with multiple list fields', () => {
+			// New syntax uses d = Data (not d:Data) for record instantiation
 			const source = `Data
     xs: i32[]<size=2>
     ys: i32[]<size=2>
-d:Data
+d = Data
     xs = [1, 2]
     ys = [3, 4]
 panic`

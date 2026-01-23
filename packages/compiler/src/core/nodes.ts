@@ -29,7 +29,6 @@ export const NodeKind = {
 	FloatLiteral: 103,
 
 	// Statements (10-99)
-	FuncBinding: 17,
 	FuncCall: 114,
 	FuncDecl: 16,
 
@@ -47,16 +46,10 @@ export const NodeKind = {
 	MatchExpr: 119, // Moved to expression range (100-149)
 	OrPattern: 203,
 	PanicExpr: 118,
-	/** @deprecated Use PanicExpr instead. Kept for backwards compatibility. */
-	PanicStatement: 10,
 	Parameter: 52,
 	ParameterList: 53,
 	ParenExpr: 105,
-	/** @deprecated Use BindingExpr instead. Kept for backwards compatibility. */
-	PrimitiveBinding: 14,
 	Program: 255,
-	/** @deprecated Use BindingExpr with record type instead. Kept for backwards compatibility. */
-	RecordBinding: 15,
 	RecordLiteral: 107,
 	RefinementType: 154,
 	RootLine: 2,
@@ -89,7 +82,7 @@ export function isPatternNode(kind: NodeKind): boolean {
 
 /** Check if a node kind is a terminator (ends control flow) */
 export function isTerminator(kind: NodeKind): boolean {
-	return kind === NodeKind.PanicStatement || kind === NodeKind.PanicExpr
+	return kind === NodeKind.PanicExpr
 }
 
 /**

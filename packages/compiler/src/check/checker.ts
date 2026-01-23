@@ -13,12 +13,7 @@ import type { CompilationContext, StringId } from '../core/context.ts'
 import type { DiagnosticCode } from '../core/diagnostics.ts'
 import { type NodeId, NodeKind, nodeId, offsetNodeId, prevNodeId } from '../core/nodes.ts'
 import { TokenKind } from '../core/tokens.ts'
-import {
-	emitSimpleBinding,
-	processPrimitiveBinding,
-	processRecordBinding,
-	processVariableBinding,
-} from './bindings.ts'
+import { emitTypedBinding, processVariableBinding } from './bindings.ts'
 import {
 	finalizeTypeDecl,
 	getFieldDeclFromLine,
@@ -27,7 +22,7 @@ import {
 	startTypeDecl,
 } from './declarations.ts'
 import { checkExpression } from './expressions.ts'
-import { handleFuncBinding, handleFuncDecl, handleLambdaBinding, resolveFuncType } from './funcs.ts'
+import { handleFuncDecl, handleLambdaBinding, resolveFuncType } from './funcs.ts'
 import {
 	finalizeMatch,
 	getMatchArmFromLine,
@@ -119,29 +114,6 @@ function handleVariableBinding(
 	const result = processVariableBinding(bindingId, state, context)
 	if (result) {
 		// Record literal case - handle locally since startRecordLiteral is in this module
-		handleRecordLiteralBinding(
-			bindingId,
-			result.typeAnnotationId,
-			result.declaredType,
-			result.typeInfo,
-			result.nameId,
-			state,
-			context
-		)
-	}
-}
-
-/**
- * Process a record binding (no expression, record type).
- * Called for RecordBinding nodes from the grammar.
- */
-function handleRecordBinding(
-	bindingId: NodeId,
-	state: CheckerState,
-	context: CompilationContext
-): void {
-	const result = processRecordBinding(bindingId, state, context)
-	if (result) {
 		handleRecordLiteralBinding(
 			bindingId,
 			result.typeAnnotationId,
@@ -338,6 +310,7 @@ function getIdentifierInfo(
 
 /**
  * Handle typed binding with explicit type annotation.
+ * Uses emitTypedBinding which handles list literals specially.
  */
 function handleTypedBinding(
 	bindingId: NodeId,
@@ -349,7 +322,7 @@ function handleTypedBinding(
 ): void {
 	const typeInfo = resolveTypeFromAnnotation(typeAnnotationId, state, context)
 	if (typeInfo) {
-		emitSimpleBinding(bindingId, exprId, typeInfo.typeId, nameId, state, context)
+		emitTypedBinding(bindingId, exprId, typeInfo.typeId, nameId, state, context)
 	}
 }
 
@@ -450,26 +423,8 @@ function emitStatement(
 	context: CompilationContext
 ): void {
 	switch (stmtKind) {
-		case NodeKind.PanicStatement:
-			state.insts.add({
-				arg0: 0,
-				arg1: 0,
-				kind: InstKind.Unreachable,
-				parseNodeId: stmtId,
-				typeId: BuiltinTypeId.None,
-			})
-			break
 		case NodeKind.FuncDecl:
 			handleFuncDecl(stmtId, state, context)
-			break
-		case NodeKind.FuncBinding:
-			handleFuncBinding(stmtId, state, context, checkExpressionWithSequence)
-			break
-		case NodeKind.PrimitiveBinding:
-			processPrimitiveBinding(stmtId, state, context)
-			break
-		case NodeKind.RecordBinding:
-			handleRecordBinding(stmtId, state, context)
 			break
 		case NodeKind.VariableBinding:
 			{
@@ -489,6 +444,10 @@ function emitStatement(
 			break
 		case NodeKind.TypeAlias:
 			handleTypeAlias(stmtId, state, context)
+			break
+		case NodeKind.PanicExpr:
+			// Panic expression as statement - discard the result
+			checkExpression(stmtId, BuiltinTypeId.None, state, context)
 			break
 	}
 }
@@ -554,7 +513,7 @@ function checkExpressionSequence(
 
 /**
  * Emit a statement within a lambda body expression sequence.
- * Handles bindings and function declarations that can appear in multi-line lambdas.
+ * Handles bindings, function declarations, and expressions that can appear in multi-line lambdas.
  */
 function emitStatementInLambdaBody(
 	stmtId: NodeId,
@@ -566,18 +525,19 @@ function emitStatementInLambdaBody(
 		case NodeKind.FuncDecl:
 			handleFuncDecl(stmtId, state, context)
 			break
-		case NodeKind.FuncBinding:
-			handleFuncBinding(stmtId, state, context, checkExpressionWithSequence)
+		case NodeKind.BindingExpr:
+			handleBindingExpr(stmtId, state, context)
 			break
-		case NodeKind.PrimitiveBinding:
-			processPrimitiveBinding(stmtId, state, context)
+		case NodeKind.PanicExpr:
+			// Panic expression as statement - discard the result
+			checkExpression(stmtId, BuiltinTypeId.None, state, context)
 			break
 	}
 }
 
 /**
  * Check an expression, handling ExpressionSequence specially for lambda bodies.
- * This wrapper is passed to handleFuncBinding to support multi-line function bodies.
+ * This wrapper supports multi-line function bodies.
  */
 function checkExpressionWithSequence(
 	exprId: NodeId,

@@ -177,6 +177,27 @@ function processListLiteralBinding(
 // ============================================================================
 
 /**
+ * Emit a typed binding with explicit type annotation.
+ * Handles list literal bindings specially (unpacking elements to individual locals).
+ * For other bindings, creates a single symbol and emits a Bind instruction.
+ */
+export function emitTypedBinding(
+	bindingId: NodeId,
+	exprId: NodeId,
+	declaredType: TypeId,
+	nameId: StringId,
+	state: CheckerState,
+	context: CompilationContext
+): void {
+	if (isListLiteralBinding(exprId, declaredType, state, context)) {
+		processListLiteralBinding(bindingId, exprId, declaredType, nameId, state, context)
+		return
+	}
+
+	emitSimpleBinding(bindingId, exprId, declaredType, nameId, state, context)
+}
+
+/**
  * Emit a simple variable binding.
  * Creates a symbol and emits a Bind instruction.
  */
@@ -271,135 +292,4 @@ export function processVariableBinding(
 
 	emitSimpleBinding(bindingId, exprId as NodeId, declaredType, nameId, state, context)
 	return null
-}
-
-/**
- * Extract binding nodes from a PrimitiveBinding.
- * Structure: [Identifier, TypeAnnotation, Expression, PrimitiveBinding]
- */
-function extractPrimitiveBindingNodes(
-	bindingId: NodeId,
-	context: CompilationContext
-): { identId: NodeId; typeAnnotationId: NodeId; exprId: NodeId } | null {
-	const prevId = prevNodeId(bindingId)
-	const prevNode = context.nodes.get(prevId)
-
-	// Expression is immediately before the PrimitiveBinding
-	if (!isExpressionNode(prevNode.kind)) {
-		console.assert(false, 'PrimitiveBinding: expected expression, found %d', prevNode.kind)
-		return null
-	}
-
-	const exprId = prevId
-	const typeAnnotationId = offsetNodeId(prevId, -prevNode.subtreeSize)
-	const typeAnnotationNode = context.nodes.get(typeAnnotationId)
-
-	if (typeAnnotationNode.kind !== NodeKind.TypeAnnotation) {
-		console.assert(
-			false,
-			'PrimitiveBinding: expected TypeAnnotation, found %d',
-			typeAnnotationNode.kind
-		)
-		return null
-	}
-
-	const identId = offsetNodeId(typeAnnotationId, -typeAnnotationNode.subtreeSize)
-	return { exprId, identId, typeAnnotationId }
-}
-
-/**
- * Process a PrimitiveBinding statement.
- * Syntax: identifier : PrimitiveTypeRef = Expression
- * Always has an expression (required for primitive types).
- */
-export function processPrimitiveBinding(
-	bindingId: NodeId,
-	state: CheckerState,
-	context: CompilationContext
-): void {
-	const nodes = extractPrimitiveBindingNodes(bindingId, context)
-	if (!nodes) return
-
-	const { exprId, identId, typeAnnotationId } = nodes
-	const nameId = extractBindingIdentInfo(identId, context)
-
-	const typeInfo = resolveTypeFromAnnotation(typeAnnotationId, state, context)
-	if (!typeInfo) {
-		emitUnknownTypeError(typeAnnotationId, context)
-		return
-	}
-
-	const declaredType = typeInfo.typeId
-
-	if (isListLiteralBinding(exprId, declaredType, state, context)) {
-		processListLiteralBinding(bindingId, exprId, declaredType, nameId, state, context)
-		return
-	}
-
-	emitSimpleBinding(bindingId, exprId, declaredType, nameId, state, context)
-}
-
-/**
- * Extract binding nodes from a RecordBinding.
- * Structure: [Identifier, TypeAnnotation, RecordBinding]
- */
-function extractRecordBindingNodes(
-	bindingId: NodeId,
-	context: CompilationContext
-): { identId: NodeId; typeAnnotationId: NodeId } | null {
-	const typeAnnotationId = prevNodeId(bindingId)
-	const typeAnnotationNode = context.nodes.get(typeAnnotationId)
-
-	if (typeAnnotationNode.kind !== NodeKind.TypeAnnotation) {
-		console.assert(
-			false,
-			'RecordBinding: expected TypeAnnotation, found %d',
-			typeAnnotationNode.kind
-		)
-		return null
-	}
-
-	const identId = offsetNodeId(typeAnnotationId, -typeAnnotationNode.subtreeSize)
-	return { identId, typeAnnotationId }
-}
-
-/**
- * Process a RecordBinding statement.
- * Syntax: identifier : upperIdentifier =
- * No expression - record type with block follows.
- * Returns info for record literal setup.
- */
-export function processRecordBinding(
-	bindingId: NodeId,
-	state: CheckerState,
-	context: CompilationContext
-): {
-	isRecordLiteral: true
-	typeAnnotationId: NodeId
-	declaredType: TypeId
-	typeInfo: { name: string; typeId: TypeId }
-	nameId: StringId
-} | null {
-	const nodes = extractRecordBindingNodes(bindingId, context)
-	if (!nodes) return null
-
-	const { identId, typeAnnotationId } = nodes
-	const nameId = extractBindingIdentInfo(identId, context)
-
-	const typeInfo = resolveTypeFromAnnotation(typeAnnotationId, state, context)
-	if (!typeInfo) {
-		emitUnknownTypeError(typeAnnotationId, context)
-		return null
-	}
-
-	const declaredType = typeInfo.typeId
-
-	// Record binding always returns record literal info
-	return {
-		declaredType,
-		isRecordLiteral: true,
-		nameId,
-		typeAnnotationId,
-		typeInfo,
-	}
 }

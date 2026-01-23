@@ -26,17 +26,17 @@ export function isValidExprResult(
  * Checks if a node kind is a terminator (e.g., panic).
  */
 export function isTerminator(kind: NodeKind): boolean {
-	return kind === NodeKind.PanicStatement || kind === NodeKind.PanicExpr
+	return kind === NodeKind.PanicExpr
 }
 
 /**
  * Checks if a node kind represents a statement.
  * Statement kinds are in range 10-99.
- * BindingExpr (117) is included because it appears in the Statement grammar rule
- * as part of the "everything is expression" transition.
+ * BindingExpr (117) and PanicExpr (118) are included because they can appear
+ * at statement position in the "everything is expression" design.
  */
 export function isStatementNode(kind: NodeKind): boolean {
-	return (kind >= 10 && kind < 100) || kind === NodeKind.BindingExpr
+	return (kind >= 10 && kind < 100) || kind === NodeKind.BindingExpr || kind === NodeKind.PanicExpr
 }
 
 /**
