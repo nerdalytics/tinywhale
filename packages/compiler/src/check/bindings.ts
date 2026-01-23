@@ -177,6 +177,27 @@ function processListLiteralBinding(
 // ============================================================================
 
 /**
+ * Emit a typed binding with explicit type annotation.
+ * Handles list literal bindings specially (unpacking elements to individual locals).
+ * For other bindings, creates a single symbol and emits a Bind instruction.
+ */
+export function emitTypedBinding(
+	bindingId: NodeId,
+	exprId: NodeId,
+	declaredType: TypeId,
+	nameId: StringId,
+	state: CheckerState,
+	context: CompilationContext
+): void {
+	if (isListLiteralBinding(exprId, declaredType, state, context)) {
+		processListLiteralBinding(bindingId, exprId, declaredType, nameId, state, context)
+		return
+	}
+
+	emitSimpleBinding(bindingId, exprId, declaredType, nameId, state, context)
+}
+
+/**
  * Emit a simple variable binding.
  * Creates a symbol and emits a Bind instruction.
  */

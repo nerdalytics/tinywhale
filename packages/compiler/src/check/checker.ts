@@ -13,7 +13,7 @@ import type { CompilationContext, StringId } from '../core/context.ts'
 import type { DiagnosticCode } from '../core/diagnostics.ts'
 import { type NodeId, NodeKind, nodeId, offsetNodeId, prevNodeId } from '../core/nodes.ts'
 import { TokenKind } from '../core/tokens.ts'
-import { emitSimpleBinding, processVariableBinding } from './bindings.ts'
+import { emitTypedBinding, processVariableBinding } from './bindings.ts'
 import {
 	finalizeTypeDecl,
 	getFieldDeclFromLine,
@@ -310,6 +310,7 @@ function getIdentifierInfo(
 
 /**
  * Handle typed binding with explicit type annotation.
+ * Uses emitTypedBinding which handles list literals specially.
  */
 function handleTypedBinding(
 	bindingId: NodeId,
@@ -321,7 +322,7 @@ function handleTypedBinding(
 ): void {
 	const typeInfo = resolveTypeFromAnnotation(typeAnnotationId, state, context)
 	if (typeInfo) {
-		emitSimpleBinding(bindingId, exprId, typeInfo.typeId, nameId, state, context)
+		emitTypedBinding(bindingId, exprId, typeInfo.typeId, nameId, state, context)
 	}
 }
 
