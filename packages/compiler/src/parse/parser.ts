@@ -383,7 +383,13 @@ function createNodeEmittingSemantics(
 		AddExpr(first: Node, ops: Node, rest: Node): NodeId {
 			return emitBinaryChain(first, ops, rest)
 		},
-		BindingExpr(ident: Node, _optColons: Node, optTypeRefs: Node, _equals: Node, expr: Node): NodeId {
+		BindingExpr(
+			ident: Node,
+			_optColons: Node,
+			optTypeRefs: Node,
+			_equals: Node,
+			expr: Node
+		): NodeId {
 			const startCount = context.nodes.count()
 			ident['emitExpression']()
 
@@ -520,6 +526,14 @@ function createNodeEmittingSemantics(
 		},
 		MulExpr(first: Node, ops: Node, rest: Node): NodeId {
 			return emitBinaryChain(first, ops, rest)
+		},
+		PanicExpr(_panicKeyword: Node): NodeId {
+			const tid = getTokenIdForOhmNode(this)
+			return context.nodes.add({
+				kind: NodeKind.PanicExpr,
+				subtreeSize: 1,
+				tokenId: tid,
+			})
 		},
 		PostfixableBase(expr: Node): NodeId {
 			return expr['emitExpression']()

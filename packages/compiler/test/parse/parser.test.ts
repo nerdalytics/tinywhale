@@ -841,6 +841,29 @@ panic`
 		})
 	})
 
+	describe('PanicExpr', () => {
+		it('should parse panic as expression in binding RHS', () => {
+			const ctx = tokenizeAndParse('x = panic')
+			assert.strictEqual(ctx.hasErrors(), false)
+			let hasPanicExpr = false
+			for (const [, node] of ctx.nodes) {
+				if (node.kind === NodeKind.PanicExpr) hasPanicExpr = true
+			}
+			assert.strictEqual(hasPanicExpr, true)
+		})
+
+		it('should still parse standalone panic as PanicStatement', () => {
+			// Standalone panic at root level continues to work
+			const ctx = tokenizeAndParse('panic')
+			assert.strictEqual(ctx.hasErrors(), false)
+			let hasPanicStatement = false
+			for (const [, node] of ctx.nodes) {
+				if (node.kind === NodeKind.PanicStatement) hasPanicStatement = true
+			}
+			assert.strictEqual(hasPanicStatement, true)
+		})
+	})
+
 	describe('BindingExpr', () => {
 		it('should parse binding expression without type annotation', () => {
 			const ctx = tokenizeAndParse('x = 42')

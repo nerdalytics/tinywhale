@@ -140,9 +140,13 @@ TinyWhale {
   PrimaryExpr = PostfixExpr
               | lparen Expression rparen  -- paren
               | ListLiteral
+              | PanicExpr
               | identifier
               | floatLiteral
               | intLiteral
+
+  // Panic as expression - type is Never (bottom type)
+  PanicExpr = panic
 
   // Postfix expressions: only identifiers can be postfix bases
   PostfixExpr = FuncCall | IndexAccess | FieldAccess

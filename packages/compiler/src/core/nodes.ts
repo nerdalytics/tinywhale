@@ -46,6 +46,7 @@ export const NodeKind = {
 	MatchArm: 13,
 	MatchExpr: 12,
 	OrPattern: 203,
+	PanicExpr: 118,
 	PanicStatement: 10,
 	Parameter: 52,
 	ParameterList: 53,
