@@ -11,8 +11,9 @@
 
 import type { CompilationContext, StringId } from '../core/context.ts'
 import type { DiagnosticCode } from '../core/diagnostics.ts'
-import { type NodeId, NodeKind, nodeId, prevNodeId } from '../core/nodes.ts'
+import { type NodeId, NodeKind, nodeId, offsetNodeId, prevNodeId } from '../core/nodes.ts'
 import {
+	emitSimpleBinding,
 	processPrimitiveBinding,
 	processRecordBinding,
 	processVariableBinding,
@@ -47,6 +48,7 @@ import {
 	isInTypeDeclContext,
 } from './state.ts'
 import { FuncStore, InstStore, ScopeStore, SymbolStore, TypeStore } from './stores.ts'
+import { resolveTypeFromAnnotation } from './type-resolution.ts'
 import { BuiltinTypeId, type CheckResult, type InstId, InstKind, type TypeId } from './types.ts'
 import { isStatementNode, isTerminator } from './utils.ts'
 
@@ -145,6 +147,114 @@ function handleRecordBinding(
 	}
 }
 
+/**
+ * Check if a string starts with an uppercase letter.
+ */
+function isUppercaseName(name: string): boolean {
+	return name.length > 0 && name[0] === name[0]?.toUpperCase() && name[0] !== name[0]?.toLowerCase()
+}
+
+/**
+ * Extract nodes from a BindingExpr in postorder storage.
+ * Structure: [Identifier, (TypeAnnotation)?, Expression..., BindingExpr]
+ */
+function extractBindingExprNodes(
+	bindingId: NodeId,
+	context: CompilationContext
+): { identId: NodeId; typeAnnotationId: NodeId | null; exprId: NodeId } | null {
+	const exprId = prevNodeId(bindingId)
+	const exprNode = context.nodes.get(exprId)
+
+	// Go back to find the identifier, skipping past the expression
+	const beforeExprId = offsetNodeId(exprId, -exprNode.subtreeSize)
+	const beforeExprNode = context.nodes.get(beforeExprId)
+
+	if (beforeExprNode.kind === NodeKind.TypeAnnotation) {
+		// Has type annotation: [Identifier, TypeAnnotation, Expression..., BindingExpr]
+		const typeAnnotationId = beforeExprId
+		const identId = offsetNodeId(typeAnnotationId, -beforeExprNode.subtreeSize)
+		return { exprId, identId, typeAnnotationId }
+	}
+
+	if (beforeExprNode.kind === NodeKind.Identifier) {
+		// No type annotation: [Identifier, Expression..., BindingExpr]
+		return { exprId, identId: beforeExprId, typeAnnotationId: null }
+	}
+
+	console.assert(false, 'BindingExpr: unexpected structure')
+	return null
+}
+
+/**
+ * Handle a BindingExpr statement.
+ * Detects record instantiation pattern: lowercase = Uppercase
+ */
+function handleBindingExpr(
+	bindingId: NodeId,
+	state: CheckerState,
+	context: CompilationContext
+): void {
+	const nodes = extractBindingExprNodes(bindingId, context)
+	if (!nodes) return
+
+	const { exprId, identId, typeAnnotationId } = nodes
+
+	// Extract identifier name
+	const identNode = context.nodes.get(identId)
+	const identToken = context.tokens.get(identNode.tokenId)
+	const nameId = identToken.payload as StringId
+	const identName = context.strings.get(nameId)
+
+	// Check if RHS is an uppercase identifier (record instantiation pattern)
+	const exprNode = context.nodes.get(exprId)
+	if (exprNode.kind === NodeKind.Identifier) {
+		const rhsToken = context.tokens.get(exprNode.tokenId)
+		const rhsNameId = rhsToken.payload as StringId
+		const rhsName = context.strings.get(rhsNameId)
+
+		if (isUppercaseName(rhsName) && !isUppercaseName(identName)) {
+			// lowercase = Uppercase → record instantiation
+			const typeId = state.types.lookup(rhsName)
+			if (typeId !== undefined && state.types.isRecordType(typeId)) {
+				startRecordLiteral(bindingId, typeId, rhsName, nameId, state, context)
+				return
+			}
+			// Type not found or not a record type - emit error
+			context.emitAtNode('TWCHECK010' as DiagnosticCode, exprId, { found: rhsName })
+			return
+		}
+	}
+
+	// Regular binding - check expression with expected type
+	if (typeAnnotationId) {
+		// Has type annotation - resolve and use it
+		const typeInfo = resolveTypeFromAnnotation(typeAnnotationId, state, context)
+		if (!typeInfo) {
+			return
+		}
+		emitSimpleBinding(bindingId, exprId, typeInfo.typeId, nameId, state, context)
+	} else {
+		// No type annotation - infer from expression
+		const result = checkExpression(exprId, BuiltinTypeId.None, state, context)
+		if (result.instId === null || result.typeId === BuiltinTypeId.Invalid) {
+			return
+		}
+		// Create binding with inferred type
+		const symId = state.symbols.add({
+			nameId,
+			parseNodeId: bindingId,
+			typeId: result.typeId,
+		})
+		state.insts.add({
+			arg0: symId as number,
+			arg1: result.instId as number,
+			kind: InstKind.Bind,
+			parseNodeId: bindingId,
+			typeId: result.typeId,
+		})
+	}
+}
+
 function emitStatement(
 	stmtId: NodeId,
 	stmtKind: NodeKind,
@@ -185,6 +295,9 @@ function emitStatement(
 			}
 			break
 		case NodeKind.MatchExpr:
+			break
+		case NodeKind.BindingExpr:
+			handleBindingExpr(stmtId, state, context)
 			break
 	}
 }
