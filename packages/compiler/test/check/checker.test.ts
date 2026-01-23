@@ -156,4 +156,32 @@ describe('check/checker', () => {
 			assert.strictEqual(warnings.length, 0)
 		})
 	})
+
+	describe('PanicExpr type checking', () => {
+		it('should type panic as bottom type (compatible with any type)', () => {
+			const source = 'x: i32 = panic\n'
+			const ctx = prepareContext(source)
+			check(ctx)
+			// panic has type None which is compatible with any expected type
+			assert.strictEqual(ctx.hasErrors(), false, `Errors: ${getErrors(ctx).map((e) => e.message).join(', ')}`)
+		})
+
+		it('should allow panic in function return position', () => {
+			const source = `f = (x: i32): i32 -> panic
+`
+			const ctx = prepareContext(source)
+			check(ctx)
+			assert.strictEqual(ctx.hasErrors(), false, `Errors: ${getErrors(ctx).map((e) => e.message).join(', ')}`)
+		})
+
+		it('should allow panic in match arm', () => {
+			const source = `result: i32 = match 5
+\t0 -> panic
+\t_ -> 42
+`
+			const ctx = prepareContext(source)
+			check(ctx)
+			assert.strictEqual(ctx.hasErrors(), false, `Errors: ${getErrors(ctx).map((e) => e.message).join(', ')}`)
+		})
+	})
 })
