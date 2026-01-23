@@ -5,12 +5,12 @@ Point
     x: i32
     y: i32
 
-p1:Point
+p1 = Point
     x = 10
     y = 20
 
 # Initialize p2 using field access from p1
-p2:Point
+p2 = Point
     x = p1.x
     y = p1.y
 
