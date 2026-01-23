@@ -26,6 +26,7 @@
 !pnpm-workspace.yaml
 !README.md
 !tsconfig.json
+!AGENTS.md
 
 # Ignore planning documents (local only)
 docs/plans/**

@@ -4,6 +4,7 @@
 
 # Allow list for the current folder
 !.gitignore
+!AGENTS.md
 !package.json
 !src/
 !src/**
