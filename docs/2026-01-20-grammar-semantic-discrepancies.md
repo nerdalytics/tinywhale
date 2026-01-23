@@ -1,14 +1,30 @@
 # Grammar vs Semantic Discrepancies Analysis
 
-> **Date:** 2026-01-20
+> **Date:** 2026-01-20 (Updated: 2026-01-24)
 > **Purpose:** Identify discrepancies between grammar (what parses) and semantics (what compiles) to prepare for property-based compiler fuzzing.
 > **Design Philosophy:** Strict grammar - grammar should only accept what the compiler can actually compile.
 
 ---
 
+## Major Updates Since Original Analysis
+
+**PR #53-56: Functions and Expression Unification**
+- Functions fully implemented (lambdas, declarations, calls)
+- "Everything is an expression" design completed
+- Removed: `Statement`, `PanicStatement`, `FuncBinding`, `PrimitiveBinding`, `RecordBinding` grammar rules
+- Unified all bindings through `BindingExpr`
+- Record type syntax changed from `type Point` to just `Point`
+- Record instantiation syntax changed from `p:Point =` to `p = Point`
+
+**PR #57: Remove Deprecated Code**
+- Removed deprecated node kinds from compiler
+- Cleaned up ~410 lines of legacy code
+
+---
+
 ## No-Discrepancies (Working Correctly)
 
-### 1. Panic Statement
+### 1. Panic Expression
 
 ```tinywhale
 panic
@@ -17,46 +33,48 @@ panic
 Unconditional trap that terminates execution. Fully supported from grammar through codegen.
 
 ```ohm
-PanicStatement = panic
+PanicExpr = panic
 panic = "panic" ~identifierPart
 ```
+
+**Updated:** Now `PanicExpr` (was `PanicStatement`). Everything is an expression.
 
 ---
 
 ### 2. Primitive Bindings (i32, i64, f32, f64)
 
 ```tinywhale
-x:i32 = 42
-y:i64 = 123
-a:f32 = 1.5
-b:f64 = 2.5
+x: i32 = 42
+y: i64 = 123
+a: f32 = 1.5
+b: f64 = 2.5
 ```
 
 Variable bindings with primitive types and required expressions. Type checking and codegen work correctly.
 
 ```ohm
-PrimitiveBinding = identifier colon PrimitiveTypeRef equals Expression
-PrimitiveTypeRef = ListType | HintedPrimitive | typeKeyword
-typeKeyword = i32 | i64 | f32 | f64
+BindingExpr = identifier TypeAnnotation? equals Expression
 ```
+
+**Updated:** Now unified as `BindingExpr` (was `PrimitiveBinding`).
 
 ---
 
 ### 3. Type Hints (min/max constraints)
 
 ```tinywhale
-x:i32<min=0> = 5
-y:i32<max=100> = 50
-z:i32<min=0, max=100> = 75
+x: i32<min=0> = 5
+y: i32<max=100> = 50
+z: i32<min=0, max=100> = 75
 ```
 
 Refinement types with constraint validation. Checker emits TWCHECK041 when constraints are violated.
 
 ```ohm
-HintedPrimitive = typeKeyword TypeHints
-TypeHints = lessThan HintList greaterThan
-Hint = hintKeyword equals minus? intLiteral
-hintKeyword = minKeyword | maxKeyword | sizeKeyword
+RefinementType = typeKeyword TypeBounds
+TypeBounds = lessThan BoundList greaterThan
+Bound = boundKeyword equals minus? intLiteral
+boundKeyword = minKeyword | maxKeyword | sizeKeyword
 ```
 
 ---
@@ -64,7 +82,7 @@ hintKeyword = minKeyword | maxKeyword | sizeKeyword
 ### 4. Record Type Declarations
 
 ```tinywhale
-type Point
+Point
     x: i32
     y: i32
 ```
@@ -72,49 +90,55 @@ type Point
 Nominal record types with field declarations. Type registration and field validation work correctly.
 
 ```ohm
-TypeDecl = typeKeywordToken upperIdentifier
+RecordTypeDecl = upperIdentifier
 FieldDecl = lowerIdentifier colon TypeRef
 ```
+
+**Updated:** Syntax changed from `type Point` to just `Point`.
 
 ---
 
 ### 5. Record Initialization
 
 ```tinywhale
-type Point
+Point
     x: i32
     y: i32
-p:Point =
-    x: 10
-    y: 20
+
+p = Point
+    x = 10
+    y = 20
 ```
 
-Record binding without expression (block follows). Field initialization validates types and detects missing/unknown fields.
+Record instantiation with field initializers. Field initialization validates types and detects missing/unknown fields.
 
 ```ohm
-RecordBinding = identifier colon upperIdentifier equals
-FieldInit = lowerIdentifier colon FieldValue
-FieldValue = NestedRecordInit | Expression
+BindingExpr = identifier TypeAnnotation? equals Expression
+FieldInit = lowerIdentifier equals Expression
 ```
+
+**Updated:** Syntax changed from `p:Point =` to `p = Point`.
 
 ---
 
 ### 6. Nested Records
 
 ```tinywhale
-type Inner
+Inner
     value: i32
-type Outer
+
+Outer
     inner: Inner
-o:Outer =
+
+o = Outer
     inner: Inner
-        value: 42
+        value = 42
 ```
 
 Records containing other record types. Nested initialization syntax works correctly.
 
 ```ohm
-NestedRecordInit = upperIdentifier
+FieldInit = lowerIdentifier (colon upperIdentifier | equals Expression)
 ```
 
 ---
@@ -122,17 +146,17 @@ NestedRecordInit = upperIdentifier
 ### 7. Single-Level Lists
 
 ```tinywhale
-arr:i32[]<size=3> = [1, 2, 3]
-x:i32 = arr[0]
+arr: i32[]<size=3> = [1, 2, 3]
+x: i32 = arr[0]
 ```
 
 Lists with size hints and index access using integer literals. All primitive element types supported.
 
 ```ohm
-ListType = ListTypeBase ListTypeSuffix+
-ListTypeSuffix = lbracket rbracket TypeHints
+ListType = typeKeyword ListTypeSuffix+
+ListTypeSuffix = lbracket rbracket TypeBounds
 ListLiteral = lbracket ListElements rbracket
-IndexAccess = PostfixBase (lbracket intLiteral rbracket)+
+IndexAccess = PostfixableBase (lbracket intLiteral rbracket)+
 ```
 
 ---
@@ -140,19 +164,21 @@ IndexAccess = PostfixBase (lbracket intLiteral rbracket)+
 ### 8. Field Access
 
 ```tinywhale
-type Point
+Point
     x: i32
     y: i32
-p:Point =
-    x: 10
-    y: 20
-v:i32 = p.x
+
+p = Point
+    x = 10
+    y = 20
+
+v: i32 = p.x
 ```
 
 Accessing record fields, including chained access (`o.inner.value`). Type checking validates field existence.
 
 ```ohm
-FieldAccess = PrimaryExprBase (dot lowerIdentifier)+
+FieldAccess = PostfixableBase (dot lowerIdentifier)+
 ```
 
 ---
@@ -160,11 +186,11 @@ FieldAccess = PrimaryExprBase (dot lowerIdentifier)+
 ### 9. Arithmetic Operators
 
 ```tinywhale
-x:i32 = 1 + 2 * 3
-y:i32 = 10 - 5
-z:i32 = 10 / 3
-m:i32 = 10 % 3
-e:i32 = -7 %% 3
+x: i32 = 1 + 2 * 3
+y: i32 = 10 - 5
+z: i32 = 10 / 3
+m: i32 = 10 % 3
+e: i32 = -7 %% 3
 ```
 
 All arithmetic operators with correct precedence. Includes Euclidean modulo (`%%`).
@@ -181,9 +207,9 @@ mulOp = star | slash | percentPercent | percent | ...
 ### 10. Comparison Operators and Chaining
 
 ```tinywhale
-x:i32 = 1 < 2
-y:i32 = 1 <= 2
-chain:i32 = 1 < 2 < 3
+x: i32 = 1 < 2
+y: i32 = 1 <= 2
+chain: i32 = 1 < 2 < 3
 ```
 
 All comparison operators return i32 (0/1). Comparison chaining supported (`a < b < c`).
@@ -198,13 +224,13 @@ compareOp = lessEqual | greaterEqual | lessThan | greaterThan | equalEqual | ban
 ### 11. Bitwise and Shift Operators
 
 ```tinywhale
-a:i32 = 5 & 3
-b:i32 = 5 | 3
-c:i32 = 5 ^ 3
-d:i32 = ~5
-e:i32 = 1 << 4
-f:i32 = 16 >> 2
-g:i32 = -1 >>> 1
+a: i32 = 5 & 3
+b: i32 = 5 | 3
+c: i32 = 5 ^ 3
+d: i32 = ~5
+e: i32 = 1 << 4
+f: i32 = 16 >> 2
+g: i32 = -1 >>> 1
 ```
 
 Bitwise AND, OR, XOR, NOT and all shift operators. Integer types only.
@@ -222,8 +248,8 @@ unaryOp = minus | tilde
 ### 12. Logical Operators
 
 ```tinywhale
-x:i32 = 1 && 0
-y:i32 = 0 || 1
+x: i32 = 1 && 0
+y: i32 = 0 || 1
 ```
 
 Short-circuit logical AND and OR. Return i32.
@@ -238,8 +264,8 @@ LogicalAndExpr = BitwiseOrExpr (ampAmp BitwiseOrExpr)*
 ### 13. Match with Literal Patterns
 
 ```tinywhale
-x:i32 = 5
-result:i32 = match x
+x: i32 = 5
+result: i32 = match x
     0 -> 100
     1 -> 200
     _ -> 0
@@ -248,7 +274,6 @@ result:i32 = match x
 Match expressions with integer literal patterns and wildcard. Exhaustiveness checking requires catch-all.
 
 ```ohm
-MatchBinding = identifier TypeAnnotation equals MatchExpr
 MatchExpr = matchKeyword Expression
 MatchArm = Pattern arrow Expression
 LiteralPattern = minus? intLiteral
@@ -260,8 +285,8 @@ WildcardPattern = underscore
 ### 14. Match with Or-Patterns
 
 ```tinywhale
-x:i32 = 2
-result:i32 = match x
+x: i32 = 2
+result: i32 = match x
     0 | 1 | 2 -> 100
     _ -> 0
 ```
@@ -277,7 +302,7 @@ OrPattern = PrimaryPattern (pipe PrimaryPattern)*
 ### 15. Standalone Match (for side effects)
 
 ```tinywhale
-x:i32 = 1
+x: i32 = 1
 match x
     0 -> panic
     _ -> panic
@@ -286,16 +311,19 @@ match x
 Match expression without binding result - for branching with side effects.
 
 ```ohm
-Statement = TypeDecl | MatchBinding | MatchExpr | PrimitiveBinding | RecordBinding | PanicStatement
+# Match is an expression, can appear anywhere an expression is valid
+Expression = ... | MatchExpr | ...
 ```
+
+**Updated:** Match is now an expression (was routed through Statement).
 
 ---
 
 ### 16. Binding Patterns in Match
 
 ```tinywhale
-x:i32 = 5
-result:i32 = match x
+x: i32 = 5
+result: i32 = match x
     0 -> 100
     other -> other + 1
 ```
@@ -314,7 +342,7 @@ BindingPattern = ~keyword ~underscore identifier
 
 ```tinywhale
 # This is a comment #
-x:i32 = 42 # inline comment
+x: i32 = 42 # inline comment
 ```
 
 Hash-delimited or to end-of-line comments. Stripped during tokenization.
@@ -328,7 +356,7 @@ comment = "#" (~("#" | "\n" | "\r" | anyDedent) any)* ("#" | &"\n" | &"\r" | &an
 ### 18. Underscore-Prefixed Identifiers
 
 ```tinywhale
-_unused:i32 = 42
+_unused: i32 = 42
 ```
 
 Allowed for documentation purposes (marking unused variables). Compiler will warn but not error.
@@ -343,7 +371,7 @@ identifier = ~keyword letter (alnum | "_")*
 
 ```tinywhale
 # This correctly fails to parse:
-# arr:i32[]<size=0> = []
+# arr: i32[]<size=0> = []
 ```
 
 Empty lists are intentionally invalid - TinyWhale uses Result/Option types, no uninitialized values.
@@ -370,12 +398,13 @@ greaterGreaterGreater = ">>>"
 ### 21. Refinement Types in Field Declarations
 
 ```tinywhale
-type Point
+Point
     x: i32<min=0, max=100>
     y: i32<min=0, max=100>
-p:Point =
-    x: 50
-    y: 75
+
+p = Point
+    x = 50
+    y = 75
 ```
 
 Refinement types can be used in record field declarations. Constraints are enforced during field initialization.
@@ -383,32 +412,56 @@ Refinement types can be used in record field declarations. Constraints are enfor
 ```ohm
 FieldDecl = lowerIdentifier colon TypeRef
 TypeRef = ListType | RefinementType | upperIdentifier | typeKeyword
-RefinementType = typeKeyword TypeHints
+RefinementType = typeKeyword TypeBounds
 ```
 
 **Fixed in PR #49:** Parser now emits RefinementType as child of FieldDecl. Checker traverses nodes instead of using token offsets.
 
 ---
 
-### 22. Cleaner Record Initialization Syntax
+### 22. Record Instantiation Syntax
 
 ```tinywhale
-type Point
+Point
     x: i32
     y: i32
 
-p:Point
+p = Point
     x = 50
     y = 10
 ```
 
-Record binding uses `:` for type name only (no trailing `=`). Field values use `=`. Nested record construction uses `:` with type name.
+Record instantiation uses `=` with type name. Field values use `=`. Nested record construction uses `:` with type name for the field.
 
 ```ohm
-RecordBinding = identifier colon upperIdentifier
-FieldInit = lowerIdentifier equals Expression
-FieldDecl = lowerIdentifier colon TypeRef  // Also used for nested record init
+BindingExpr = identifier TypeAnnotation? equals Expression
+FieldInit = lowerIdentifier (colon upperIdentifier | equals Expression)
 ```
+
+**Updated:** Syntax changed from `p:Point` to `p = Point` in PR #56.
+
+---
+
+### 23. Functions ✅ NEW
+
+```tinywhale
+add = (a: i32, b: i32): i32 -> a + b
+result: i32 = add(1, 2)
+```
+
+First-class functions with lambdas, type inference, and function calls.
+
+```ohm
+Lambda = lparen Parameters rparen TypeAnnotation? arrow LambdaBody
+FuncCall = PostfixableBase lparen Arguments rparen
+FuncDecl = identifier colon FuncType
+```
+
+**Implemented in PRs #53-56:** Functions fully working including:
+- Lambda expressions with parameters and return types
+- Function declarations for forward references
+- Function calls with arguments
+- Type inference for parameters when type alias provided
 
 ---
 
@@ -418,21 +471,21 @@ FieldDecl = lowerIdentifier colon TypeRef  // Also used for nested record init
 
 **Desired:**
 ```tinywhale
-matrix:i32[]<size=2>[]<size=2> = [[1, 2], [3, 4]]
-x:i32 = matrix[0][1]
+matrix: i32[]<size=2>[]<size=2> = [[1, 2], [3, 4]]
+x: i32 = matrix[0][1]
 ```
 Should create 2D list and access nested elements.
 
 **Actual:**
 ```tinywhale
-matrix:i32[]<size=2>[]<size=2> = [[1, 2], [3, 4]]
+matrix: i32[]<size=2>[]<size=2> = [[1, 2], [3, 4]]
 # Error: TWCHECK012 - type mismatch (expected i32, found list literal)
 ```
 Grammar parses nested list types and literals, but checker doesn't support them.
 
 ```ohm
-ListType = ListTypeBase ListTypeSuffix+
-ListTypeSuffix = lbracket rbracket TypeHints
+ListType = typeKeyword ListTypeSuffix+
+ListTypeSuffix = lbracket rbracket TypeBounds
 ```
 
 **Discrepancy:** Grammar allows `ListTypeSuffix+` (one or more), but checker only handles single level.
@@ -443,21 +496,21 @@ ListTypeSuffix = lbracket rbracket TypeHints
 
 **Desired:**
 ```tinywhale
-matrix:i32[]<size=2>[]<size=2> = [[1, 2], [3, 4]]
-x:i32 = matrix[0][1]
+matrix: i32[]<size=2>[]<size=2> = [[1, 2], [3, 4]]
+x: i32 = matrix[0][1]
 ```
 Should access element at row 0, column 1.
 
 **Actual:**
 ```tinywhale
-arr:i32[]<size=3> = [1, 2, 3]
-x:i32 = arr[0][0]
+arr: i32[]<size=3> = [1, 2, 3]
+x: i32 = arr[0][0]
 # Error: TWCHECK031 - cannot index into i32 result
 ```
 Grammar allows multiple index suffixes, but checker fails because first index returns primitive.
 
 ```ohm
-IndexAccess = PostfixBase (lbracket intLiteral rbracket)+
+IndexAccess = PostfixableBase (lbracket intLiteral rbracket)+
 ```
 
 **Discrepancy:** Grammar allows `(lbracket intLiteral rbracket)+`, but checker doesn't validate chained index types.
@@ -468,8 +521,8 @@ IndexAccess = PostfixBase (lbracket intLiteral rbracket)+
 
 **Desired:**
 ```tinywhale
-arr:i32[]<size=3> = [1, 2, 3]
-result:i32 = match arr
+arr: i32[]<size=3> = [1, 2, 3]
+result: i32 = match arr
     [head, .., tail] -> head + tail
     _ -> 0
 ```
@@ -493,13 +546,15 @@ PrimaryPattern = WildcardPattern | LiteralPattern | BindingPattern
 
 **Desired:**
 ```tinywhale
-type Point
+Point
     x: i32
     y: i32
-p:Point =
-    x: 10
-    y: 20
-result:i32 = match p
+
+p = Point
+    x = 10
+    y = 20
+
+result: i32 = match p
     {x, y} -> x + y
 ```
 Should destructure record fields in pattern.
@@ -522,8 +577,8 @@ PrimaryPattern = WildcardPattern | LiteralPattern | BindingPattern
 
 **Desired:**
 ```tinywhale
-x:i32 = 5
-result:i32 = match x
+x: i32 = 5
+result: i32 = match x
     n on n > 0 -> n
     _ -> 0
 ```
@@ -531,8 +586,8 @@ Should allow `on` guard for additional conditions.
 
 **Also designed:**
 ```tinywhale
-expected:i32 = 5
-result:i32 = match x
+expected: i32 = 5
+result: i32 = match x
     _ is expected -> 100
     _ -> 0
 ```
@@ -552,16 +607,16 @@ MatchArm = Pattern arrow Expression
 
 **Desired:**
 ```tinywhale
-x:f32 = -1.5
+x: f32 = -1.5
 ```
 Should parse `-1.5` as single float literal token.
 
 **Actual:**
 ```tinywhale
-x:f32 = -1.5
+x: f32 = -1.5
 # Parses as UnaryExpr(minus, 1.5), not as single literal
 ```
-Works but tokenization is suboptimal.
+Works but tokenization is suboptimal - creates extra AST nodes.
 
 ```ohm
 floatLiteral = digit+ "." digit+ (("e" | "E") ("+" | "-")? digit+)?
@@ -575,54 +630,58 @@ floatLiteral = digit+ "." digit+ (("e" | "E") ("+" | "-")? digit+)?
 
 **Desired:**
 ```tinywhale
-type Data
+Data
     items: i32[]<size=3>
-d:Data =
-    items: [1, 2, 3]
+
+d = Data
+    items = [1, 2, 3]
 ```
 Should initialize list field in record.
 
 **Actual:**
 ```tinywhale
-type Data
+Data
     items: i32[]<size=3>
-d:Data =
-    items: [1, 2, 3]
-# Error: TWCHECK012 - type mismatch
+
+d = Data
+    items = [1, 2, 3]
+# Error: WASM validator - local.set's value type must be correct
 ```
-List field declaration works, but initialization fails.
+List field declaration works, but initialization produces invalid WASM.
 
 ```ohm
-FieldInit = lowerIdentifier colon FieldValue
-FieldValue = NestedRecordInit | Expression
+FieldInit = lowerIdentifier (colon upperIdentifier | equals Expression)
 ```
 
-**Discrepancy:** `Expression` in `FieldValue` includes `ListLiteral`, but checker doesn't handle list field initialization.
+**Discrepancy:** `Expression` in `FieldInit` includes `ListLiteral`, but codegen doesn't handle list field initialization correctly.
 
 ---
 
-### D8. Lists of User-Defined Types (Blocked on Functions)
+### D8. Lists of User-Defined Types
 
 **Desired:**
 ```tinywhale
-type Point
+Point
     x: i32
     y: i32
-p1:Point =
-    x: 1
-    y: 2
-p2:Point =
-    x: 3
-    y: 4
-vertices:Point[]<size=2> = [p1, p2]
+
+p1 = Point
+    x = 1
+    y = 2
+
+p2 = Point
+    x = 3
+    y = 4
+
+vertices: Point[]<size=2> = [p1, p2]
 ```
 Should allow lists with record element types, initialized via variable references.
 
-**Actual:** Grammar and type resolution work correctly. But records are currently flattened to local fields (`p1_x`, `p1_y`) - no symbol exists for `p1` itself.
+**Actual:** Grammar and type resolution work correctly. But records are currently flattened to local fields (`p1_x`, `p1_y`) - no whole-record symbol exists for `p1` itself, so it cannot be used in a list literal.
 
-**Not a bug - architectural decision:** Records are flattened unless passed around. When functions are implemented, records passed to functions will use WASM structs, and whole-record references will work.
+**Discrepancy:** Records are flattened to individual fields. Need WASM GC structs or similar to support whole-record references in lists.
 
-**Status:** Deferred until functions feature (F5).
+**Note:** Functions are now implemented (PR #53-56), but this issue remains because records are still flattened at the codegen level.
 
 ---
 
@@ -630,8 +689,8 @@ Should allow lists with record element types, initialized via variable reference
 
 **Desired:**
 ```tinywhale
-x:f32 = 1.5
-result:i32 = match x
+x: f32 = 1.5
+result: i32 = match x
     1.5 -> 100
     _ -> 0
 ```
@@ -639,7 +698,7 @@ Should match on float literal patterns.
 
 **Actual:**
 ```tinywhale
-# LiteralPattern only allows intLiteral
+# Parse error - LiteralPattern only allows intLiteral
 ```
 
 ```ohm
@@ -659,20 +718,20 @@ Grammar is correct (`ListTypeSuffix+`). Checker/codegen need implementation. Tra
 
 ### F2. Variable Index Access
 ```tinywhale
-arr:i32[]<size=3> = [1, 2, 3]
-i:i32 = 1
-x:i32 = arr[i]
+arr: i32[]<size=3> = [1, 2, 3]
+i: i32 = 1
+x: i32 = arr[i]
 ```
-Currently only integer literal indices for exhaustiveness checking. Variable indices planned with functions and bounds checking.
+Currently only integer literal indices for exhaustiveness checking. Variable indices planned with bounds checking.
 
 ```ohm
-IndexAccess = PostfixBase (lbracket intLiteral rbracket)+
+IndexAccess = PostfixableBase (lbracket intLiteral rbracket)+
 ```
 
 ### F3. Floats (Comprehensive)
 Float implementation is incomplete. Includes:
-- Float match patterns
-- Negative float literals
+- Float match patterns (D9)
+- Negative float literals (D6)
 - Numeric formats (hex, binary, octal)
 - Float-specific operations
 
@@ -681,7 +740,7 @@ Worth multiple PRs.
 ### F4. Multi-line Lists / Trailing Commas
 ```tinywhale
 # Undecided syntax - possibly comma-less:
-arr:i32[]<size=3> = [
+arr: i32[]<size=3> = [
     1
     2
     3
@@ -690,33 +749,38 @@ arr:i32[]<size=3> = [
 ```
 Open design question. Not adding trailing comma support until decided.
 
-### F5. Functions
-Not yet implemented. Will unlock:
-- Variable index access with bounds checking
-- Side-effect operations in match arms
-- General-purpose computation
+### ~~F5. Functions~~ ✅ DONE
+~~Not yet implemented. Will unlock:~~
+~~- Variable index access with bounds checking~~
+~~- Side-effect operations in match arms~~
+~~- General-purpose computation~~
+
+**Implemented in PRs #53-56.** Functions are fully working.
 
 ---
 
 ## Summary
 
-| Category | Count |
-|----------|-------|
-| Working correctly | 22 |
-| Discrepancies | 9 |
-| Future enhancements | 5 |
+| Category | Count | Status |
+|----------|-------|--------|
+| Working correctly | 23 | ✅ All verified |
+| Discrepancies | 9 | ❌ Open |
+| Future enhancements | 4 | ⏳ Planned (F5 done) |
 
-**Fixes completed (PRs #47, #48, and #49):**
+**Fixes completed (PRs #47-57):**
 - Dead VariableBinding grammar rule removed
 - Postfix base restricted to identifiers only (no parens, literals, or list literals)
 - Integer scientific notation negative exponents rejected at grammar level
 - Binding patterns in match now work with lexical scoping
-- Refinement types in field declarations now enforced (checker traverses nodes instead of token offsets)
+- Refinement types in field declarations now enforced
+- Functions fully implemented (lambdas, declarations, calls)
+- "Everything is expression" design completed
+- Deprecated Statement-related code removed
 
 **Remaining discrepancies for fuzzing preparation:**
-1. D1-D2 (nested lists, chained index) - need checker implementation
+1. D1-D2 (nested lists, chained index) - need checker/codegen implementation
 2. D3-D5 (list/record destructuring, guards) - missing grammar + checker
-3. D6 (negative float literals) - grammar addition
-4. D7 (list fields in records) - checker fix
-5. D8 (lists of user-defined types) - deferred until functions
-6. D9 (float match patterns) - grammar + checker
+3. D6 (negative float literals) - grammar change needed
+4. D7 (list fields in records) - codegen fix needed
+5. D8 (lists of user-defined types) - need WASM GC or alternative approach
+6. D9 (float match patterns) - grammar + checker needed
