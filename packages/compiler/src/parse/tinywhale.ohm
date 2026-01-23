@@ -5,27 +5,25 @@ TinyWhale {
   Program (a program) = Line? (newline Line?)* newline?
   Line (a line) = IndentedLine | DedentLine | RootLine
 
-  // RootLine tries Statement first, then falls back to Expression
-  // Statement covers specific constructs (FuncDecl, RecordTypeDecl, TypeAlias, etc.)
-  // Expression covers the general case (BindingExpr, PanicExpr, etc.)
-  RootLine = Statement | Expression
+  // RootLine tries DeclarationExpr first, then falls back to Expression
+  // DeclarationExpr covers declarations (RecordTypeDecl, TypeAlias, FuncDecl)
+  // Expression covers everything else (BindingExpr, PanicExpr, etc.)
+  RootLine = DeclarationExpr | Expression
+
+  // Declarations as expressions (return None, have side effects)
+  DeclarationExpr = RecordTypeDecl | TypeAlias | FuncDecl
 
   // Newline (required between lines, not treated as whitespace)
   newline = "\n" | "\r\n" | "\r"
 
-  // IndentedLine can contain a MatchArm, Statement, FieldDecl, or FieldInit
+  // IndentedLine can contain a MatchArm, DeclarationExpr, Expression, FieldDecl, or FieldInit
   // FieldDecl (with :) for type declarations or nested record init (context-dependent)
   // FieldInit (with =) for value assignments
   // When dedenting from level N to level M (where M > 0), tokenizer emits both indent and dedent tokens.
   // anyDedent* handles the dedent tokens that follow the indent marker.
   IndentedLine = indentToken anyDedent* IndentedContent?
-  IndentedContent = MatchArm | FieldInit | FieldDecl | Statement
-  DedentLine = anyDedent+ Statement?
-
-  // Statements
-  // BindingExpr added as catch-all for new `x = value` syntax without explicit type
-  Statement = RecordTypeDecl | TypeAlias | MatchBinding | MatchExpr | FuncDecl | FuncBinding | PrimitiveBinding | RecordBinding | PanicStatement | BindingExpr
-  PanicStatement = panic
+  IndentedContent = MatchArm | FieldInit | FieldDecl | DeclarationExpr | Expression
+  DedentLine = anyDedent+ (DeclarationExpr | Expression)?
 
   // Function forward declaration: factorial: (i32) -> i32
   FuncDecl = identifier colon FuncType
@@ -43,11 +41,7 @@ TinyWhale {
   LambdaBody = LambdaBlock | Expression
   LambdaBlock = newline LambdaBlockLine (newline LambdaBlockLine)*
   LambdaBlockLine = indentToken anyDedent* BlockExpression
-  BlockExpression = FuncDecl | FuncBinding | PrimitiveBinding | MatchBinding | MatchExpr | Expression
-
-  // Function binding: double = (x: i32): i32 -> x * 2
-  // With optional type annotation: add: Add = (a: i32, b: i32): i32 -> a + b
-  FuncBinding = identifier (colon TypeRef)? equals Lambda
+  BlockExpression = DeclarationExpr | Expression
 
   // Record type declaration: Point (followed by indented FieldDecls)
   // Use negative lookahead to avoid matching TypeAlias (= TypeRef) or bindings (: Type)
@@ -56,16 +50,7 @@ TinyWhale {
   // Type alias (no `type` keyword): Add = (i32, i32) -> i32
   TypeAlias = upperIdentifier equals TypeRef
 
-  // Primitive type reference (types that require inline expression)
-  PrimitiveTypeRef = ListType | RefinementType | typeKeyword
-
-  // Binding for primitive types: expression required
-  PrimitiveBinding = identifier colon PrimitiveTypeRef equals Expression
-
-  // Binding for record types: no expression, block follows
-  RecordBinding = identifier colon upperIdentifier
-
-  // TypeAnnotation used by MatchBinding
+  // TypeAnnotation used by expressions
   TypeAnnotation = colon TypeRef
 
   // Field declaration inside type (on indented line)
@@ -106,8 +91,7 @@ TinyWhale {
   // Lower-case identifier for field/variable names
   lowerIdentifier = ~keyword lower (alnum | "_")*
 
-  // Match expression: result: Type = match scrutinee
-  MatchBinding = identifier TypeAnnotation equals MatchExpr
+  // Match expression
   MatchExpr = matchKeyword Expression
 
   // Match arm: Pattern -> Expression
