@@ -476,12 +476,13 @@ p = Point
 
 	describe('BindingExpr type alias', () => {
 		it('should detect type alias from Uppercase = Uppercase pattern', () => {
+			// Uses new syntax: p = P (not p: P) for record instantiation
 			const source = `Point
 \tx: i32
 \ty: i32
 
 P = Point
-p: P
+p = P
 \tx = 1
 \ty = 2
 `

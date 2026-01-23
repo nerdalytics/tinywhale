@@ -939,9 +939,10 @@ panic`
 
 	describe('list literal in record init parsing', () => {
 		it('should parse record initialization with list field', () => {
+			// New syntax uses f = Foo (not f:Foo) for record instantiation
 			const source = `Foo
     items: i32[]<size=3>
-f:Foo
+f = Foo
     items = [1, 2, 3]
 panic`
 			const ctx = new CompilationContext(source)
@@ -951,9 +952,10 @@ panic`
 		})
 
 		it('should parse record initialization with nested list field', () => {
+			// New syntax uses m = Matrix (not m:Matrix) for record instantiation
 			const source = `Matrix
     data: i32[]<size=2>[]<size=2>
-m:Matrix
+m = Matrix
     data = [[1, 2], [3, 4]]
 panic`
 			const ctx = new CompilationContext(source)
@@ -963,10 +965,11 @@ panic`
 		})
 
 		it('should parse record initialization with multiple list fields', () => {
+			// New syntax uses d = Data (not d:Data) for record instantiation
 			const source = `Data
     xs: i32[]<size=2>
     ys: i32[]<size=2>
-d:Data
+d = Data
     xs = [1, 2]
     ys = [3, 4]
 panic`

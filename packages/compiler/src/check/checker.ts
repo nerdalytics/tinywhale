@@ -444,6 +444,10 @@ function emitStatement(
 		case NodeKind.TypeAlias:
 			handleTypeAlias(stmtId, state, context)
 			break
+		case NodeKind.PanicExpr:
+			// Panic expression as statement - discard the result
+			checkExpression(stmtId, BuiltinTypeId.None, state, context)
+			break
 	}
 }
 
@@ -508,7 +512,7 @@ function checkExpressionSequence(
 
 /**
  * Emit a statement within a lambda body expression sequence.
- * Handles bindings and function declarations that can appear in multi-line lambdas.
+ * Handles bindings, function declarations, and expressions that can appear in multi-line lambdas.
  */
 function emitStatementInLambdaBody(
 	stmtId: NodeId,
@@ -519,6 +523,13 @@ function emitStatementInLambdaBody(
 	switch (stmtKind) {
 		case NodeKind.FuncDecl:
 			handleFuncDecl(stmtId, state, context)
+			break
+		case NodeKind.BindingExpr:
+			handleBindingExpr(stmtId, state, context)
+			break
+		case NodeKind.PanicExpr:
+			// Panic expression as statement - discard the result
+			checkExpression(stmtId, BuiltinTypeId.None, state, context)
 			break
 	}
 }

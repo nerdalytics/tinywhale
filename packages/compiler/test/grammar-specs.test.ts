@@ -114,8 +114,8 @@ test('Grammar Specs', async (t) => {
 				'x:f64 =', // Missing expression for primitive
 				'x:i32<min=0> =', // Missing expression for bounded primitive
 				'arr:i32[]<size=3> =', // Missing expression for list type
-				'p:Point = 5', // Expression not allowed for record
-				'p:Point =', // Old syntax: trailing = after record type rejected
+				// Note: 'p:Point = 5' is now valid grammar (type mismatch is a semantic error)
+				'p:Point =', // Missing expression after equals
 			])
 		)
 

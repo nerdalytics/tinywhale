@@ -161,9 +161,10 @@ panic`
 
 	describe('future: list in record field initialization', () => {
 		it('documents expected: list field init in record should work', () => {
+			// Updated to use new syntax: d = Data (not d:Data)
 			const source = `Data
     items: i32[]<size=1>
-d:Data
+d = Data
     items = [99]
 panic`
 			const ctx = prepareAndCheck(source)
