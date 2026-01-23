@@ -467,4 +467,29 @@ p = Point
 			// assert.strictEqual(ctx.hasErrors(), false)
 		})
 	})
+
+	describe('BindingExpr type alias', () => {
+		it('should detect type alias from Uppercase = Uppercase pattern', () => {
+			const source = `Point
+\tx: i32
+\ty: i32
+
+P = Point
+p: P
+\tx = 1
+\ty = 2
+`
+			const ctx = compileAndCheck(source)
+			assert.strictEqual(ctx.hasErrors(), false, `Errors: ${ctx.getErrors().map((e) => e.message).join(', ')}`)
+		})
+
+		it('should error on type alias with unknown type', () => {
+			const source = `P = Unknown
+`
+			const ctx = compileAndCheck(source)
+			assert.strictEqual(ctx.hasErrors(), true, 'Should have errors for unknown type')
+			const errors = ctx.getErrors()
+			assert.ok(errors.some((e) => e.message.includes('Unknown')))
+		})
+	})
 })

@@ -12,6 +12,7 @@
 import type { CompilationContext, StringId } from '../core/context.ts'
 import type { DiagnosticCode } from '../core/diagnostics.ts'
 import { type NodeId, NodeKind, nodeId, offsetNodeId, prevNodeId } from '../core/nodes.ts'
+import { TokenKind } from '../core/tokens.ts'
 import {
 	emitSimpleBinding,
 	processPrimitiveBinding,
@@ -26,7 +27,7 @@ import {
 	startTypeDecl,
 } from './declarations.ts'
 import { checkExpression } from './expressions.ts'
-import { handleFuncBinding, handleFuncDecl } from './funcs.ts'
+import { handleFuncBinding, handleFuncDecl, resolveFuncType } from './funcs.ts'
 import { finalizeMatch, getMatchArmFromLine, processMatchArm, startMatchBinding } from './match.ts'
 import {
 	extractFieldDeclName,
@@ -155,6 +156,70 @@ function isUppercaseName(name: string): boolean {
 }
 
 /**
+ * Find FuncType child of a TypeAnnotation node (if present).
+ */
+function findFuncTypeChild(
+	typeAnnotationId: NodeId,
+	context: CompilationContext
+): NodeId | null {
+	for (const [childId, child] of context.nodes.iterateChildren(typeAnnotationId)) {
+		if (child.kind === NodeKind.FuncType) {
+			return childId
+		}
+	}
+	return null
+}
+
+/**
+ * Handle a TypeAlias statement.
+ * Syntax: UppercaseId = TypeRef
+ * Creates a type alias that maps the name to the target type.
+ */
+function handleTypeAlias(
+	aliasId: NodeId,
+	state: CheckerState,
+	context: CompilationContext
+): void {
+	// TypeAlias structure in postorder: [TypeAnnotation, TypeAlias]
+	// TypeAlias tokenId has the alias name
+	const aliasNode = context.nodes.get(aliasId)
+	const aliasToken = context.tokens.get(aliasNode.tokenId)
+	const aliasNameId = aliasToken.payload as StringId
+	const aliasName = context.strings.get(aliasNameId)
+
+	// Get the TypeAnnotation child (target type)
+	const typeAnnotationId = prevNodeId(aliasId)
+
+	// Check for FuncType (e.g., Add = (i32, i32) -> i32)
+	const funcTypeChildId = findFuncTypeChild(typeAnnotationId, context)
+	if (funcTypeChildId !== null) {
+		const funcTypeId = resolveFuncType(funcTypeChildId, state, context)
+		if (funcTypeId !== BuiltinTypeId.Invalid) {
+			state.types.addAlias(aliasName, funcTypeId)
+		}
+		return
+	}
+
+	// Try regular type resolution
+	const typeInfo = resolveTypeFromAnnotation(typeAnnotationId, state, context)
+
+	if (!typeInfo) {
+		// Get target type name for error message
+		const typeAnnotationNode = context.nodes.get(typeAnnotationId)
+		const typeToken = context.tokens.get(typeAnnotationNode.tokenId)
+		const targetName =
+			typeToken.kind === TokenKind.Identifier
+				? context.strings.get(typeToken.payload as StringId)
+				: 'unknown'
+		context.emitAtNode('TWCHECK010' as DiagnosticCode, typeAnnotationId, { found: targetName })
+		return
+	}
+
+	// Register the alias
+	state.types.addAlias(aliasName, typeInfo.typeId)
+}
+
+/**
  * Extract nodes from a BindingExpr in postorder storage.
  * Structure: [Identifier, (TypeAnnotation)?, Expression..., BindingExpr]
  */
@@ -206,6 +271,7 @@ function handleBindingExpr(
 	const identName = context.strings.get(nameId)
 
 	// Check if RHS is an uppercase identifier (record instantiation pattern)
+	// Note: Uppercase = Uppercase is handled by TypeAlias at grammar level, not BindingExpr
 	const exprNode = context.nodes.get(exprId)
 	if (exprNode.kind === NodeKind.Identifier) {
 		const rhsToken = context.tokens.get(exprNode.tokenId)
@@ -298,6 +364,9 @@ function emitStatement(
 			break
 		case NodeKind.BindingExpr:
 			handleBindingExpr(stmtId, state, context)
+			break
+		case NodeKind.TypeAlias:
+			handleTypeAlias(stmtId, state, context)
 			break
 	}
 }
