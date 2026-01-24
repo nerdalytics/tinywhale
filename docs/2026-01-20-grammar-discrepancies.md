@@ -9,7 +9,7 @@
 ## Major Updates Since Original Analysis
 
 **PR #53-56: Functions and Expression Unification**
-- Functions fully implemented (lambdas, declarations, calls)
+- Basic functions implemented (lambdas, declarations, direct calls)
 - "Everything is an expression" design completed
 - Removed: `Statement`, `PanicStatement`, `FuncBinding`, `PrimitiveBinding`, `RecordBinding` grammar rules
 - Unified all bindings through `BindingExpr`
@@ -442,14 +442,14 @@ FieldInit = lowerIdentifier (colon upperIdentifier | equals Expression)
 
 ---
 
-### 23. Functions ✅ NEW
+### 23. Functions (Basic) ✅
 
 ```tinywhale
 add = (a: i32, b: i32): i32 -> a + b
 result: i32 = add(1, 2)
 ```
 
-First-class functions with lambdas, type inference, and function calls.
+Basic functions with lambdas, type inference, and direct function calls.
 
 ```ohm
 Lambda = lparen Parameters rparen TypeAnnotation? arrow LambdaBody
@@ -457,11 +457,19 @@ FuncCall = PostfixableBase lparen Arguments rparen
 FuncDecl = identifier colon FuncType
 ```
 
-**Implemented in PRs #53-56:** Functions fully working including:
+**Implemented in PRs #53-56:**
 - Lambda expressions with parameters and return types
 - Function declarations for forward references
-- Function calls with arguments
+- Direct function calls with arguments
+- Multi-line bodies with expression sequences
 - Type inference for parameters when type alias provided
+
+**Not yet implemented (see original plan `2026-01-19-functions-roadmap.md`):**
+- Higher-order functions (passing functions as arguments)
+- Indirect calls (calling through a variable) — blocked by `codegen/index.ts:697`
+- Tuples (multiple return values)
+- Closures (capturing outer variables)
+- Extern bindings (`extern wasm`, `extern host`)
 
 ---
 
@@ -749,13 +757,17 @@ arr: i32[]<size=3> = [
 ```
 Open design question. Not adding trailing comma support until decided.
 
-### ~~F5. Functions~~ ✅ DONE
-~~Not yet implemented. Will unlock:~~
-~~- Variable index access with bounds checking~~
-~~- Side-effect operations in match arms~~
-~~- General-purpose computation~~
+### F5. Functions (Partial)
 
-**Implemented in PRs #53-56.** Functions are fully working.
+**Basic functions implemented in PRs #53-56:**
+- Lambda expressions, function declarations, direct calls
+- Multi-line bodies, type inference from aliases
+
+**Still pending (per original plan `2026-01-19-functions-roadmap.md`):**
+- PR 3: Higher-order functions (indirect calls via `call_indirect`)
+- PR 4: Tuples (types, literals, destructuring)
+- PR 5: Closures (variable capture)
+- PR 6: Extern bindings (`extern wasm`, `extern host`)
 
 ---
 
@@ -765,7 +777,7 @@ Open design question. Not adding trailing comma support until decided.
 |----------|-------|--------|
 | Working correctly | 23 | ✅ All verified |
 | Discrepancies | 9 | ❌ Open |
-| Future enhancements | 4 | ⏳ Planned (F5 done) |
+| Future enhancements | 4 | ⏳ Planned (F5 partial) |
 
 **Fixes completed (PRs #47-57):**
 - Dead VariableBinding grammar rule removed
@@ -773,7 +785,7 @@ Open design question. Not adding trailing comma support until decided.
 - Integer scientific notation negative exponents rejected at grammar level
 - Binding patterns in match now work with lexical scoping
 - Refinement types in field declarations now enforced
-- Functions fully implemented (lambdas, declarations, calls)
+- Basic functions implemented (lambdas, declarations, direct calls)
 - "Everything is expression" design completed
 - Deprecated Statement-related code removed
 
