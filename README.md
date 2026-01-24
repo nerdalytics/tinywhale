@@ -14,8 +14,8 @@ This is a monorepo managed with [pnpm](https://pnpm.io/) workspaces:
 ## Prerequisites
 
 - [mise](https://mise.jdx.dev/) - Development tool version manager and task runner
-- Node.js 24.12.0 (automatically installed via mise)
-- pnpm 10.26.0 (automatically installed via mise)
+- Node.js 24.13.0 (automatically installed via mise)
+- pnpm 10.28.1 (automatically installed via mise)
 
 ## Getting Started
 

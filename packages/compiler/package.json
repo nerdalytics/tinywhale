@@ -9,7 +9,7 @@
 	"devDependencies": {
 		"@ohm-js/cli": "2.0.1",
 		"@tinywhale/grammar-test": "workspace:*",
-		"@types/node": "25.0.9",
+		"@types/node": "25.0.10",
 		"typescript": "5.9.3"
 	},
 	"exports": {
