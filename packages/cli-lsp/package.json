@@ -9,7 +9,7 @@
 	},
 	"description": "TinyWhale Language Server CLI",
 	"devDependencies": {
-		"@types/node": "25.0.9",
+		"@types/node": "25.0.10",
 		"typescript": "5.9.3"
 	},
 	"exports": {
