@@ -1,6 +1,6 @@
 # Grammar vs Semantic Discrepancies Analysis
 
-> **Date:** 2026-01-20 (Updated: 2026-01-24)
+> **Date:** 2026-01-20 (Updated: 2026-01-25)
 > **Purpose:** Identify discrepancies between grammar (what parses) and semantics (what compiles) to prepare for property-based compiler fuzzing.
 > **Design Philosophy:** Strict grammar - grammar should only accept what the compiler can actually compile.
 
@@ -769,6 +769,39 @@ Open design question. Not adding trailing comma support until decided.
 - PR 5: Closures (variable capture)
 - PR 6: Extern bindings (`extern wasm`, `extern host`)
 
+### F6. Labeled Parameters for Same-Type Arguments
+
+```tinywhale
+# Two or more parameters of the same type require labels at call site:
+transfer = (from: i32, to: i32, amount: i32): i32 -> from + to + amount
+
+# Call site must use labels (order can vary):
+transfer(from: 1, to: 2, amount: 500)
+transfer(amount: 500, from: 1, to: 2)
+
+# Single parameter or different types - no labels required:
+sqrt = (n: f64): f64 -> n
+sqrt(4.0)
+
+format = (s: i32, width: i64): i32 -> s
+format(1, 10)
+```
+
+This rule applies to both primitive types and record types:
+
+```tinywhale
+fn merge(base: Config, override: Config) -> Config
+merge(base: defaults, override: userPrefs)  # labels required, same type
+```
+
+**Rationale:**
+- Nominal types prevent swapping records of different types, but two `Config` parameters can still be swapped
+- Primitives have no nominal protection - `transfer(2, 1, 500)` silently swaps sender/receiver
+- Mirrors the `@` prefix philosophy: call sites should be locally readable without chasing definitions
+- Labels are non-optional when required - no mixing labeled and positional for same-type params
+
+**Severity:** Low - not foundational, can be added after core features stabilize.
+
 ---
 
 ## Summary
@@ -777,7 +810,7 @@ Open design question. Not adding trailing comma support until decided.
 |----------|-------|--------|
 | Working correctly | 23 | ✅ All verified |
 | Discrepancies | 9 | ❌ Open |
-| Future enhancements | 4 | ⏳ Planned (F5 partial) |
+| Future enhancements | 5 | ⏳ Planned (F5 partial) |
 
 **Fixes completed (PRs #47-57):**
 - Dead VariableBinding grammar rule removed
