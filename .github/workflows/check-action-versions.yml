@@ -214,6 +214,22 @@ jobs:
 
           echo "changes_made=$CHANGES_MADE" >> "$GITHUB_OUTPUT"
 
+      - name: Configure SSH signing
+        if: steps.apply.outputs.changes_made == '1'
+        env:
+          SSH_SIGNING_KEY: ${{ secrets.SSH_SIGNING_KEY }}
+          SSH_PASSPHRASE: ${{ secrets.SSH_SIGNING_KEY_PASSPHRASE }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_SIGNING_KEY" > ~/.ssh/signing_key
+          chmod 600 ~/.ssh/signing_key
+          ssh-keygen -p -P "$SSH_PASSPHRASE" -N "" -f ~/.ssh/signing_key
+          git config user.name "nerdalytics"
+          git config user.email "97166791+nerdalytics@users.noreply.github.com"
+          git config gpg.format ssh
+          git config user.signingkey ~/.ssh/signing_key
+          git config commit.gpgsign true
+
       - name: Create branch and commit
         if: steps.apply.outputs.changes_made == '1'
         id: commit
@@ -221,9 +237,6 @@ jobs:
           set -euo pipefail
 
           BRANCH_NAME="automation/update-github-actions"
-
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
 
           git checkout -B "$BRANCH_NAME"
           git add .github/workflows/*.yml
