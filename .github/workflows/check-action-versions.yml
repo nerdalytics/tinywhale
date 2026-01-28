@@ -101,7 +101,7 @@ jobs:
 
               if [[ -n "$sha" ]]; then
                 ACTIONS_SHA[$action]="$sha"
-                ((OUTDATED_COUNT++))
+                ((OUTDATED_COUNT++)) || true
               else
                 echo "  Warning: Could not fetch SHA for $action@$latest"
               fi
