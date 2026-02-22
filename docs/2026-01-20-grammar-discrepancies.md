@@ -797,7 +797,7 @@ merge(base: defaults, override: userPrefs)  # labels required, same type
 **Rationale:**
 - Nominal types prevent swapping records of different types, but two `Config` parameters can still be swapped
 - Primitives have no nominal protection - `transfer(2, 1, 500)` silently swaps sender/receiver
-- Mirrors the `@` prefix philosophy: call sites should be locally readable without chasing definitions
+- Call sites should be locally readable without chasing definitions
 - Labels are non-optional when required - no mixing labeled and positional for same-type params
 
 **Severity:** Low - not foundational, can be added after core features stabilize.

@@ -124,9 +124,9 @@ div_mod = (a: i32, b: i32): {i32, i32} -> {a / b, a % b}
 clz: (i32) -> i32
 clz = extern wasm "i32.clz"
 
-# Host imports (with @ prefix for effects)
-@log: (i32) -> None
-@log = extern host "env" "log"
+# Host imports (datagram model — no @ prefix needed)
+log: (i32) -> None
+log = extern host "env" "log"
 ```
 
 ---
@@ -228,8 +228,7 @@ PatternList = (identifier | underscore) (comma (identifier | underscore))*
 
 ### Scope
 - `extern wasm "opcode"` for WASM intrinsics
-- `extern host "module" "function"` for host imports
-- `@` prefix requirement for host imports
+- `extern host "module" "function"` for host imports — compiler generates datagram constructors (the datagram wrapping is implicit; return types stay as declared)
 - Opcode whitelist
 
 ### Grammar

@@ -5,6 +5,10 @@
 
 ---
 
+> **2026-02-22 — Datagram model update**: TinyWhale now follows Roc's design where all functions produce datagrams (instructions for the runtime). The runtime is the sole executor of effects. This means the `@` prefix for side-effectful functions (previously discussed in the functions roadmap) is retired — no function directly performs side effects. The dispatch strategies below are **unaffected** by this shift; they solve union type polymorphism via monomorphization and per-function tables, which is orthogonal to the effect model. The datagram wrapper is implicit and invisible at the language level — return types stay as declared.
+
+---
+
 ## Overview
 
 This directory contains detailed educational reports on four dispatch strategies for implementing higher-order functions and multiple dispatch in TinyWhale's WASM backend.
