@@ -275,7 +275,7 @@ These are the TypeScript functions that emit dispatch tables, dispatch wrappers,
 import binaryen from 'binaryen'
 
 interface FunctionVariant {
-  name: string      // e.g. "$get_depth$5"
+  name: string      // e.g. "get_depth$5"
   typeTag: number   // e.g. 5
 }
 
@@ -293,8 +293,7 @@ function emitDispatchTable(module: binaryen.Module, func: GenericFunction): void
   module.addTable(
     tableName,
     variantNames.length,  // initial size (exact)
-    variantNames.length,  // max size (exact)
-    binaryen.funcref
+    variantNames.length   // max size (exact)
   )
 
   module.addActiveElementSegment(
@@ -307,16 +306,20 @@ function emitDispatchTable(module: binaryen.Module, func: GenericFunction): void
 
 function emitDispatchWrapper(module: binaryen.Module, func: GenericFunction): void {
   const tableName = `${func.name}$dispatch`
+  // In TinyWhale, all reference types are passed as i32 pointers.
+  // The dispatch wrapper reads the type tag from the object header at offset 0.
+  const ptr = module.local.get(0, binaryen.i32)
+  const typeTag = module.i32.load(0, 0, ptr)
 
   module.addFunction(
     func.name,
-    binaryen.createType([binaryen.i32]),  // single pointer parameter
+    binaryen.createType([binaryen.i32]),  // pointer to reference type object
     func.returnType,
     [],  // no locals needed
     module.call_indirect(
       tableName,
-      module.i32.load(0, 0, module.local.get(0, binaryen.i32)),  // type tag at offset 0
-      [module.local.get(0, binaryen.i32)],                        // forward the argument
+      typeTag,
+      [ptr],
       func.paramType,
       func.returnType
     )
