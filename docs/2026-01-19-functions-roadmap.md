@@ -124,7 +124,7 @@ div_mod = (a: i32, b: i32): {i32, i32} -> {a / b, a % b}
 clz: (i32) -> i32
 clz = extern wasm "i32.clz"
 
-# Host imports (datagram model — no @ prefix needed)
+# Host imports
 log: (i32) -> None
 log = extern host "env" "log"
 ```

@@ -2,7 +2,7 @@
 
 > **Date**: 2026-02-22
 > **Status**: Approved design
-> **Context**: Retiring the `@` prefix for side-effectful functions in favour of a uniform execution model
+> **Context**: Design rationale for TinyWhale's uniform function model
 
 ---
 
@@ -23,9 +23,9 @@ The common mechanism: the runtime manages multiple execution stacks and decides 
 
 ---
 
-## 2. TinyWhale's `@` Prefix Was Function Coloring
+## 2. Effect Annotations Cause Function Coloring
 
-The original extern bindings design from the [functions roadmap](./2026-01-19-functions-roadmap.md):
+One approach to marking side-effectful functions is a syntactic prefix — for example, `@` on host-imported functions:
 
 ```tinywhale
 # WASM intrinsics — no prefix
@@ -37,14 +37,14 @@ clz = extern wasm "i32.clz"
 @log = extern host "env" "log"
 ```
 
-The `@` prefix was contagious. A function that called `@log` was itself effectful and required marking:
+The prefix would be contagious. A function that called `@log` would itself be effectful and require marking:
 
 ```tinywhale
 @greet = (name: i32): None ->
-    @log(name)        # calling @log requires @greet to be @greet
+    @log(name)        # calling @log forces @greet to be marked too
 ```
 
-This is structurally identical to TypeScript's `async`. Two incompatible worlds: pure functions and `@`-prefixed effectful functions. Higher-order functions accepting effectful callbacks would need to carry the prefix in their type. The problem compounds as the codebase grows.
+This is structurally identical to TypeScript's `async`. Two incompatible worlds: plain functions and `@`-prefixed effectful functions. Higher-order functions accepting effectful callbacks would need to carry the prefix in their type. The problem compounds as the codebase grows. TinyWhale does not use this design.
 
 ---
 
@@ -58,7 +58,7 @@ The word "virtually" is load-bearing. The datagram is a compiler reasoning model
 
 **No `Task` type.** Return types stay as declared. `log: (i32) -> None` does not become `log: (i32) -> Task<None>`. This avoids the need for generic type syntax, which would conflict with TinyWhale's existing use of `<>` for value constraints (`i32<min=0, max=100>`).
 
-**`extern host` generates a standard WASM import declaration.** The programmer-facing declaration is unchanged, minus the retired prefix:
+**`extern host` generates a standard WASM import declaration.** Host functions are declared and called like any other:
 
 ```tinywhale
 log: (i32) -> None
