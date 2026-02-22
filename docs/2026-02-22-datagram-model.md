@@ -23,38 +23,13 @@ The common mechanism: the runtime manages multiple execution stacks and decides 
 
 ---
 
-## 2. Effect Annotations Cause Function Coloring
-
-One approach to marking side-effectful functions is a syntactic prefix — for example, `@` on host-imported functions:
-
-```tinywhale
-# WASM intrinsics — no prefix
-clz: (i32) -> i32
-clz = extern wasm "i32.clz"
-
-# Host imports — @ prefix marks side effects
-@log: (i32) -> None
-@log = extern host "env" "log"
-```
-
-The prefix would be contagious. A function that called `@log` would itself be effectful and require marking:
-
-```tinywhale
-@greet = (name: i32): None ->
-    @log(name)        # calling @log forces @greet to be marked too
-```
-
-This is structurally identical to TypeScript's `async`. Two incompatible worlds: plain functions and `@`-prefixed effectful functions. Higher-order functions accepting effectful callbacks would need to carry the prefix in their type. The problem compounds as the codebase grows. TinyWhale does not use this design.
-
----
-
-## 3. The Datagram Model
+## 2. The Datagram Model
 
 TinyWhale follows Roc's approach: every function *virtually* returns a datagram — a description of what the runtime should execute. The function itself is pure; it maps inputs to a value that may include an effect description. The runtime reads that description and acts.
 
 The word "virtually" is load-bearing. The datagram is a compiler reasoning model. No runtime datagram object exists. The compiler emits standard WASM `call` instructions directly.
 
-**No `@` prefix.** Every function is the same kind of thing. There is no distinction between "effectful" and "pure" at the language level, and therefore nothing to annotate or propagate.
+Every function is the same kind of thing. There is no distinction between "effectful" and "pure" at the language level, and therefore no annotation to propagate.
 
 **No `Task` type.** Return types stay as declared. `log: (i32) -> None` does not become `log: (i32) -> Task<None>`. This avoids the need for generic type syntax, which would conflict with TinyWhale's existing use of `<>` for value constraints (`i32<min=0, max=100>`).
 
@@ -73,7 +48,7 @@ Calling `log(42)` emits a WASM `call` to the imported function. The datagram fra
 
 ---
 
-## 4. Effect Sequencing
+## 3. Effect Sequencing
 
 Effect sequencing in TinyWhale is sequential: multiple host calls in a function body compile to sequential WASM `call` instructions.
 
@@ -94,7 +69,7 @@ No composition operator. No monadic bind. Sequential calls produce sequential ef
 
 ---
 
-## 5. Closures
+## 4. Closures
 
 Closures that call host functions have no type contamination. The closure type is determined by its parameter and return types, not by what it calls.
 
@@ -118,7 +93,7 @@ Closure implementation is deferred to PR 5 (see [functions roadmap](./2026-01-19
 
 ---
 
-## 6. WASM/WASI Ecosystem
+## 5. WASM/WASI Ecosystem
 
 TinyWhale compiles to WASM targeting WASI runtimes. The datagram model aligns with a direction the WASM ecosystem is converging on across three layers of the stack.
 
@@ -156,7 +131,7 @@ TinyWhale does not need to wait for stack switching. The datagram model is imple
 
 ---
 
-## 7. Open Questions
+## 6. Open Questions
 
 The design decision is made; some implementation details are not.
 
