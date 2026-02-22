@@ -267,6 +267,80 @@ get_depth = (w: Widget) -> i32
     (i32.load offset=16 (local.get $w)))
 ```
 
+### 5.5 Binaryen Code Generation
+
+These are the TypeScript functions that emit dispatch tables, dispatch wrappers, and call sites using the Binaryen API.
+
+```typescript
+import binaryen from 'binaryen'
+
+interface FunctionVariant {
+  name: string      // e.g. "$get_depth$5"
+  typeTag: number   // e.g. 5
+}
+
+interface GenericFunction {
+  name: string                 // e.g. "get_depth"
+  variants: FunctionVariant[]
+  paramType: binaryen.Type     // WASM type for the parameter list
+  returnType: binaryen.Type    // WASM type for the return value
+}
+
+function emitDispatchTable(module: binaryen.Module, func: GenericFunction): void {
+  const tableName = `${func.name}$dispatch`
+  const variantNames = func.variants.map(v => v.name)
+
+  module.addTable(
+    tableName,
+    variantNames.length,  // initial size (exact)
+    variantNames.length,  // max size (exact)
+    binaryen.funcref
+  )
+
+  module.addActiveElementSegment(
+    tableName,
+    `${tableName}$elem`,
+    variantNames,
+    module.i32.const(0)
+  )
+}
+
+function emitDispatchWrapper(module: binaryen.Module, func: GenericFunction): void {
+  const tableName = `${func.name}$dispatch`
+
+  module.addFunction(
+    func.name,
+    binaryen.createType([binaryen.i32]),  // single pointer parameter
+    func.returnType,
+    [],  // no locals needed
+    module.call_indirect(
+      tableName,
+      module.i32.load(0, 0, module.local.get(0, binaryen.i32)),  // type tag at offset 0
+      [module.local.get(0, binaryen.i32)],                        // forward the argument
+      func.paramType,
+      func.returnType
+    )
+  )
+}
+
+// Use staticTypeTag when the caller knows the concrete type at compile time.
+// Pass null when the caller only has a union type.
+function emitCall(
+  module: binaryen.Module,
+  callee: string,
+  args: binaryen.ExpressionRef[],
+  returnType: binaryen.Type,
+  staticTypeTag: number | null
+): binaryen.ExpressionRef {
+  if (staticTypeTag !== null) {
+    // Concrete type known — call the specialized variant directly
+    return module.call(`${callee}$${staticTypeTag}`, args, returnType)
+  }
+  // Union type — call through the dispatch wrapper
+  return module.call(callee, args, returnType)
+}
+```
+
 ---
 
 ## 6. Multi-Argument Dispatch
