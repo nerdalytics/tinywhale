@@ -213,6 +213,8 @@ PatternList = (identifier | underscore) (comma (identifier | underscore))*
 - Generate environment structs for captured variables
 - Closure conversion in codegen
 
+The [datagram model](./2026-02-22-datagram-model.md) imposes no additional requirements. A closure that calls host functions has type `(params) -> return` — identical to a closure that does not. The environment struct captures values, not capabilities.
+
 ### Implementation Steps
 
 1. Track variable references across scope boundaries

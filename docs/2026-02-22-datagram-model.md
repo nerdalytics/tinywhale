@@ -8,7 +8,7 @@
 
 ## 1. The Function Coloring Problem
 
-Bob Nystrom's 2015 post ["What Color is Your Function?"](https://journal.stuffwithstuff.com/2015/02/01/what-color-is-your-function/) describes a structural problem that appears in any language with a sync/async split. Each function has a "color": async or sync. A sync function cannot call an async function without itself becoming async. The color spreads upward through the entire call graph — this is contagion.
+Bob Nystrom's 2015 post [\"What Color is Your Function?\"](https://journal.stuffwithstuff.com/2015/02/01/what-color-is-your-function/) describes a structural problem that appears in any language with a sync/async split. Each function has a "color": async or sync. A sync function cannot call an async function without itself becoming async. The color spreads upward through the entire call graph — this is contagion.
 
 In TypeScript, an `async` function returns `Promise<T>` instead of `T`. Any function that calls it must either `await` the promise (becoming `async` itself) or accept a `Promise<T>` and deal with it explicitly. Higher-order functions break: a function that accepts a `(x: string) => string` callback cannot receive an `async (x: string) => Promise<string>` without a rewrite. The coloring is not cosmetic — it appears in types, in function signatures, and in the CPS transformation the compiler performs on every `await` boundary.
 
@@ -50,28 +50,75 @@ This is structurally identical to TypeScript's `async`. Two incompatible worlds:
 
 ## 3. The Datagram Model
 
-TinyWhale follows Roc's approach: every function virtually returns a datagram — a structured description of instructions for the runtime to execute. The function itself is pure; it maps inputs to a value that may include an effect description. The runtime reads the description and acts.
+TinyWhale follows Roc's approach: every function *virtually* returns a datagram — a description of what the runtime should execute. The function itself is pure; it maps inputs to a value that may include an effect description. The runtime reads that description and acts.
 
-The word "virtually" is load-bearing. The datagram is a compiler and runtime concern. It does not appear in the language.
+The word "virtually" is load-bearing. The datagram is a compiler reasoning model. No runtime datagram object exists. The compiler emits standard WASM `call` instructions directly.
 
 **No `@` prefix.** Every function is the same kind of thing. There is no distinction between "effectful" and "pure" at the language level, and therefore nothing to annotate or propagate.
 
 **No `Task` type.** Return types stay as declared. `log: (i32) -> None` does not become `log: (i32) -> Task<None>`. This avoids the need for generic type syntax, which would conflict with TinyWhale's existing use of `<>` for value constraints (`i32<min=0, max=100>`).
 
-**`extern host` generates a datagram constructor**, not a direct host import. The programmer-facing declaration is identical to before, minus the prefix:
+**`extern host` generates a standard WASM import declaration.** The programmer-facing declaration is unchanged, minus the retired prefix:
 
 ```tinywhale
 log: (i32) -> None
 log = extern host "env" "log"
 ```
 
-Calling `log(42)` and calling `add(1, 2)` look identical to the programmer. The compiler, not the type system, handles the distinction.
+Calling `log(42)` emits a WASM `call` to the imported function. The datagram framing explains why there is no type-level distinction — but the emitted WASM is what a direct host call would produce anyway. The "virtual datagram" is a language design principle, not a compilation technique.
 
 **`extern wasm` is unchanged.** Pure WASM intrinsics (`i32.clz`, `f32.sqrt`, etc.) were never effectful. They remain direct, inline WASM instructions.
 
+**No sync/async distinction for TinyWhale programmers.** Calling `log(42)` and calling `add(1, 2)` are syntactically and semantically identical. Any function can call any other function. There is no type-system barrier between functions that reach the host and functions that do not. The compiler handles the distinction invisibly, the same way Go's runtime transparently parks goroutines at I/O boundaries.
+
 ---
 
-## 4. WASM/WASI Ecosystem
+## 4. Effect Sequencing
+
+Effect sequencing in TinyWhale is sequential: multiple host calls in a function body compile to sequential WASM `call` instructions.
+
+```tinywhale
+report = (a: i32, b: i32): None ->
+    log(a)
+    log(b)
+```
+
+Compiles to:
+
+```wasm
+call $log   ;; a
+call $log   ;; b
+```
+
+No composition operator. No monadic bind. Sequential calls produce sequential effects, in source order. This is possible because the datagram is virtual — the compiler emits calls directly and the runtime executes them in order.
+
+---
+
+## 5. Closures
+
+Closures that call host functions have no type contamination. The closure type is determined by its parameter and return types, not by what it calls.
+
+```tinywhale
+# These two closures have identical types: (i32) -> None
+silent = (x: i32): None -> x
+noisy  = (x: i32): None -> log(x)
+```
+
+Both have type `(i32) -> None`. A higher-order function that accepts a `(i32) -> None` callback accepts either.
+
+The closure representation is unchanged by the datagram model:
+
+```
+{ func_index: i32, env_ptr: i32 }
+```
+
+The environment struct captures values, not capabilities. Whether a closure body calls the host is invisible to the struct layout.
+
+Closure implementation is deferred to PR 5 (see [functions roadmap](./2026-01-19-functions-roadmap.md)). The datagram model imposes no additional requirements on PR 5's design.
+
+---
+
+## 6. WASM/WASI Ecosystem
 
 TinyWhale compiles to WASM targeting WASI runtimes. The datagram model aligns with a direction the WASM ecosystem is converging on across three layers of the stack.
 
@@ -109,15 +156,13 @@ TinyWhale does not need to wait for stack switching. The datagram model is imple
 
 ---
 
-## 5. Open Questions
+## 7. Open Questions
 
-The design decision is made; the implementation details are not.
+The design decision is made; some implementation details are not.
 
 **Datagram format.** What is the concrete memory layout of an effect description? The [packed memory layout](./implementation/packed-memory-layout.md) and type-tag approach apply, but the specific variant definitions for host operation kinds — their tags, field layouts, and result protocols — are not yet specified.
 
-**Effect composition.** How do multiple host calls in a single function chain? Sequencing (do A then B), branching on results, error handling — none of this is designed.
-
-**Closures with effects** (PR 5 in the functions roadmap). How do closures that perform host operations interact with the datagram model? A closure captures its environment; if the effect description is a return value, the closure's calling convention may need to account for it.
+**Effect composition.** How do multiple host calls with data dependencies chain? Sequencing independent calls is straightforward (sequential `call` instructions). Branching on a host call's result, or error handling, is not yet designed.
 
 **Component Model targeting.** Will TinyWhale eventually target the WASM Component Model, making `extern host` map to Component Model async imports via the Canonical ABI? Or will TinyWhale maintain a custom datagram protocol for raw WASM?
 

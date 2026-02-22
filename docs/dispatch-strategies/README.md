@@ -5,7 +5,7 @@
 
 ---
 
-> **2026-02-22 — Datagram model update**: TinyWhale now follows Roc's design where all functions produce datagrams (instructions for the runtime). The runtime is the sole executor of effects. This means the `@` prefix for side-effectful functions (previously discussed in the functions roadmap) is retired — no function directly performs side effects. The dispatch strategies below are **unaffected** by this shift; they solve union type polymorphism via monomorphization and per-function tables, which is orthogonal to the effect model. The datagram wrapper is implicit and invisible at the language level — return types stay as declared. See the [datagram model design](../2026-02-22-datagram-model.md) for the full rationale.
+> **2026-02-22 — Datagram model update**: TinyWhale adopts the virtual datagram model — all functions are the same kind of thing, with no sync/async distinction at the language level. The `@` prefix for side-effectful functions is retired. The dispatch strategies below are **unaffected** by this shift; they solve union type polymorphism via monomorphization and per-function tables, which is orthogonal to the effect model. Return types stay as declared. See the [datagram model design](../2026-02-22-datagram-model.md) for the full rationale.
 
 ---
 

@@ -398,6 +398,8 @@ Closures that capture variables require additional machinery:
 - Closure representation: `{ func_index: i32, env_ptr: i32 }`
 - Modified calling convention to pass environment
 
+The [datagram model](../2026-02-22-datagram-model.md) imposes no additional requirements here. A closure that calls host functions has the same type as one that does not — `(i32) -> None` in both cases. The environment struct captures values, not capabilities. The representation above is unchanged by the effect model.
+
 This is deferred to a later phase (PR 5 per functions roadmap).
 
 ---
