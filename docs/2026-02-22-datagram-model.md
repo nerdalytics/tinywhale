@@ -17,7 +17,7 @@ Even with async/await syntax sugar, Nystrom's point holds: "we're lying to ourse
 Languages that eliminate the problem do so by keeping functions uniform and pushing the concurrency boundary into the runtime:
 
 - **Go**: No `async` keyword. Any function can yield to the goroutine scheduler. Developers write ordinary-looking code; the Go runtime handles context switching. An I/O call in a goroutine parks the goroutine and resumes it when data arrives — transparently, with no annotation at the call site.
-- **Roc**: All functions return `Task` values — descriptions of effects to perform. The platform (runtime) executes them. No function directly performs I/O; they produce data. Composition of effects is ordinary function composition.
+- **Roc**: Effectful functions return `Task` values — descriptions of effects to perform. The platform (runtime) executes them. No function directly performs I/O; they produce data. Pure functions return values directly; the distinction is structural, not contagious in the way async is.
 
 The common mechanism: the runtime manages multiple execution stacks and decides when to switch between them. The language does not expose this as a type-system distinction.
 
@@ -25,11 +25,9 @@ The common mechanism: the runtime manages multiple execution stacks and decides 
 
 ## 2. The Datagram Model
 
-TinyWhale follows Roc's approach: every function *virtually* returns a datagram — a description of what the runtime should execute. The function itself is pure; it maps inputs to a value that may include an effect description. The runtime reads that description and acts.
+TinyWhale's design goal is the same as Go's and Roc's: eliminate the sync/async split at the language level. The mechanism is different from both.
 
-The word "virtually" is load-bearing. The datagram is a compiler reasoning model. No runtime datagram object exists. The compiler emits standard WASM `call` instructions directly.
-
-Every function is the same kind of thing. There is no distinction between "effectful" and "pure" at the language level, and therefore no annotation to propagate.
+All functions are the same kind of thing. There is no distinction between "effectful" and "pure" at the language level, and therefore no annotation to propagate. The compiler calls this the *virtual datagram model*: conceptually, every function call is a description of work to be done. In practice, the compiler emits standard WASM `call` instructions directly. No runtime datagram object exists — the "datagram" is a design framing, not a runtime mechanism.
 
 **No `Task` type.** Return types stay as declared. `log: (i32) -> None` does not become `log: (i32) -> Task<None>`. This avoids the need for generic type syntax, which would conflict with TinyWhale's existing use of `<>` for value constraints (`i32<min=0, max=100>`).
 
@@ -44,7 +42,7 @@ Calling `log(42)` emits a WASM `call` to the imported function. The datagram fra
 
 **`extern wasm` is unchanged.** Pure WASM intrinsics (`i32.clz`, `f32.sqrt`, etc.) were never effectful. They remain direct, inline WASM instructions.
 
-**No sync/async distinction for TinyWhale programmers.** Calling `log(42)` and calling `add(1, 2)` are syntactically and semantically identical. Any function can call any other function. There is no type-system barrier between functions that reach the host and functions that do not. The compiler handles the distinction invisibly, the same way Go's runtime transparently parks goroutines at I/O boundaries.
+**No sync/async distinction for TinyWhale programmers.** Calling `log(42)` and calling `add(1, 2)` are syntactically and semantically identical. Any function can call any other function. There is no type-system barrier between functions that reach the host and functions that do not.
 
 ---
 
