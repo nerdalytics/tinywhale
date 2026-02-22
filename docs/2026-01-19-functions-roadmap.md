@@ -228,7 +228,7 @@ PatternList = (identifier | underscore) (comma (identifier | underscore))*
 
 ### Scope
 - `extern wasm "opcode"` for WASM intrinsics
-- `extern host "module" "function"` for host imports — compiler generates datagram constructors (the datagram wrapping is implicit; return types stay as declared)
+- `extern host "module" "function"` for host imports — compiler generates datagram constructors (the datagram wrapping is implicit; return types stay as declared). See [datagram model design](./2026-02-22-datagram-model.md).
 - Opcode whitelist
 
 ### Grammar
