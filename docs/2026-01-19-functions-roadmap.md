@@ -1,287 +1,177 @@
 # Functions Roadmap
 
-## Overview
+This document tracks what the TinyWhale compiler implements for functions and what remains to build.
 
-Add first-class functions to TinyWhale with the following capabilities:
-- Named functions and lambdas (same syntax)
-- Forward declarations for recursion
-- Higher-order functions (functions as values)
-- Tuple return types with destructuring
-- Extern bindings (WASM intrinsics and host imports)
-- Shadowing warnings for function types
+## Current State
 
-## PR Status
+The compiler fully supports:
 
-| PR | Scope | Status | Notes |
-|----|-------|--------|-------|
-| **PR 1** | Basic functions, parameters, calls, forward declarations | ✅ **MERGED** | [#53](https://github.com/nerdalytics/tinywhale/pull/53) - Single-expression bodies only |
-| **PR 2** | Expression unification (everything is an expression) | Pending | **Replaces old PR 4** — See [expression-unification.md](../../docs/plans/2026-01-21-expression-unification.md) |
-| **PR 3** | Higher-order functions, lambdas as expressions | Pending | Depends on PR 2 |
-| **PR 4** | Tuples: types, literals, destructuring | Pending | Depends on PR 2 |
-| **PR 5** | Closures (variable capture) | Pending | Depends on PR 2 |
-| **PR 6** | Extern bindings: `extern wasm`, `extern host` | Pending | Depends on PR 2 |
+- **Forward declarations** — syntax `factorial: (i32) -> i32`. Grammar, parser, and checker handle these. Codegen resolves forward declarations atomically with the definition — there is no separate forward-declaration WASM emission.
+- **Function definitions** — lambda syntax `(params): ReturnType -> body` bound to a name. All four pipeline phases handle these.
+- **Typed parameters** — parameters require explicit type annotations. Type checking validates argument types at call sites.
+- **Multi-line function bodies** — expression sequences in an indented block after `->`. The last expression is the return value.
+- **Function calls** — `name(arg1, arg2)`. Argument count and types are checked.
+- **Return type annotations** — `: ReturnType` before `->`. The checker validates the body expression against the declared type.
 
-## Design Change: Expression Unification
+Tested in `packages/compiler/test/semantic-specs.test.ts` and `packages/compiler/test/grammar-specs.test.ts`.
 
-During PR 1 implementation, we discovered that the statement/expression split creates unnecessary complexity. **PR 2 now implements expression unification** — everything becomes an expression:
+**Not yet working:**
 
-- Bindings evaluate to `None`
-- Type definitions evaluate to `None`
-- `panic` evaluates to `Never`
-- Function bodies are expression sequences (last expression is return value)
-- No `type` keyword — PascalCase identifies types
-
-This change simplifies the grammar and enables multi-line function bodies and nested definitions naturally.
-
-See full design: [docs/plans/2026-01-21-expression-unification.md](../../docs/plans/2026-01-21-expression-unification.md)
-
-## Known Limitations (PR 1)
-
-The following features don't work yet due to `LambdaBody = Expression` (no block support):
-
-```tinywhale
-# ❌ Multi-line function bodies
-factorial = (n: i32): i32 ->
-    match n              # ERROR: body must be single expression
-        0 -> 1
-        _ -> n * factorial(n - 1)
-
-# ❌ Nested function definitions
-outer = (x: i32): i32 ->
-    helper = (y: i32): i32 -> y * 2   # ERROR: can't define functions in body
-    helper(x)
-
-# ❌ Mutual recursion (forward decl works, calling doesn't)
-is_even: (i32) -> i32
-is_odd: (i32) -> i32
-is_even = (n: i32): i32 -> is_odd(n)  # ERROR: is_odd not yet defined
-```
-
-**What works:**
-```tinywhale
-# ✅ Single-expression functions
-double = (x: i32): i32 -> x * 2
-add = (a: i32, b: i32): i32 -> a + b
-
-# ✅ Forward declarations
-factorial: (i32) -> i32
-
-# ✅ Function calls
-result:i32 = double(21)
-```
-
-**These limitations are resolved by PR 2 (expression unification).**
+- Nested function definitions (inner lambdas whose names are visible in the outer scope). Grammar and parser handle the syntax; checker and codegen do not.
+- Recursive calls are structurally supported by forward declarations but are not covered by tests.
+- Everything in PR 2–6 below.
 
 ---
 
-## Syntax Design (Target)
+## PR Status
 
-### Named Functions
+| PR | Scope | Status |
+|----|-------|--------|
+| **PR 1** | Basic functions, parameters, calls, forward declarations | ✅ MERGED (#53) |
+| **PR 2** | Nested functions, type aliases | Pending |
+| **PR 3** | Higher-order functions | Pending |
+| **PR 4** | Tuples | Pending |
+| **PR 5** | Closures | Pending |
+| **PR 6** | Extern bindings | Pending |
+
+---
+
+## PR 2: Nested Functions and Type Aliases
+
+**What to build:**
+
+Nested function definitions — a lambda bound inside another function's body, visible within that scope:
 
 ```tinywhale
-# Single expression body (works now)
-double = (x: i32): i32 -> x * 2
-
-# Multi-line body (requires PR 2)
-factorial: (i32) -> i32
-factorial = (n: i32): i32 ->
-    match n
-        0 -> 1
-        _ -> n * factorial(n - 1)
+outer = (x: i32): i32 ->
+    helper = (y: i32): i32 -> y * 2
+    helper(x)
 ```
 
-### Type Aliases (PR 2 — no `type` keyword)
+Type aliases by PascalCase convention — no `type` keyword:
 
 ```tinywhale
-Person                            # PascalCase + block = record type
-    id: i32
-    age: i32
-
-BinaryOp = (i32, i32) -> i32      # PascalCase = type alias
-Percentage = i32<min=0, max=100>  # bounded type alias
-
-add: BinaryOp = (a, b) -> a + b   # value binding with type alias
+BinaryOp = (i32, i32) -> i32
+add: BinaryOp = (a, b) -> a + b
 ```
 
-### Higher-Order Functions (PR 3)
+**What needs to change:**
+
+- Checker: register inner bindings in a child scope, allow the outer body to reference them
+- Codegen: nested functions must emit as top-level WASM functions (WASM has no nested functions); the checker supplies their names
+
+**Dependency:** None. This is the next PR.
+
+---
+
+## PR 3: Higher-Order Functions
+
+**What to build:**
+
+Function values as first-class citizens. A function may be passed as an argument or returned as a value:
 
 ```tinywhale
 apply_twice = (f: (i32) -> i32, x: i32): i32 -> f(f(x))
 result = apply_twice((n: i32): i32 -> n + 1, 5)  # result = 7
 ```
 
-### Tuple Returns (PR 4)
+**What needs to change:**
 
-```tinywhale
-div_mod = (a: i32, b: i32): {i32, i32} -> {a / b, a % b}
-{quotient, remainder} = div_mod(10, 3)
-```
+- Codegen: function values are `i32` table indices. All functions that appear as values must be placed in a WASM function table. Calls through a function-typed variable emit `call_indirect`.
+- See `docs/implementation/packed-memory-layout.md` §7 for the full spec.
 
-### Extern Bindings (PR 6)
-
-```tinywhale
-# WASM intrinsics
-clz: (i32) -> i32
-clz = extern wasm "i32.clz"
-
-# Host imports
-log: (i32) -> None
-log = extern host "env" "log"
-```
-
----
-
-## PR 2: Expression Unification
-
-**This PR replaces the old PR 4 (Nested Functions and Multi-line Bodies).**
-
-See detailed plan: [docs/plans/2026-01-21-expression-unification.md](../../docs/plans/2026-01-21-expression-unification.md)
-
-### Core Changes
-
-1. Remove statement/expression distinction — everything is an expression
-2. Remove `type` keyword — PascalCase identifies types
-3. Bindings, type definitions, forward declarations evaluate to `None`
-4. `panic` evaluates to `Never`
-5. Expression sequences: last expression is the return value
-
-### What This Enables
-
-- Multi-line function bodies (expression sequences)
-- Nested function definitions (bindings inside bindings)
-- Cleaner grammar (no `Statement` rule)
-
----
-
-## PR 3: Higher-Order Functions and Lambdas
-
-### Scope
-- Function types as first-class values
-- Lambdas as expressions (not just bound)
-- Passing functions as arguments
-- Type inference for lambda parameters from context
-
-### Grammar Changes
-
-```ohm
-// Lambda becomes a valid Expression
-Expression += Lambda
-
-// Function parameter can have function type
-Parameter = identifier colon TypeRef  // TypeRef includes FuncType
-```
-
-### Implementation Steps
-
-1. Allow Lambda in expression position
-2. Handle function-typed parameters
-3. Support calling through variables (indirect calls)
-4. Type inference from parameter context
+**Dependency:** PR 2 (nested lambdas must work before lambdas-as-values does).
 
 ---
 
 ## PR 4: Tuples
 
-### Scope
-- Tuple types: `{T1, T2, ...}`
-- Tuple literals: `{expr1, expr2, ...}`
-- Tuple destructuring: `{a, b} = expr`
+**What to build:**
 
-### Grammar
+Tuple types, literals, and destructuring:
 
-```ohm
-TupleType = lbrace TypeList rbrace
-TupleLiteral = lbrace ExpressionList rbrace
-TupleBinding = TuplePattern equals Expression
-TuplePattern = lbrace PatternList rbrace
-PatternList = (identifier | underscore) (comma (identifier | underscore))*
+```tinywhale
+div_mod = (a: i32, b: i32): (i32, i32) -> (a / b, a % b)
+(quotient, remainder) = div_mod(10, 3)
 ```
 
-### Implementation Steps
+**What needs to change:**
 
-1. Add Tuple to TypeKind
-2. Handle tuple literals
-3. Handle tuple destructuring
-4. Codegen for tuples (WASM multi-value or struct)
+- Grammar: tuple type `(T1, T2)`, tuple literal `(e1, e2)`, tuple destructuring in bindings
+- Checker: new `Tuple` type kind, structural equality
+- Codegen: WASM multi-value returns
+
+**Dependency:** PR 2.
 
 ---
 
 ## PR 5: Closures
 
-### Scope
-- Identify free variables in nested functions
-- Generate environment structs for captured variables
-- Closure conversion in codegen
+**What to build:**
 
-The [datagram model](./2026-02-22-datagram-model.md) imposes no additional requirements. A closure that calls host functions has type `(params) -> return` — identical to a closure that does not. The environment struct captures values, not capabilities.
+Capture of variables from an outer scope:
 
-### Implementation Steps
+```tinywhale
+make_adder = (x: i32): ((i32) -> i32) ->
+    (y: i32): i32 -> x + y
 
-1. Track variable references across scope boundaries
-2. Identify captured variables (free variables)
-3. Generate environment struct type
-4. Modify function signature to accept environment
-5. Emit closure construction at definition site
-6. Emit environment access in closure body
+add5 = make_adder(5)
+result = add5(3)  # result = 8
+```
+
+**Representation:** `{ func_index: i32, env_ptr: i32 }`. The function pointer is a table index; the environment pointer references a heap-allocated struct of captured values. A closure that calls host functions has the same type as one that does not — the environment captures values, not capabilities.
+
+**What needs to change:**
+
+- Checker: free variable analysis — identify variables referenced in an inner lambda that are bound in an outer scope
+- Codegen: generate environment struct layout, emit struct allocation at closure definition site, emit environment load at captured-variable access sites
+- See `docs/implementation/packed-memory-layout.md` §7.5 for the representation spec.
+
+**Dependency:** PR 3.
 
 ---
 
 ## PR 6: Extern Bindings
 
-### Scope
-- `extern wasm "opcode"` for WASM intrinsics
-- `extern host "module" "function"` for host imports — compiler generates datagram constructors (the datagram wrapping is implicit; return types stay as declared). See [datagram model design](./2026-02-22-datagram-model.md).
-- Opcode whitelist
+**What to build:**
 
-### Grammar
+`extern wasm` for WASM intrinsics and `extern host` for host imports:
 
-```ohm
-FuncExpr = ExternWasm | ExternHost | Lambda
-ExternWasm = externKeyword wasmKeyword stringLiteral
-ExternHost = externKeyword hostKeyword stringLiteral stringLiteral
+```tinywhale
+# WASM intrinsic (pure operation, no import needed)
+clz: (i32) -> i32
+clz = extern wasm "i32.clz"
 
-externKeyword = "extern" ~identifierPart
-wasmKeyword = "wasm" ~identifierPart
-hostKeyword = "host" ~identifierPart
+# Host import (generates a WASM import declaration)
+log: (i32) -> None
+log = extern host "env" "log"
 ```
 
-### WASM Intrinsic Whitelist
+`extern host` generates a standard WASM `import` in the module. The return type stays as declared — there is no `Task` wrapper and no async annotation. Calling `log(42)` emits a WASM `call` to the imported function, exactly as any other function call would. See `docs/2026-02-22-datagram-model.md` for the rationale.
 
-Pure operations only:
-- Integer arithmetic: `i32.add`, `i32.sub`, `i32.mul`, `i32.div_s`, etc.
-- Bitwise: `i32.and`, `i32.or`, `i32.xor`, `i32.shl`, etc.
+**WASM intrinsic whitelist** (pure operations only):
+- Integer arithmetic: `i32.add`, `i32.sub`, `i32.mul`, `i32.div_s`, `i32.div_u`, `i32.rem_s`, `i32.rem_u`
+- Bitwise: `i32.and`, `i32.or`, `i32.xor`, `i32.shl`, `i32.shr_s`, `i32.shr_u`, `i32.rotl`, `i32.rotr`
 - Bit counting: `i32.clz`, `i32.ctz`, `i32.popcnt`
-- Float math: `f32.sqrt`, `f32.abs`, `f32.ceil`, `f32.floor`, etc.
-- Conversions: `i32.wrap_i64`, `f32.convert_i32_s`, etc.
+- Float math: `f32.sqrt`, `f32.abs`, `f32.ceil`, `f32.floor`, `f32.nearest`, `f32.min`, `f32.max`
+- Conversions: `i32.wrap_i64`, `i64.extend_i32_s`, `f32.convert_i32_s`, `f32.convert_i32_u`
 
----
+**What needs to change:**
 
-## Type System (Reference)
+- Grammar: `extern wasm "opcode"` and `extern host "module" "name"` as valid right-hand sides for a forward-declared binding
+- Checker: validate opcode against whitelist for `extern wasm`; register the symbol as an imported function for `extern host`
+- Codegen: for `extern wasm`, emit a WASM function that calls the intrinsic; for `extern host`, emit a `module.addFunctionImport`
 
-### Type Kinds
-
-```typescript
-enum TypeKind {
-  None, I32, I64, F32, F64, Distinct, Record, List, Refined,
-  Func,   // (params) -> return  ✅ Implemented
-  Tuple,  // {T1, T2, ...}       Pending (PR 4)
-}
-```
-
-### Type Compatibility
-
-- `Never` is subtype of all types (bottom type)
-- `None` only compatible with `None`
-- Func types use structural equality
-- Tuple types use structural equality
+**Dependency:** PR 2.
 
 ---
 
 ## Verification Checklist
 
-For each PR:
+For each PR before merging:
+
 - [ ] `mise run build` succeeds
-- [ ] `mise run test` all pass
-- [ ] `mise run check` no lint errors
-- [ ] `mise run typecheck` no type errors
-- [ ] Example files compile and produce valid WASM
+- [ ] `mise run test` — all tests pass
+- [ ] `mise run check` — no lint errors
+- [ ] `mise run typecheck` — no type errors
+- [ ] Example files in `examples/` compile and produce valid WASM
