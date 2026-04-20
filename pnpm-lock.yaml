@@ -4,6 +4,11 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  binaryen@129.0.0-nightly.20260419:
+    hash: 20739acd602f8b086ad5e9fad13190d3c17f34b439314689e5ca49189b9ea49d
+    path: patches/binaryen@129.0.0-nightly.20260419.patch
+
 importers:
 
   .:
@@ -81,8 +86,8 @@ importers:
         specifier: workspace:*
         version: link:../diagnostics
       binaryen:
-        specifier: 129.0.0
-        version: 129.0.0
+        specifier: 129.0.0-nightly.20260419
+        version: 129.0.0-nightly.20260419(patch_hash=20739acd602f8b086ad5e9fad13190d3c17f34b439314689e5ca49189b9ea49d)
       ohm-js:
         specifier: 17.5.0
         version: 17.5.0
@@ -275,8 +280,8 @@ packages:
   as-table@1.0.55:
     resolution: {integrity: sha512-xvsWESUJn0JN421Xb9MQw6AsMHRCUknCe0Wjlxvjud80mU4E6hQf1A6NzQKcYNmYw62MfzEtXc+badstZP3JpQ==}
 
-  binaryen@129.0.0:
-    resolution: {integrity: sha512-NyF5J0SfRoLDthpPh36FGTycOEv3Eqnkq3+mP5Cqt6iD9BLGGJMEVuPzu81nhLy2MMpPKmRTM9VLZihfyRQv8A==}
+  binaryen@129.0.0-nightly.20260419:
+    resolution: {integrity: sha512-5Oir3mh24oUnPbeamIvyR90hWeeLekDBs1omWQTTkpIekC3UY2p5zhFy9MwbjdskVzw/HHNd729aROuhU3daYA==}
     hasBin: true
 
   braces@3.0.3:
@@ -661,7 +666,7 @@ snapshots:
     dependencies:
       printable-characters: 1.0.42
 
-  binaryen@129.0.0: {}
+  binaryen@129.0.0-nightly.20260419(patch_hash=20739acd602f8b086ad5e9fad13190d3c17f34b439314689e5ca49189b9ea49d): {}
 
   braces@3.0.3:
     dependencies:

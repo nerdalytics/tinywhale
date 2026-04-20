@@ -2,7 +2,7 @@
 	"author": "",
 	"dependencies": {
 		"@tinywhale/diagnostics": "workspace:*",
-		"binaryen": "129.0.0",
+		"binaryen": "129.0.0-nightly.20260419",
 		"ohm-js": "17.5.0"
 	},
 	"description": "TinyWhale compiler library",
