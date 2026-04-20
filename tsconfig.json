@@ -4,7 +4,6 @@
 		"allowJs": false,
 		"allowUnreachableCode": false,
 		"allowUnusedLabels": false,
-		"baseUrl": "./",
 		"declaration": true,
 		"declarationMap": true,
 		"esModuleInterop": true,
@@ -29,6 +28,7 @@
 		"sourceMap": true,
 		"strict": true,
 		"target": "ESNext",
+		"types": ["node"],
 		"verbatimModuleSyntax": true
 	}
 }

@@ -4,13 +4,13 @@
 		"tinywhale-lsp": "./dist/cli.js"
 	},
 	"dependencies": {
-		"@adonisjs/ace": "13.4.0",
+		"@adonisjs/ace": "14.1.0",
 		"@tinywhale/lsp": "workspace:*"
 	},
 	"description": "TinyWhale Language Server CLI",
 	"devDependencies": {
-		"@types/node": "25.0.10",
-		"typescript": "5.9.3"
+		"@types/node": "25.6.0",
+		"typescript": "6.0.3"
 	},
 	"exports": {
 		".": {

@@ -35,6 +35,7 @@ import {
 	type SymbolId,
 	type TypeId,
 } from '../check/types.ts'
+import { combine32BitPartsToBigInt } from '../check/utils.ts'
 import { type CompilationContext, DiagnosticSeverity, type StringId } from '../core/context.ts'
 import type { DiagnosticCode } from '../core/diagnostics.ts'
 import { type NodeId, NodeKind } from '../core/nodes.ts'
@@ -108,7 +109,7 @@ function emitIntConst(
 ): binaryen.ExpressionRef {
 	const binaryenType = toBinaryenType(inst.typeId, context)
 	if (binaryenType === binaryen.i64) {
-		return mod.i64.const(getIntConstLow(inst), getIntConstHigh(inst))
+		return mod.i64.const(combine32BitPartsToBigInt(getIntConstLow(inst), getIntConstHigh(inst)))
 	}
 	return mod.i32.const(getIntConstLow(inst))
 }
@@ -210,7 +211,7 @@ function emitNegate(
 		case binaryen.i32:
 			return mod.i32.sub(mod.i32.const(0), operand)
 		case binaryen.i64:
-			return mod.i64.sub(mod.i64.const(0, 0), operand)
+			return mod.i64.sub(mod.i64.const(0n), operand)
 		case binaryen.f32:
 			return mod.f32.neg(operand)
 		case binaryen.f64:
@@ -236,7 +237,7 @@ function emitBitwiseNot(
 		case binaryen.i32:
 			return mod.i32.xor(operand, mod.i32.const(-1))
 		case binaryen.i64:
-			return mod.i64.xor(operand, mod.i64.const(-1, -1))
+			return mod.i64.xor(operand, mod.i64.const(-1n))
 		default:
 			return null
 	}
@@ -268,8 +269,8 @@ function emitEuclideanMod(
 	}
 	if (binaryenType === binaryen.i64) {
 		const absB = mod.select(
-			mod.i64.lt_s(right, mod.i64.const(0, 0)),
-			mod.i64.sub(mod.i64.const(0, 0), right),
+			mod.i64.lt_s(right, mod.i64.const(0n)),
+			mod.i64.sub(mod.i64.const(0n), right),
 			right
 		)
 		const remainder = mod.i64.rem_s(left, right)
@@ -493,9 +494,7 @@ function emitLiteralComparison(
 	const binaryenType = toBinaryenType(typeId, context)
 
 	if (binaryenType === binaryen.i64) {
-		const low = Number(BigInt.asIntN(32, value))
-		const high = Number(BigInt.asIntN(32, value >> 32n))
-		return mod.i64.eq(scrutineeExpr, mod.i64.const(low, high))
+		return mod.i64.eq(scrutineeExpr, mod.i64.const(value))
 	}
 
 	return mod.i32.eq(scrutineeExpr, mod.i32.const(Number(value)))

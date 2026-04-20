@@ -20,6 +20,8 @@
 !mise.toml
 !package-lock.json
 !package.json
+!patches/
+!patches/**
 !packages/
 !packages/**
 !pnpm-lock.yaml

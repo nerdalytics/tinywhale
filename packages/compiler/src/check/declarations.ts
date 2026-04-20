@@ -276,4 +276,4 @@ export function finalizeTypeDecl(state: CheckerState, _context: CompilationConte
 // ============================================================================
 
 // These are used by checker.ts for FieldInit handling in TypeDecl context
-export { getFieldDeclFromLine, resolveUserDefinedFieldType, addFieldToTypeDeclContext }
+export { addFieldToTypeDeclContext, getFieldDeclFromLine, resolveUserDefinedFieldType }
