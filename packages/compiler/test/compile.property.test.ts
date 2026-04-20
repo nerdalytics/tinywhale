@@ -7,9 +7,7 @@ const validProgramArb = fc.oneof(
 	// Single panic
 	fc.constant('panic\n'),
 	// Multiple panics
-	fc
-		.integer({ max: 10, min: 1 })
-		.map((n) => 'panic\n'.repeat(n)),
+	fc.integer({ max: 10, min: 1 }).map((n) => 'panic\n'.repeat(n)),
 	// Variable binding with panic
 	fc
 		.tuple(fc.constantFrom('i32', 'i64', 'f32', 'f64'), fc.integer({ max: 1000, min: 0 }))
@@ -20,12 +18,10 @@ const validProgramArb = fc.oneof(
 			return `x:${type} = ${value}\npanic\n`
 		}),
 	// Multiple bindings with panic
-	fc
-		.integer({ max: 5, min: 1 })
-		.map((n) => {
-			const bindings = Array.from({ length: n }, (_, i) => `v${i}:i32 = ${i}`).join('\n')
-			return `${bindings}\npanic\n`
-		})
+	fc.integer({ max: 5, min: 1 }).map((n) => {
+		const bindings = Array.from({ length: n }, (_, i) => `v${i}:i32 = ${i}`).join('\n')
+		return `${bindings}\npanic\n`
+	})
 )
 
 describe('compile/pipeline properties', () => {

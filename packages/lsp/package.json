@@ -5,8 +5,8 @@
 	},
 	"description": "TinyWhale Language Server Protocol implementation",
 	"devDependencies": {
-		"@types/node": "25.0.10",
-		"typescript": "5.9.3"
+		"@types/node": "25.6.0",
+		"typescript": "6.0.3"
 	},
 	"exports": {
 		".": {

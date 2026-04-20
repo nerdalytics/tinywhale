@@ -104,6 +104,10 @@ export function splitBigIntTo32BitParts(
 	return { high, low }
 }
 
+export function combine32BitPartsToBigInt(low: number, high: number): bigint {
+	return (BigInt(high) << 32n) | BigInt(low >>> 0)
+}
+
 /**
  * Checks if a value is representable as f32.
  */
