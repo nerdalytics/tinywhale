@@ -2,10 +2,10 @@
 	"author": "",
 	"description": "A programming language with compiler, CLI, and LSP server",
 	"devDependencies": {
-		"@biomejs/biome": "2.4.12",
-		"@types/node": "25.6.0",
-		"fast-check": "4.7.0",
-		"typescript": "6.0.3"
+		"@biomejs/biome": "2.5.5",
+		"@types/node": "26.1.1",
+		"fast-check": "4.9.0",
+		"typescript": "7.0.2"
 	},
 	"engines": {
 		"node": "26.5.0",
