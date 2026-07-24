@@ -8,8 +8,8 @@
 		"typescript": "6.0.3"
 	},
 	"engines": {
-		"node": "24.15.0",
-		"pnpm": "10.33.0"
+		"node": "26.5.0",
+		"pnpm": "11.16.0"
 	},
 	"keywords": [
 		"compiler",
@@ -18,12 +18,7 @@
 	],
 	"license": "MIT",
 	"name": "tinywhale",
-	"packageManager": "pnpm@10.33.0",
-	"pnpm": {
-		"patchedDependencies": {
-			"binaryen@129.0.0-nightly.20260419": "patches/binaryen@129.0.0-nightly.20260419.patch"
-		}
-	},
+	"packageManager": "pnpm@11.16.0",
 	"private": true,
 	"scripts": {
 		"start": "mise run"

@@ -1,2 +1,5 @@
 packages:
   - 'packages/*'
+
+patchedDependencies:
+  binaryen@129.0.0-nightly.20260419: patches/binaryen@129.0.0-nightly.20260419.patch
