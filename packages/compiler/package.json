@@ -2,15 +2,15 @@
 	"author": "",
 	"dependencies": {
 		"@tinywhale/diagnostics": "workspace:*",
-		"binaryen": "129.0.0-nightly.20260419",
+		"binaryen": "131.0.0",
 		"ohm-js": "17.5.0"
 	},
 	"description": "TinyWhale compiler library",
 	"devDependencies": {
 		"@ohm-js/cli": "2.0.1",
 		"@tinywhale/grammar-test": "workspace:*",
-		"@types/node": "25.6.0",
-		"typescript": "6.0.3"
+		"@types/node": "26.1.1",
+		"typescript": "7.0.2"
 	},
 	"exports": {
 		".": {

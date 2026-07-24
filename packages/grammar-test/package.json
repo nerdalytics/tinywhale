@@ -5,8 +5,8 @@
 	},
 	"description": "Generic Ohm.js grammar testing framework and library",
 	"devDependencies": {
-		"@types/node": "25.6.0",
-		"typescript": "6.0.3"
+		"@types/node": "26.1.1",
+		"typescript": "7.0.2"
 	},
 	"exports": {
 		".": {

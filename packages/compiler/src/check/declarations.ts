@@ -230,7 +230,7 @@ export function processFieldDecl(
 	context: CompilationContext
 ): void {
 	const ctx = currentBlockContext(state)
-	if (!ctx || ctx.kind !== 'TypeDecl') {
+	if (ctx?.kind !== 'TypeDecl') {
 		// FieldDecl outside type declaration - should not happen if parser is correct
 		return
 	}
@@ -254,7 +254,7 @@ export function processFieldDecl(
  */
 export function finalizeTypeDecl(state: CheckerState, _context: CompilationContext): void {
 	const ctx = currentBlockContext(state)
-	if (!ctx || ctx.kind !== 'TypeDecl') return
+	if (ctx?.kind !== 'TypeDecl') return
 
 	popBlockContext(state)
 

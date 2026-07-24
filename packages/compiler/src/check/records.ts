@@ -302,7 +302,7 @@ function checkFieldsHaveRuntimeValues(
  */
 export function finalizeRecordLiteral(state: CheckerState, context: CompilationContext): void {
 	const ctx = currentBlockContext(state)
-	if (!ctx || ctx.kind !== 'RecordLiteral') return
+	if (ctx?.kind !== 'RecordLiteral') return
 
 	popBlockContext(state)
 
@@ -507,7 +507,7 @@ function registerNestedRecordWithParent(ctx: NestedRecordInitContext, state: Che
  */
 export function finalizeNestedRecordInit(state: CheckerState, context: CompilationContext): void {
 	const ctx = currentBlockContext(state)
-	if (!ctx || ctx.kind !== 'NestedRecordInit') return
+	if (ctx?.kind !== 'NestedRecordInit') return
 
 	popBlockContext(state)
 	validateNestedRecordMissingFields(ctx, state, context)
