@@ -1,6 +1,6 @@
 # Grammar vs Semantic Discrepancies Analysis
 
-> **Date:** 2026-01-20 (Updated: 2026-01-24)
+> **Date:** 2026-01-20 (Updated: 2026-07-24)
 > **Purpose:** Identify discrepancies between grammar (what parses) and semantics (what compiles) to prepare for property-based compiler fuzzing.
 > **Design Philosophy:** Strict grammar - grammar should only accept what the compiler can actually compile.
 
@@ -8,7 +8,7 @@
 
 ## Major Updates Since Original Analysis
 
-**PR #53-56: Functions and Expression Unification**
+**PRs #53, #54, and #56: Functions and Expression Unification**
 - Basic functions implemented (lambdas, declarations, direct calls)
 - "Everything is an expression" design completed
 - Removed: `Statement`, `PanicStatement`, `FuncBinding`, `PrimitiveBinding`, `RecordBinding` grammar rules
@@ -457,7 +457,7 @@ FuncCall = PostfixableBase lparen Arguments rparen
 FuncDecl = identifier colon FuncType
 ```
 
-**Implemented in PRs #53-56:**
+**Implemented in PRs #53, #54, and #56:**
 - Lambda expressions with parameters and return types
 - Function declarations for forward references
 - Direct function calls with arguments
@@ -653,15 +653,17 @@ Data
 
 d = Data
     items = [1, 2, 3]
-# Error: WASM validator - local.set's value type must be correct
+# Error TWCHECK012: type mismatch for list literal
 ```
-List field declaration works, but initialization produces invalid WASM.
+List field declaration works, but the checker rejects list literal
+initialization before code generation.
 
 ```ohm
 FieldInit = lowerIdentifier (colon upperIdentifier | equals Expression)
 ```
 
-**Discrepancy:** `Expression` in `FieldInit` includes `ListLiteral`, but codegen doesn't handle list field initialization correctly.
+**Discrepancy:** `Expression` in `FieldInit` includes `ListLiteral`, but record
+field checking and lowering do not support list-valued fields.
 
 ---
 
@@ -689,7 +691,8 @@ Should allow lists with record element types, initialized via variable reference
 
 **Discrepancy:** Records are flattened to individual fields. Need WASM GC structs or similar to support whole-record references in lists.
 
-**Note:** Functions are now implemented (PR #53-56), but this issue remains because records are still flattened at the codegen level.
+**Note:** Functions are now implemented in PRs #53, #54, and #56, but this
+issue remains because records are still flattened at the codegen level.
 
 ---
 
@@ -759,15 +762,16 @@ Open design question. Not adding trailing comma support until decided.
 
 ### F5. Functions (Partial)
 
-**Basic functions implemented in PRs #53-56:**
+**Basic functions implemented in PRs #53, #54, and #56:**
 - Lambda expressions, function declarations, direct calls
 - Multi-line bodies, type inference from aliases
 
-**Still pending (per original plan `2026-01-19-functions-roadmap.md`):**
-- PR 3: Higher-order functions (indirect calls via `call_indirect`)
-- PR 4: Tuples (types, literals, destructuring)
-- PR 5: Closures (variable capture)
-- PR 6: Extern bindings (`extern wasm`, `extern host`)
+**Still pending (see `2026-01-19-functions-roadmap.md`):**
+- Explicit call-argument representation in SemIR
+- Non-capturing function values and indirect calls
+- Tuples (types, literals, destructuring)
+- Closures (variable capture)
+- Extern bindings (`extern wasm`, `extern host`)
 
 ---
 
@@ -785,7 +789,8 @@ Open design question. Not adding trailing comma support until decided.
 - Integer scientific notation negative exponents rejected at grammar level
 - Binding patterns in match now work with lexical scoping
 - Refinement types in field declarations now enforced
-- Basic functions implemented (lambdas, declarations, direct calls)
+- Basic functions implemented in #53, #54, and #56 (lambdas, declarations,
+  direct calls)
 - "Everything is expression" design completed
 - Deprecated Statement-related code removed
 
@@ -793,6 +798,6 @@ Open design question. Not adding trailing comma support until decided.
 1. D1-D2 (nested lists, chained index) - need checker/codegen implementation
 2. D3-D5 (list/record destructuring, guards) - missing grammar + checker
 3. D6 (negative float literals) - grammar change needed
-4. D7 (list fields in records) - codegen fix needed
+4. D7 (list fields in records) - checker and lowering support needed
 5. D8 (lists of user-defined types) - need WASM GC or alternative approach
 6. D9 (float match patterns) - grammar + checker needed
