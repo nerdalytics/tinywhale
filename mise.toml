@@ -1,8 +1,4 @@
 # mise configuration for tinywhale monorepo
-[tools]
-node = "24.15.0"
-pnpm = "10.33.0"
-
 [tasks.install]
 description = "Install dependencies"
 run = "pnpm install"
@@ -96,3 +92,6 @@ node packages/cli-grammar-test/dist/cli/index.js analyze \
   ${usage_format:+--format "$usage_format"} \
   ${usage_grammar?}
 """
+
+[settings]
+minimum_release_age = "1d"
