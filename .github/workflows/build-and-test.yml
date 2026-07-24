@@ -21,6 +21,18 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Configure runtime versions
+        shell: bash
+        run: |
+          node -e '
+            const packageJson = require("./package.json");
+            const pnpmVersion = packageJson.packageManager.replace(/^pnpm@/, "");
+            if (pnpmVersion !== packageJson.engines.pnpm) {
+              throw new Error("packageManager and engines.pnpm must match");
+            }
+            process.stdout.write(`node ${packageJson.engines.node}\npnpm ${pnpmVersion}\n`);
+          ' > .tool-versions
+
       - name: Setup mise
         uses: jdx/mise-action@f10502fc09dadecfefb962fff68ce77213930204 # v4.2.2
         with:
